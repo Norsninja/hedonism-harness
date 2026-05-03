@@ -86,3 +86,17 @@ class BodyConfig(BaseModel):
             msg = f"starting_health ({self.starting_health}) > max_health ({self.max_health})"
             raise ValueError(msg)
         return self
+
+
+class ActionConfig(BaseModel):
+    """Per-action energy costs (SPEC §7)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    move_cost: float = Field(default=1.0, ge=0.0)
+    stay_cost: float = Field(default=0.1, ge=0.0)
+    eat_cost: float = Field(
+        default=0.0,
+        ge=0.0,
+        description="Energy cost of the EAT action (food gain is separate).",
+    )
