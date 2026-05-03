@@ -11,7 +11,7 @@ with valence.py, etc.).
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 UINT32_MAX = 2**32 - 1
 
@@ -52,3 +52,37 @@ class WorldConfig(BaseModel):
         ge=0.0,
         description="Fear-reduction strength of a SAFE cell.",
     )
+
+
+class BodyConfig(BaseModel):
+    """Per-agent body capacities, costs, and starting state (SPEC §7)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    max_energy: float = Field(default=100.0, gt=0.0)
+    starting_energy: float = Field(default=60.0, ge=0.0)
+    max_health: float = Field(default=100.0, gt=0.0)
+    starting_health: float = Field(default=100.0, ge=0.0)
+    base_metabolic_cost: float = Field(
+        default=0.25,
+        ge=0.0,
+        description="Energy lost per tick before trait modifiers.",
+    )
+    sensor_radius_metabolic_cost: float = Field(
+        default=0.05,
+        ge=0.0,
+        description=(
+            "Additional energy cost per unit of sensor_radius per tick "
+            "(SPEC §22 recommendation: high sensor radius costs more)."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_starting_within_max(self) -> BodyConfig:
+        if self.starting_energy > self.max_energy:
+            msg = f"starting_energy ({self.starting_energy}) > max_energy ({self.max_energy})"
+            raise ValueError(msg)
+        if self.starting_health > self.max_health:
+            msg = f"starting_health ({self.starting_health}) > max_health ({self.max_health})"
+            raise ValueError(msg)
+        return self
