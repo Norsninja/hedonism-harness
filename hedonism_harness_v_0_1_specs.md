@@ -22,11 +22,11 @@ The first experiment should answer:
 
 Secondary questions:
 
-- Does hunger pain eventually overcome fear paralysis?
-- Do different pain/pleasure thresholds produce distinct behavioral phenotypes?
-- Do some trait profiles survive by hiding while others survive by risk-taking?
-- Does reproduction select for different thresholds under different environmental conditions?
-- Does simple valence memory improve survival or create over-avoidance/cowardice?
+* Does hunger pain eventually overcome fear paralysis?
+* Do different pain/pleasure thresholds produce distinct behavioral phenotypes?
+* Do some trait profiles survive by hiding while others survive by risk-taking?
+* Does reproduction select for different thresholds under different environmental conditions?
+* Does simple valence memory improve survival or create over-avoidance/cowardice?
 
 ---
 
@@ -34,36 +34,36 @@ Secondary questions:
 
 ### Included
 
-- 2D grid world
-- Food cells
-- Hazard cells
-- Safe/barren regions
-- Energy decay
-- Health damage
-- Agent death by starvation or injury
-- Minimal reproduction
-- Trait inheritance with mutation
-- Pleasure/pain harness
-- Simple local sensors
-- Optional explicit valence memory map
-- Deterministic seeded runs
-- Metrics logging
-- Basic visualization, preferably ASCII first, then optional Pygame-CE
-- Pytest-based test suite
+* 2D grid world
+* Food cells
+* Hazard cells
+* Safe/barren regions
+* Energy decay
+* Health damage
+* Agent death by starvation or injury
+* Minimal reproduction
+* Trait inheritance with mutation
+* Pleasure/pain harness
+* Simple local sensors
+* Optional explicit valence memory map
+* Deterministic seeded runs
+* Metrics logging
+* Basic visualization, preferably ASCII first, then optional Pygame-CE
+* Pytest-based test suite
 
 ### Excluded from v0.1
 
-- Unity
-- Complex physics
-- Sexual reproduction
-- Parenting behavior
-- Social bonding
-- Predators as separate learning entities
-- Neural network agents
-- Stable-Baselines3 / PPO training
-- Complex ecology balancing
-- Raw pixel observations
-- LLM agents
+* Unity
+* Complex physics
+* Sexual reproduction
+* Parenting behavior
+* Social bonding
+* Predators as separate learning entities
+* Neural network agents
+* Stable-Baselines3 / PPO training
+* Complex ecology balancing
+* Raw pixel observations
+* LLM agents
 
 ---
 
@@ -200,15 +200,15 @@ class Cell:
 
 `World` should handle:
 
-- grid creation
-- seeded random generation
-- bounds checking
-- cell lookup
-- food consumption
-- hazard application
-- optional food regrowth
-- agent placement
-- occupancy checks
+* grid creation
+* seeded random generation
+* bounds checking
+* cell lookup
+* food consumption
+* hazard application
+* optional food regrowth
+* agent placement
+* occupancy checks
 
 Do not put agent decision logic inside the world.
 
@@ -561,9 +561,9 @@ For v0.1, memory should probably **not** be inherited by default. Traits should 
 
 Optional experiment later:
 
-- inherited memory fragments
-- species-level shared memory
-- cultural memory
+* inherited memory fragments
+* species-level shared memory
+* cultural memory
 
 ---
 
@@ -605,8 +605,8 @@ Chooses random valid action.
 
 Purpose:
 
-- baseline chaos
-- smoke testing environment
+* baseline chaos
+* smoke testing environment
 
 ### 15.2 ReflexAgent
 
@@ -623,8 +623,8 @@ else random move/stay
 
 Purpose:
 
-- baseline authored survival behavior
-- compare against emergent valence behavior
+* baseline authored survival behavior
+* compare against emergent valence behavior
 
 ### 15.3 HedonismAgent
 
@@ -632,7 +632,7 @@ Uses the Hedonism Harness to score possible actions.
 
 Purpose:
 
-- primary experimental agent
+* primary experimental agent
 
 ### 15.4 HedonismAgentWithMemory
 
@@ -640,7 +640,7 @@ Same as HedonismAgent, but includes explicit valence memory in scoring.
 
 Purpose:
 
-- test whether memory improves survival, increases caution, or creates paralysis
+* test whether memory improves survival, increases caution, or creates paralysis
 
 ---
 
@@ -666,12 +666,12 @@ Hazard creates expected fear before it creates injury.
 
 Possible emergent outcomes:
 
-- high fear + low hunger sensitivity -> paralysis and starvation
-- low fear + high hunger sensitivity -> reckless crossing, possible injury death
-- moderate fear + memory -> cautious movement around hazard
-- high pain tolerance -> hazard crossing
-- high novelty drive -> exploration despite risk
-- high reproduction drive -> reproduce early, possibly unsustainably
+* high fear + low hunger sensitivity -> paralysis and starvation
+* low fear + high hunger sensitivity -> reckless crossing, possible injury death
+* moderate fear + memory -> cautious movement around hazard
+* high pain tolerance -> hazard crossing
+* high novelty drive -> exploration despite risk
+* high reproduction drive -> reproduce early, possibly unsustainably
 
 ### 16.4 Metrics
 
@@ -771,63 +771,63 @@ Use pytest. Do not begin ML or visualization before core tests pass.
 
 ### 18.1 World Tests
 
-- World initializes deterministically from seed.
-- Same seed creates same grid.
-- Different seed creates different grid.
-- Cell lookup respects bounds.
-- Food can be consumed once.
-- Hazard applies damage.
+* World initializes deterministically from seed.
+* Same seed creates same grid.
+* Different seed creates different grid.
+* Cell lookup respects bounds.
+* Food can be consumed once.
+* Hazard applies damage.
 
 ### 18.2 Agent Body Tests
 
-- Energy decreases each tick.
-- Movement costs more energy than staying.
-- Eating increases energy.
-- Health decreases when hazard is applied.
-- Agent dies when energy <= 0.
-- Agent dies when health <= 0.
+* Energy decreases each tick.
+* Movement costs more energy than staying.
+* Eating increases energy.
+* Health decreases when hazard is applied.
+* Agent dies when energy <= 0.
+* Agent dies when health <= 0.
 
 ### 18.3 Trait Tests
 
-- Trait generation respects configured ranges.
-- Mutation respects configured ranges.
-- Mutation is deterministic under seed.
-- Offspring traits differ from parent within expected mutation bounds.
+* Trait generation respects configured ranges.
+* Mutation respects configured ranges.
+* Mutation is deterministic under seed.
+* Offspring traits differ from parent within expected mutation bounds.
 
 ### 18.4 Valence Tests
 
-- Hunger pain increases as energy decreases.
-- Eating pleasure is higher when hungry than when full.
-- Fear increases with predicted hazard risk.
-- Pain tolerance reduces felt pain.
-- Risk tolerance reduces fear.
-- Reproduction pleasure scales with reproduction drive.
-- Valence breakdown total equals component sum.
-- No valence result returns NaN or infinity.
+* Hunger pain increases as energy decreases.
+* Eating pleasure is higher when hungry than when full.
+* Fear increases with predicted hazard risk.
+* Pain tolerance reduces felt pain.
+* Risk tolerance reduces fear.
+* Reproduction pleasure scales with reproduction drive.
+* Valence breakdown total equals component sum.
+* No valence result returns NaN or infinity.
 
 ### 18.5 Memory Tests
 
-- Memory updates after pleasure.
-- Memory updates after pain.
-- Memory decays over time.
-- Memory confidence increases with visits.
-- Memory sensor returns directional good/bad values.
+* Memory updates after pleasure.
+* Memory updates after pain.
+* Memory decays over time.
+* Memory confidence increases with visits.
+* Memory sensor returns directional good/bad values.
 
 ### 18.6 Reproduction Tests
 
-- Agent cannot reproduce below energy threshold.
-- Agent can reproduce above energy threshold if space exists.
-- Parent pays energy cost.
-- Child receives mutated traits.
-- Child receives correct parent_id and lineage_id.
+* Agent cannot reproduce below energy threshold.
+* Agent can reproduce above energy threshold if space exists.
+* Parent pays energy cost.
+* Child receives mutated traits.
+* Child receives correct parent_id and lineage_id.
 
 ### 18.7 Simulation Tests
 
-- Simulation advances ticks.
-- Dead agents are removed or marked inactive.
-- Metrics are recorded.
-- Batch run with fixed seed is reproducible.
-- No run produces invalid metrics.
+* Simulation advances ticks.
+* Dead agents are removed or marked inactive.
+* Metrics are recorded.
+* Batch run with fixed seed is reproducible.
+* No run produces invalid metrics.
 
 ---
 
@@ -862,16 +862,16 @@ Every step should include tests before proceeding.
 
 ## 20. Development Standards
 
-- Python 3.11+
-- Use dataclasses or Pydantic-style configs, but avoid overengineering.
-- Prefer pure Python + NumPy initially.
-- Keep the simulation deterministic under seeded RNG.
-- Avoid hidden global random state.
-- Keep agent decision logic separate from world update logic.
-- Keep valence scoring explainable.
-- Every major calculation should be testable.
-- Avoid premature RL integration.
-- Avoid visual polish until core metrics are trustworthy.
+* Python 3.11+
+* Use dataclasses or Pydantic-style configs, but avoid overengineering.
+* Prefer pure Python + NumPy initially.
+* Keep the simulation deterministic under seeded RNG.
+* Avoid hidden global random state.
+* Keep agent decision logic separate from world update logic.
+* Keep valence scoring explainable.
+* Every major calculation should be testable.
+* Avoid premature RL integration.
+* Avoid visual polish until core metrics are trustworthy.
 
 Recommended dependencies:
 
@@ -932,13 +932,13 @@ These can remain unresolved during initial repo creation:
 
 Recommended v0.1 defaults:
 
-- Memory influences action scoring through directional remembered good/bad signals.
-- Reproduction is an evaluated action.
-- Staying has low energy cost but can still lead to hunger pain.
-- Include novelty drive but keep it weak.
-- Safe zones reduce fear rather than directly creating strong pleasure.
-- No inherited memory yet.
-- Sensor radius should increase metabolic cost slightly.
+* Memory influences action scoring through directional remembered good/bad signals.
+* Reproduction is an evaluated action.
+* Staying has low energy cost but can still lead to hunger pain.
+* Include novelty drive but keep it weak.
+* Safe zones reduce fear rather than directly creating strong pleasure.
+* No inherited memory yet.
+* Sensor radius should increase metabolic cost slightly.
 
 ---
 
@@ -963,34 +963,34 @@ v0.1 is complete when:
 
 ### v0.2
 
-- More world layouts
-- Food regrowth
-- Sensor cost tradeoffs
-- Better memory visualization
-- Lineage tree visualization
-- Stable population experiments
-- More refined paralysis metric
+* More world layouts
+* Food regrowth
+* Sensor cost tradeoffs
+* Better memory visualization
+* Lineage tree visualization
+* Stable population experiments
+* More refined paralysis metric
 
 ### v0.3
 
-- Gymnasium environment wrapper
-- Stable-Baselines3 PPO comparison
-- RecurrentPPO comparison
-- Learned policies using same valence reward harness
+* Gymnasium environment wrapper
+* Stable-Baselines3 PPO comparison
+* RecurrentPPO comparison
+* Learned policies using same valence reward harness
 
 ### v0.4
 
-- Multi-species environments
-- Predators/prey
-- Social pleasure/pain
-- Offspring bonding
-- Cultural/shared memory
+* Multi-species environments
+* Predators/prey
+* Social pleasure/pain
+* Offspring bonding
+* Cultural/shared memory
 
 ### v0.5
 
-- Continuous 2D world
-- Pygame or lightweight browser visualization
-- Interactive experiment dashboard
+* Continuous 2D world
+* Pygame or lightweight browser visualization
+* Interactive experiment dashboard
 
 ---
 
@@ -1008,3 +1008,355 @@ Before writing major code, create:
 
 Then proceed in the implementation order above.
 
+---
+
+## 26. Software Leverage Decisions
+
+The project should use mature libraries where they reduce boilerplate without hiding the experimental logic. The rule is:
+
+> Use libraries for plumbing, validation, metrics, testing, and visualization scaffolding. Keep the novel science — traits, sensors, valence, memory, reproduction pressure, and decision scoring — in our own clear modules.
+
+### 26.1 Adopt Mesa as the Backbone
+
+Use Mesa 3.x as the simulation backbone.
+
+Mesa should provide:
+
+* model lifecycle
+* agent lifecycle scaffolding
+* grid / spatial structures
+* scheduling
+* data collection
+* batch runs
+* optional later visualization
+
+This changes the earlier pure custom architecture. Instead of writing our own full `Simulation` orchestrator, we use a Mesa `Model` subclass as the imperative shell.
+
+However, our domain logic remains independent:
+
+```text
+traits.py
+sensors.py
+valence.py
+memory.py
+actions.py
+reproduction.py
+```
+
+Mesa may own the outer simulation loop, but it should not own the Hedonism Harness.
+
+Decision:
+
+```text
+Use Mesa for ABM plumbing.
+Keep Hedonism Harness logic pure and framework-light.
+Do not let Agent.step() become a god method.
+```
+
+### 26.2 Adjusted Architecture with Mesa
+
+Recommended structure:
+
+```text
+src/hedonism_harness/
+    model.py              # Mesa Model subclass
+    mesa_agents.py        # Mesa Agent wrappers
+    core/
+        traits.py
+        sensors.py
+        valence.py
+        memory.py
+        actions.py
+        reproduction.py
+        events.py
+        config.py
+    experiments/
+        fear_hunger_chamber.py
+        batch.py
+    viz/
+        terminal.py
+        mesa_viz.py
+    tests/
+```
+
+Mesa `Agent.step()` should remain thin:
+
+```python
+observation = observe(model.world, self.body, self.memory, config)
+action, breakdown = self.policy.decide(observation, self.body.traits, rng)
+result = apply_action(model.world, self.body, action, config, rng)
+self.memory = update_memory(self.memory, result, config)
+emit_events(result.events)
+```
+
+The agent wrapper coordinates. The real logic lives in testable modules.
+
+### 26.3 State Mutation Compromise
+
+Mesa is stateful by design. That is acceptable as long as we keep pure functions at the domain layer.
+
+Revised decision:
+
+```text
+Use Mesa's stateful model/agent lifecycle.
+Keep valence, sensors, trait mutation, memory update, and action scoring pure or near-pure.
+Use tests to protect those modules from framework coupling.
+```
+
+This is a practical compromise: less plumbing, faster experimentation, still scientifically inspectable.
+
+### 26.4 Event and Metrics Stack
+
+Use both:
+
+* Mesa `DataCollector` for snapshot-style metrics.
+* Blinker or a lightweight typed event layer for event-style metrics.
+
+Mesa DataCollector is good for:
+
+```text
+population count
+average energy
+average fear
+average pain
+average offspring
+trait averages per tick
+```
+
+Events are better for:
+
+```text
+agent born
+agent died
+food eaten
+hazard entered
+reproduction failed
+memory updated
+paralysis tick
+```
+
+Decision:
+
+```text
+Use Mesa DataCollector for periodic snapshots.
+Use a lightweight event layer for discrete life-history events.
+Do not write CSV from core logic.
+```
+
+### 26.5 Configuration
+
+Use Pydantic v2 for configuration validation and JSON serialization.
+
+Use composed configs:
+
+```python
+SimulationConfig
+WorldConfig
+TraitConfig
+HarnessConfig
+MemoryConfig
+ReproductionConfig
+ExperimentConfig
+```
+
+Every run should write the resolved config to:
+
+```text
+runs/{run_id}/config.json
+```
+
+Hydra is deferred. Pydantic plus a small CLI is enough for v0.1.
+
+Decision:
+
+```text
+Pydantic v2 now.
+Hydra later if experiment sweeps become painful.
+```
+
+### 26.6 Lineage Tracking
+
+Use a simple internal lineage tracker first, but leave an adapter seam for Phylotrackpy.
+
+Phylotrackpy is strongly aligned with the long-term project, but it may be more dependency than needed before the reproduction model stabilizes.
+
+v0.1 should record:
+
+```text
+agent_id
+parent_id
+lineage_id
+birth_tick
+death_tick
+death_cause
+offspring_count
+traits_json
+```
+
+Add Phylotrackpy once:
+
+* reproduction semantics are stable
+* lineage metrics become central
+* population size grows
+* pruning extinct lineages matters
+
+Decision:
+
+```text
+Do not block v0.1 on Phylotrackpy.
+Design lineage logging so Phylotrackpy can be added later.
+```
+
+### 26.7 Testing Stack
+
+Use:
+
+```text
+pytest
+hypothesis
+pytest-benchmark optional
+```
+
+Hypothesis should be added immediately because many core truths are properties, not single examples.
+
+Good Hypothesis targets:
+
+```text
+mutation always stays in range
+valence total equals component sum
+no valid trait genome produces NaN
+memory decay never increases absolute memory unless updated
+same seed produces same world
+same seed produces same first N events
+```
+
+Decision:
+
+```text
+Use pytest + Hypothesis from the start.
+Add benchmark tests after the model is stable.
+```
+
+### 26.8 Numerical and Signal Computation
+
+Start with NumPy only.
+
+Use SciPy later if sensor calculations become expensive.
+
+Decision:
+
+```text
+Naive sensor loops are acceptable in v0.1.
+Keep sensor API swappable for future NumPy/SciPy convolution acceleration.
+```
+
+### 26.9 Dev Tooling
+
+Use:
+
+```text
+uv
+ruff
+mypy or pyright
+pre-commit
+```
+
+Suggested default:
+
+```text
+uv for project/dependency management
+ruff for linting and formatting
+mypy for type checking
+pre-commit for enforcement
+```
+
+Decision:
+
+```text
+Adopt uv + ruff immediately.
+Add mypy once core types settle.
+```
+
+### 26.10 Deferred Libraries
+
+Do not add these in v0.1:
+
+```text
+Gymnasium
+Stable-Baselines3
+Ray/RLlib
+PyTorch
+JAX
+DEAP
+Hydra
+Aim
+Streamlit
+Gradio
+full dashboard stack
+```
+
+Reason: each one is potentially useful later, but each increases surface area before the artificial-life core has proven itself.
+
+### 26.11 Final v0.1 Dependency Recommendation
+
+Core dependencies:
+
+```text
+mesa
+numpy
+pandas
+pydantic
+pytest
+hypothesis
+rich
+blinker
+```
+
+Dev dependencies:
+
+```text
+ruff
+mypy
+pre-commit
+pytest-benchmark optional
+```
+
+Deferred:
+
+```text
+phylotrackpy
+scipy
+pyarrow
+hydra-core
+hydra-zen
+deap
+aim
+gymnasium
+stable-baselines3
+pygame-ce
+```
+
+### 26.12 Updated Instruction to Chronus
+
+Proceed with Mesa as the backbone unless installation or API friction becomes obvious in the first scaffold.
+
+Chronus should first build a thin Mesa model with one RandomAgent and one deterministic test world. Then add the Hedonism Harness modules one at a time.
+
+Immediate implementation sequence:
+
+1. Set up `uv`, `pyproject.toml`, `ruff`, `pytest`, `hypothesis`.
+2. Install Mesa, NumPy, Pydantic, Pandas, Rich, and Blinker.
+3. Create a minimal Mesa model and grid.
+4. Add deterministic seed handling using NumPy RNG streams.
+5. Add RandomAgent smoke test.
+6. Add Traits and trait-range tests.
+7. Add ValenceBreakdown and valence property tests.
+8. Add HedonismAgent.
+9. Add reproduction and lineage CSV logging.
+10. Add Fear-Hunger Conflict Chamber.
+
+The first proof point is not visual beauty. The first proof point is:
+
+```text
+Given the same seed, the same model config produces the same world, same first N events, and same final metrics.
+```
