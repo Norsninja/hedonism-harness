@@ -186,6 +186,28 @@ def apply_action(
     raise ValueError(msg)
 
 
+def action_energy_cost(action: Action, action_config: ActionConfig) -> float:
+    """Return the energy cost the body pays for taking ``action``.
+
+    Used by the Hedonism Harness to compute ``effort_cost`` independent of body
+    energy clamping (which would otherwise hide costs when energy hits the cap
+    after eating).
+
+    REPRODUCE returns 0 in v0.1 step 6; the reproduction energy cost lands
+    with step 9.
+    """
+    if action == Action.STAY:
+        return action_config.stay_cost
+    if action in MOVE_DIRECTIONS:
+        return action_config.move_cost
+    if action == Action.EAT:
+        return action_config.eat_cost
+    if action == Action.REPRODUCE:
+        return 0.0
+    msg = f"Unknown action: {action!r}"
+    raise ValueError(msg)
+
+
 def commit_delta(world: World, delta: WorldDelta) -> None:
     """Apply a ``WorldDelta`` to the live world's NumPy layers in place."""
     for (x, y), mutation in delta.cells.items():
