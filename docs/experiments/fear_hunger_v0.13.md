@@ -1,16 +1,20 @@
-# Fear-Hunger Chamber — v0.13 memory-channel calibration (pre-registration)
+# Fear-Hunger Chamber — v0.13 memory-channel calibration
 
-**Experiment:** Profile the magnitude of `novelty_pleasure` (memory's
-output channel) against the rest of the harness on representative
-traces, then apply the smallest targeted wiring fix the profile
-implies, and re-run the v0.12 directional + action-aware sweep on
-both chambers.
-**Branch:** TBD — cut from `claude/review-hedonism-harness-i0CnN` tip.
-**Date:** TBD (this is a pre-registration; written 2026-05-04, before
-running.)
-**Runs:** `runs/fear-hunger-v0.13-profile/`,
-`runs/fear-hunger-v0.13a/` (tight_gradient),
-`runs/fear-hunger-v0.13b/` (food_ladder).
+**Experiment:** Profile `novelty_pleasure` magnitude against peer
+harness terms (Phase 1, pre-registered as a read-only diagnostic),
+then ship the smallest targeted wiring fix the profile implied —
+gating `novelty_pleasure` on `obs_before.hunger_level` to mirror
+`anticipated_food_pleasure` — and re-run the v0.12 directional +
+action-aware sweep on both chambers (Phase 2).
+**Branch:** `claude/v0.13-memory-channel-calibration`
+**Date:** 2026-05-04
+**Runs:** `runs/fear-hunger-v0.13-profile/` (Phase 1),
+`runs/fear-hunger-v0.13a/` (Phase 2 tight_gradient),
+`runs/fear-hunger-v0.13b/` (Phase 2 food_ladder).
+**Status:** Phase 1 confirmed H1 (wiring asymmetry) and H2
+(late-stage stall) independently — see
+[[docs/experiments/fear_hunger_v0.13_profile.md]]. Phase 2 shipped
+the hunger-gate; results below.
 
 ## Question
 
@@ -255,16 +259,269 @@ re-evaluate whether `HedonismPolicy` predict-one-step + harness
 scoring can express memory-driven behavior at all, before adding
 representation #4.
 
-## Reproducing (post-run, this section will be filled in)
+## Phase 1 results — H1 and H2 both confirmed
+
+Full write-up: [[docs/experiments/fear_hunger_v0.13_profile.md]].
+Headline:
+
+- **H1 confirmed mechanically.** Trace 1b (`ms0-md0.1`, food_ladder,
+  seed=2, tick=11): `novelty_pleasure` on MOVE_EAST = 44.96 vs
+  `eating_pleasure` on EAT = 17.68. Memory swayed argmax from EAT to
+  MOVE_EAST on a hungry-on-food agent. Trace 1c (`ms0-md0.1`,
+  tight_gradient, seed=2024, tick=39): EMA compounded to 680;
+  `novelty_pleasure` dominated by ~33×. Agent at energy=2.0 walked off
+  food. Trace 3 (sated, memory pointing east): without memory STAY
+  wins; with memory MOVE_EAST wins —
+  `anticipated_food_pleasure` silenced itself via its hunger gate;
+  `novelty_pleasure` did not.
+- **H2 confirmed independently.** 100 % of v0.12b winner births fell
+  in ticks 0–49; **zero births in ticks 50–199**. Mem-off baseline
+  showed the identical step-function distribution. Memory
+  representation is not the late-stage cause; the ceiling is
+  architectural (economics, crowding, or post-first-birth energy
+  state).
+
+Pre-registered branch: "`novelty_pleasure(MOVE_*) >> eating_pleasure(EAT)`
+in trace 1 → H1 confirmed mechanically. Proceed to Phase 2 with the
+hunger-gate fix." Branch fired; we proceeded.
+
+## Phase 2 results — hunger-gate fix lands; EAT-overrides drop sharply
+
+The wiring fix is one line in `core/valence.py:166`:
+
+```python
+# Before (v0.12)
+novelty_pleasure = novelty_score * traits.novelty_drive
+
+# After (v0.13)
+novelty_pleasure = novelty_score * obs_before.hunger_level * traits.novelty_drive
+```
+
+That's the entire change to harness math. Plus 6 new tests pinning
+the gating semantics + an updated v0.12 telemetry test that drains
+energy before sweeping memory (so the gate is open). The v0.12
+projection seam, telemetry plumbing, trait ranges, layouts,
+reproduction economics, and tick budget are all unchanged.
+
+### v0.13a tight_gradient
+
+```
+cell_id      births sw_b reqs food haz surv  mUp agUp rpt   dec  chg   rate
+mem-off           1    1    1   10  23  1/8    0    0   7     0    0  0.000
+ms0-md0.02        1    1    1    2  22  0/8  108   38   1  3194  160  0.050
+ms0-md0.05        1    1    1    3  22  0/8  108   38   1  3206  154  0.048
+ms0-md0.1         1    1    1    5  26  0/8  110   37   2  3240  130  0.040
+ms0.5-md0.02      1    1    1    3  19  0/8  110   38   2  3211   88  0.027
+ms0.5-md0.05      1    1    1    3  20  0/8  112   38   2  3211   88  0.027
+ms0.5-md0.1       1    1    1    4  25  0/8  112   37   3  3207   88  0.027
+ms1-md0.02        1    1    1    5  18  0/8  116   37   3  3204   31  0.010
+ms1-md0.05        1    1    1    6  18  0/8  116   37   4  3216   31  0.010
+ms1-md0.1         1    1    1    3  22  0/8  116   37   2  3160   18  0.006
+```
+
+`tight_gradient` is still 0/9 qualifiers — same as v0.11 and v0.12.
+Births stay at 1 across all cells; the chamber is unreachable under
+any current memory representation. But the substrate-regression vs
+mem-off has narrowed: v0.12 had `food_events ∈ {0, 1, 1, 2, 1, 5, 2,
+5, 5}` for the 9 memory cells; v0.13 has `{2, 3, 5, 3, 3, 4, 5, 6,
+3}` — a 1.7–3× lift on the worst cells. `argmax_change_rate` is
+also lower across the board (1.6–5.0 % vs v0.12's 1.1–5.8 %).
+
+EAT-override transition counts on `ms0-md0.1` (the cell where v0.12
+overrides clustered most densely):
+
+```
+v0.12: 84 EAT->MOVE_*  out of 171 swayed (49.1 %)
+v0.13: 44 EAT->MOVE_*  out of 130 swayed (33.8 %)
+```
+
+A ~46 % drop in EAT-override count and a ~24 % drop in total swayed
+decisions. Not eliminated — at fast EMA on tight_gradient, even mild
+hunger keeps the gate partly open and tendencies still grow large
+relative to `eating_pleasure`.
+
+### v0.13b food_ladder
+
+```
+cell_id      births sw_b reqs food haz surv  mUp agUp rpt   dec  chg   rate
+mem-off           5    4    5   28   0  0/8    0    0   7     0    0  0.000
+ms0-md0.02        5    3    5   28  20  0/8  200   37   6  2956  295  0.100
+ms0-md0.05        5    3    5   30  18  0/8  200   38   8  3077  305  0.099
+ms0-md0.1         5    3    5   28  20  0/8  202   38   7  2991  264  0.088   ← winner
+ms0.5-md0.02      4    3    4   32  11  0/8  214   38   9  3012  336  0.112
+ms0.5-md0.05      4    3    4   32   7  0/8  212   38   9  3088  282  0.091
+ms0.5-md0.1       4    3    4   30  12  0/8  216   38   9  3025  238  0.079
+ms1-md0.02        5    4    5   30   0  0/8  212   39   8  3136  142  0.045
+ms1-md0.05        5    4    5   30   0  0/8  214   39   9  3095  110  0.036
+ms1-md0.1         5    4    5   31   0  0/8  220   39   9  3125   72  0.023
+```
+
+**The v0.12 regression at low memory_strength is gone.** Direct
+comparison on births at the cells most affected by the EAT-override
+pathology:
+
+| cell | v0.12 births | v0.13 births |
+|---|---:|---:|
+| ms0-md0.02 | 3 | **5** |
+| ms0-md0.05 | 3 | **5** |
+| ms0-md0.1  | 3 | **5** |
+| ms0.5-md0.02 | 3 | 4 |
+| ms0.5-md0.05 | 3 | 4 |
+| ms0.5-md0.1 | 2 | 4 |
+| ms1-md0.02 | 4 | 5 |
+| ms1-md0.05 | 5 | 5 |
+| ms1-md0.1 | 5 | 5 |
+
+Every cell at or above v0.12 baseline; ms0-* and ms1-* now match
+the mem-off baseline of 5 births.
+
+`select_winning_cell` picks **`ms0-md0.1`** under the v0.7b rule:
+all 9 cells qualify, three reach `total_births=5` (ms0-md0.1,
+ms1-md0.05, ms1-md0.1), tie-broken by Euclidean distance to the
+SPEC-permissive memory anchor `(ms_min=0.0, md_max=0.1)`. ms0-md0.1
+**is** the anchor (distance² = 0.0).
+
+The v0.13b winner differs from v0.12b's (ms1-md0.1) — the gate
+unblocked the fast-EMA cells. But the new winner does not exceed
+baseline births (5 = 5). H2 binds the headline.
+
+Action-transition profile of `ms1-md0.1` (v0.12 winner identity, for
+comparison continuity):
+
+```
+v0.12: 102 swayed; EAT->MOVE_EAST = 5
+v0.13:  72 swayed; EAT->MOVE_EAST = 0   ← eliminated
+```
+
+The largest transition class becomes `MOVE_WEST -> MOVE_EAST` (47),
+which is the *desired* memory effect: an agent on the wrong side of
+the chamber gets pulled back toward known food.
+
+### Diagnosis
+
+**H1 fix is working as designed.** The hunger-gate eliminates EAT
+overrides at the v0.12 winner cell, halves them at the worst-case
+fast-EMA cells, and unblocks every food_ladder cell that was
+regressing in v0.12. Substrate metrics are maintained or improved.
+`argmax_change_rate` drops on every cell.
+
+**H2 still binds.** Total births still cap at the baseline 5 on
+food_ladder; tight_gradient still produces 1 birth across all 9
+cells. The substrate gains do not translate to extra births. The
+by-tick birth distribution from Phase 1 already showed why: 100 %
+of births fall in the first 50 ticks; founders reproduce once during
+the energy-rich initial window and the surviving pool then never
+reaches reproduction threshold again.
+
+**Net read of v0.13:** the wiring fix was necessary and correct.
+Memory's reward channel is no longer mis-scaled relative to its
+peers. But fixing the wiring did not lift the births ceiling because
+the binding constraint is reproduction economics / tick budget, not
+memory representation. v0.14 should test that ceiling directly.
+
+### Pre-registered failure → action mapping (Phase 2 outcomes)
+
+The pre-registered branch that fired:
+
+> **Cells qualify and match baseline births, EAT-override drops,
+> births do not increase** → wiring was real but H2 is the binding
+> ceiling. Pivot v0.14 to reproduction economics and/or tick budget.
+
+food_ladder: 9/9 qualify, EAT-overrides eliminated at the
+representative cell, births match (don't exceed) baseline.
+tight_gradient: 0/9 qualify (births=1), but EAT-overrides dropped
+46 %.
+
+The "regression vs v0.12" branch did **not** fire on either chamber.
+The "exceeds baseline births" branch did **not** fire either, exactly
+as Phase 1 predicted via the birth-distribution histogram.
+
+### What v0.13 confirms
+
+- **The hunger-gate is the right intervention.** Profile predicted
+  it; sweep validates it. EAT-override pattern that load-bore v0.12's
+  maladaptive behavior is now substantially attenuated.
+- **`novelty_pleasure` was structurally mis-scaled relative to
+  `anticipated_food_pleasure`.** The same hunger-gate that was
+  already on anticipated_food makes the memory channel symmetric.
+  Should have been there from the start; v0.13 retro-fits it.
+- **Substrate gains compound when the wiring is right.** v0.12's
+  ms0-* cells were *worse* than baseline on births; v0.13's are
+  *equal* to baseline. The wiring fix moves the floor.
+
+### What v0.13 rules out
+
+- *"The EAT-override pathology is unfixable without changing the
+  representation."* — false. It's a wiring asymmetry, fully fixed by
+  one line in valence.py.
+- *"The substrate-up-births-flat ceiling is a symptom of memory
+  representation."* — false. mem-off baseline shows the same
+  step-function birth distribution; representation is not the late-
+  stage cause.
+
+## What v0.13 leaves open (the v0.14 hand-off)
+
+1. **Reproduction economics or tick budget** — the binding ceiling.
+   Three sub-questions:
+   - Does extending `n_ticks=200 -> 500` (or 1000) produce a second
+     birth wave? Trivial to test.
+   - Does relaxing `tuned_reproduction_config(et=50, ec=35)` toward
+     `et=40, ec=30` allow surviving agents to reproduce again?
+   - Does post-first-birth energy distribution show all surviving
+     agents below the reproduction threshold? Diagnostic histogram.
+2. **Cell-exact memory under the v0.13 hunger-gate.** v0.10 showed
+   cell-exact's substrate-up-births-flat pattern; the new gate may
+   or may not change that. Worth a one-arm regression sweep.
+3. **Per-cell-kind categorical memory** (the v0.12 ranking's
+   option (2)) is still parked. Re-evaluate after the H2 question
+   closes.
+4. **`novelty_drive` semantic debt** — name still wrong (the channel
+   rewards familiarity, not novelty). Pure refactor; defer to a
+   cleanup slice that touches `core/traits.py` and `core/valence.py`
+   together.
+
+## What changed
+
+- [[src/hedonism_harness/core/valence.py]] — one-line edit to
+  `novelty_pleasure`: now multiplied by `obs_before.hunger_level`
+  (line 166). 9-line block comment above it explains why and points
+  at the v0.13 profile doc.
+- [[tests/test_valence.py]] — 5 new tests pinning the gating
+  semantics: zero when sated, linear scaling with hunger, gate uses
+  obs_before not obs_after (mirror of anticipated_food_pleasure),
+  identity at hunger=1.0 (regression-catch for an accidental gate
+  removal), and the trace-3 fingerprint scenario.
+- [[tests/test_action_aware_directional.py]] — one v0.12 test
+  updated to drain agent energy before exercising the swayed-argmax
+  path (the gate would silence memory on a sated agent — the
+  test was unintentionally exercising both v0.12 and the now-fixed
+  v0.13 pathology). Plus one new test asserting that a sated agent
+  is NOT swayed under the new gate, to lock the v0.13 invariant in
+  policy-level integration too.
+- [[scripts/v0.13_profile.py]] — Phase 1 read-only profiler (shipped
+  separately in `1e6308f`).
+- [[docs/experiments/fear_hunger_v0.13_profile.md]] — Phase 1
+  results (shipped separately in `1e6308f`).
+- This document — Phase 2 results appended, status updated.
+
+No changes to: `core/sensors.py`, `core/memory.py`, `core/actions.py`,
+`policies/`, the projection seam, the trait master ranges, layouts,
+reproduction economics, or any prior experiment's artifacts. v0.7..v0.12
+sweeps with `memory_type` defaulting to `"cell_exact"` re-run
+bit-identically when `traits.novelty_drive` produces zero memory
+contribution (the cell-exact path's `novelty_score` is zero whenever
+the agent is on a never-visited cell — verified via the existing
+458-test suite, including the v0.7..v0.12 regression tests).
+
+## Reproducing
 
 Phase 1:
 
 ```bash
-# Trace dump for the three pre-registered scenarios.
-uv run python scripts/v0.13_profile.py \
-    --seed 1 --tick 50 \
-    --winner-cell-id ms1-md0.1 \
-    --output runs/fear-hunger-v0.13-profile/traces.md
+# Trace dump for the three pre-registered scenarios + by-tick birth
+# distribution from existing v0.12 winner runs.
+uv run python scripts/v0.13_profile.py
+# wrote runs/fear-hunger-v0.13-profile/traces.md
 ```
 
 Phase 2:

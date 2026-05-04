@@ -153,8 +153,17 @@ def evaluate(
     )
 
     # Novelty: read from memory sensors (zero without memory in v0.1).
+    # v0.13 — gate on hunger to mirror ``anticipated_food_pleasure`` (above).
+    # Without this gate v0.12 traces showed memory's projected
+    # ``_remembered_good_total`` could grow without bound under fast EMA and
+    # override ``eating_pleasure`` even on a hungry agent standing on food
+    # (49 % of swayed decisions on tight_gradient were ``EAT -> MOVE_*``).
+    # Gating on ``obs_before.hunger_level`` makes a sated agent's memory
+    # channel silent, the same way ``anticipated_food_pleasure`` already
+    # silences itself when full. See ``docs/experiments/fear_hunger_v0.13_profile.md``
+    # for the trace data and the H1 confirmation.
     novelty_score = _remembered_good_total(obs_after)
-    novelty_pleasure = novelty_score * traits.novelty_drive
+    novelty_pleasure = novelty_score * obs_before.hunger_level * traits.novelty_drive
 
     pleasure = (
         eating_pleasure

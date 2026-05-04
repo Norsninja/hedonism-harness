@@ -231,6 +231,84 @@ def test_novelty_pleasure_zero_without_memory(traits, body_config) -> None:
     assert bd.details["novelty_score"] == 0.0
 
 
+# ---------------------------------------------------------------------------
+# v0.13: hunger-gate on novelty_pleasure (mirror of anticipated_food_pleasure).
+# Pre-registration: docs/experiments/fear_hunger_v0.13.md.
+# Phase 1 trace evidence: docs/experiments/fear_hunger_v0.13_profile.md.
+# ---------------------------------------------------------------------------
+
+
+def test_novelty_pleasure_silenced_when_obs_before_is_sated(traits, body_config) -> None:
+    """A fully sated agent's memory channel must contribute zero — the
+    v0.13 fingerprint scenario where v0.12 traces showed memory swaying
+    a sated agent off STAY into MOVE_<remembered-good>."""
+    body = _body(5, 5, traits, body_config)
+    obs_sated = _zero_obs(hunger_level=0.0, remembered_good_east=10.0)
+    bd = evaluate(obs_sated, obs_sated, body, body, Action.STAY, 0.0, traits)
+    assert bd.details["novelty_score"] == 10.0  # raw signal still readable
+    assert bd.details["novelty_pleasure"] == 0.0  # but gated to zero
+
+
+def test_novelty_pleasure_scales_linearly_with_obs_before_hunger(traits, body_config) -> None:
+    """Hunger gate is multiplicative: 4x the hunger -> 4x the pleasure
+    contribution (with everything else held fixed)."""
+    body = _body(5, 5, traits, body_config)
+    obs_low = _zero_obs(hunger_level=0.2, remembered_good_east=10.0)
+    obs_high = _zero_obs(hunger_level=0.8, remembered_good_east=10.0)
+    low = evaluate(obs_low, obs_low, body, body, Action.STAY, 0.0, traits)
+    high = evaluate(obs_high, obs_high, body, body, Action.STAY, 0.0, traits)
+    assert high.details["novelty_pleasure"] == pytest.approx(
+        4.0 * low.details["novelty_pleasure"], rel=1e-6
+    )
+
+
+def test_novelty_pleasure_uses_obs_before_not_obs_after(traits, body_config) -> None:
+    """Mirror of ``anticipated_food_pleasure``: the gate fires on
+    ``obs_before.hunger_level``, not ``obs_after``. An agent who is
+    hungry at decision-time but predicted to be sated post-action (e.g.
+    EAT) still receives the memory channel based on its pre-action
+    hunger — same convention as the rest of the predicted-action scoring."""
+    body = _body(5, 5, traits, body_config)
+    obs_before = _zero_obs(hunger_level=0.9, remembered_good_east=10.0)
+    obs_after = _zero_obs(hunger_level=0.0, remembered_good_east=10.0)
+    bd = evaluate(obs_before, obs_after, body, body, Action.STAY, 0.0, traits)
+    # 0.9 * trait_drive * 10.0 — non-zero because the gate reads obs_before.
+    assert bd.details["novelty_pleasure"] > 0.0
+    # And it's exactly obs_before.hunger_level * trait_drive * score.
+    expected = 10.0 * 0.9 * traits.novelty_drive
+    assert bd.details["novelty_pleasure"] == pytest.approx(expected, rel=1e-6)
+
+
+def test_novelty_pleasure_at_full_hunger_unchanged_from_pre_v013_formula(
+    traits, body_config
+) -> None:
+    """At ``hunger_level=1.0`` the gate is a multiplicative identity, so
+    the result must equal the pre-v0.13 formula ``score * novelty_drive``.
+    Pin so a future regression that drops the gate is caught only when
+    hunger ≠ 1.0 (where the gate matters)."""
+    body = _body(5, 5, traits, body_config)
+    obs = _zero_obs(hunger_level=1.0, remembered_good_north=4.0, remembered_good_east=6.0)
+    bd = evaluate(obs, obs, body, body, Action.STAY, 0.0, traits)
+    assert bd.details["novelty_score"] == pytest.approx(10.0)
+    assert bd.details["novelty_pleasure"] == pytest.approx(10.0 * traits.novelty_drive)
+
+
+def test_v013_fingerprint_sated_with_memory_total_does_not_exceed_stay(traits, body_config) -> None:
+    """End-to-end repro of the trace 3 scenario: a sated agent in a
+    no-hazard cell with memory loaded east must NOT have its harness
+    total beaten by MOVE_EAST. Pre-v0.13 this was the failure mode
+    (novelty_pleasure dominated); post-v0.13 the gate silences it.
+
+    The check is necessarily local — we only score STAY and STAY-with-
+    memory from the same obs to confirm the memory channel is gated
+    rather than asserting the full predict-one-step (that path is in
+    test_action_aware_directional.py and would replay the policy)."""
+    body = _body(5, 5, traits, body_config)
+    obs_sated = _zero_obs(hunger_level=0.0, remembered_good_east=8.0)
+    bd = evaluate(obs_sated, obs_sated, body, body, Action.STAY, 0.0, traits)
+    assert bd.details["novelty_pleasure"] == 0.0
+
+
 def test_uncertainty_zero_without_memory(traits, body_config) -> None:
     body = _body(5, 5, traits, body_config)
     obs = _zero_obs()

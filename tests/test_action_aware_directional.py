@@ -362,12 +362,20 @@ def test_argmax_change_rate_zero_when_no_decisions() -> None:
 def test_swayed_decisions_show_up_as_action_transitions() -> None:
     """When memory steers the argmax (as in the loaded-east unit test
     above) the per-tick decision log records the swayed transition; the
-    collector aggregates it into ``action_transitions``."""
+    collector aggregates it into ``action_transitions``.
+
+    Post-v0.13 the agent must be hungry for memory to sway anything —
+    ``novelty_pleasure`` is gated on ``obs_before.hunger_level``. We
+    drain the founder's energy below ``starting_energy`` so the gate
+    is open."""
+    import dataclasses as _dc
+
     model = _build_model(memory_type="directional")
     agent = next(a for a in model.agents if isinstance(a, HHAgent))
     assert isinstance(agent.memory, DirectionalMemory)
-    # Force the agent's directional memory to a configuration that will
-    # sway argmax (same recipe as the unit test above).
+    # Drain energy so hunger_level >= 0.5 — opens the v0.13 hunger-gate.
+    agent.body = _dc.replace(agent.body, energy=20.0)
+    # Force a directional memory configuration that will sway argmax.
     agent.memory.pleasure_tendency[2] = 50.0  # east
     agent.memory.pain_tendency[0] = 50.0
     agent.memory.pain_tendency[1] = 50.0
@@ -382,9 +390,40 @@ def test_swayed_decisions_show_up_as_action_transitions() -> None:
     assert telem.directional_decisions >= 1
     assert telem.argmax_changes >= 1
     # Action transitions key on (no_mem_action_int, with_mem_action_int).
-    # The unit test above established the no-mem winner is STAY (first
-    # valid action under strict ``>``), and the swayed winner is MOVE_EAST.
-    assert (int(Action.STAY), int(Action.MOVE_EAST)) in telem.action_transitions
+    # No-mem winner is the first valid action with the highest tie-broken
+    # score; swayed winner is MOVE_EAST. We assert MOVE_EAST appears as
+    # the with-memory action in at least one transition (the no-memory
+    # action depends on which other channel wins — STAY or MOVE_NORTH
+    # depending on the agent's spawn cell — but MOVE_EAST as the "to"
+    # is the load-bearing claim).
+    assert any(with_mem == int(Action.MOVE_EAST) for (_, with_mem) in telem.action_transitions)
+
+
+def test_v013_hunger_gate_silences_sated_agent_memory_channel() -> None:
+    """Mirror of trace 3 in the v0.13 Phase 1 profile. With the
+    hunger-gate, a sated agent cannot be swayed off STAY by a strong
+    east-tendency — even though pre-v0.13 it would have been
+    (novelty_pleasure ran un-gated)."""
+    import dataclasses as _dc
+
+    model = _build_model(memory_type="directional")
+    agent = next(a for a in model.agents if isinstance(a, HHAgent))
+    assert isinstance(agent.memory, DirectionalMemory)
+    # Sate the agent: hunger_level = 0.0.
+    agent.body = _dc.replace(agent.body, energy=model.body_config.max_energy)
+    # Plant the same swaying tendency that did fire in the test above.
+    agent.memory.pleasure_tendency[2] = 50.0
+    agent.memory.pain_tendency[0] = 50.0
+    agent.memory.pain_tendency[1] = 50.0
+    agent.memory.pain_tendency[3] = 50.0
+
+    coll = MemoryTelemetryCollector(model)
+    coll.connect()
+    model.step()
+    coll.disconnect()
+    telem = coll.finalize()
+    # Memory cannot sway a sated agent because novelty_pleasure is gated.
+    assert telem.argmax_changes == 0
 
 
 def test_model_step_calls_note_policy_decision_for_directional_only() -> None:
