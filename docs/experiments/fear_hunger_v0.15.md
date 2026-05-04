@@ -79,10 +79,10 @@ that v0.14 resolves into STAY. Inside that branch:
 ```
 current_total = obs.food_signal_n + ... + obs.food_signal_w
 dS = current_total - memory.last_total_food_signal
-hunger_gate = obs.hunger_level   # multiplicative gate, v0.13-aligned
 
-if hunger_gate <= 0.0:
-    return STAY                  # sated cell does not waste energy in a blackout
+# Sated veto: a sated cell does not waste energy in a blackout.
+if obs.hunger_level <= 0.0:
+    return STAY
 
 if dS >= 0 and memory.last_move_action in MOVE_ACTIONS:
     return memory.last_move_action   # persist (run)
@@ -97,14 +97,16 @@ the agent's current cell (in-bounds, not occupied). If no MOVE is valid
 the cell STAYs. The tumble bypasses the gradient but is bounded by the
 existing `get_valid_actions` set, so the determinism contract is unchanged.
 
-### Hunger gate
+### Hunger gate — hard sated veto
 
-A sated cell (`hunger_level == 0`) STAYs in the blackout case rather than
+A sated cell (`hunger_level <= 0`) STAYs in the blackout case rather than
 running or tumbling. This is energy economy, not biology — real bacteria
 chemotax continuously. The gate aligns with v0.13's `novelty_pleasure`
 hunger-gate philosophy: trait-modulated channels should not override
-substrate energy economy when there is nothing to gain. Multiplicative gate
-is the simplest defensible shape.
+substrate energy economy when there is nothing to gain. The gate is a
+**hard sated veto**, not a multiplicative tumble probability — the cleaner
+shape for this slice. A probabilistic / multiplicative gate is deferred
+unless H4 evidence requires it.
 
 ### What the v0.14 cell does NOT change
 
@@ -210,8 +212,9 @@ B-A = persistence effect; C-B = derivative-tumble effect.
 - Spatial maps.
 - Directional EMA per cardinal (= multi-cell tier; deferred to v0.20+).
 - New trait fields. The v0.14 trait schema is fixed for this slice.
-- Hunger-gate refinements (sigmoid, threshold-based, etc.) — multiplicative
-  is the default; revisit only if H4 shows the cell flails when sated.
+- Hunger-gate refinements (sigmoid, multiplicative tumble probability,
+  threshold-based, etc.) — the v0.15 default is a hard sated veto;
+  revisit only if H4 shows the cell flails when sated.
 - Receptor-level methylation analog. Over-engineering at the cell scale.
 - Reintroducing `memory_strength` / `memory_decay_rate` as live trait
   modulators — they remain inert in v0.15 (the scalar lag has no rate).
@@ -222,8 +225,13 @@ B-A = persistence effect; C-B = derivative-tumble effect.
 
 ### File-level changes
 
-- New: `src/hedonism_harness/core/memory.py` additions
-  (`ScalarMemory` dataclass, `make_scalar_memory()`, `update_scalar()`).
+- Modify: `src/hedonism_harness/core/memory.py` — add `ScalarMemory`
+  dataclass, `make_scalar_memory()`, `update_scalar()` alongside the
+  existing `ValenceMemory` / `DirectionalMemory` machinery.
+  `ScalarMemory.last_move_action` should hold an `Action` if importing
+  from `core.actions` is clean; if a circular import surfaces, fall back
+  to a small enum-safe value (e.g. the action's int code) and document
+  the reason at the import site.
 - New: `src/hedonism_harness/policies/gradient_policy.py` blackout branch
   (~25 LOC additional).
 - Modify: `src/hedonism_harness/model.py` — `MEMORY_TYPE_SCALAR =
