@@ -40,6 +40,7 @@ from hedonism_harness.core.memory import decay_all as _decay_memory_all
 from hedonism_harness.core.memory import (
     decay_directional as _decay_memory_directional,
 )
+from hedonism_harness.core.reproduction import can_reproduce
 from hedonism_harness.core.sensors import observe
 from hedonism_harness.core.world import CellKind
 from hedonism_harness.policies.base import DecisionContext
@@ -226,6 +227,45 @@ class HHAgent(CellAgent):
             _decay_memory_all(self.memory, decay_rate)
         elif isinstance(self.memory, DirectionalMemory):
             _decay_memory_directional(self.memory, decay_rate)
+
+    def apply_auto_reproduction(self) -> None:
+        """v0.2 substrate phase: trigger reproduction without policy intent.
+
+        Per v0.2 reflex-cell spec, reproduction is a substrate consequence
+        of body state, not a behavior. When the agent is alive, eligible
+        (energy >= threshold, age >= min_age, not on a hazard cell, has
+        an open neighbor), and the model has auto-reproduction enabled,
+        this phase emits a ``ReproductionRequested`` event and queues a
+        birth via the existing ``_birth_queue`` infrastructure. The
+        per-tick birth-queue processing in ``model.step()`` then handles
+        the actual reproduction (energy debit, child construction).
+
+        No-op when:
+          - the agent is dead;
+          - ``model.auto_reproduction_enabled`` is False (the v0.7..v0.13
+            default; preserves bit-identity for the deliberative-voluntary
+            comparison branch);
+          - the agent fails ``can_reproduce`` (e.g., insufficient energy,
+            no open neighbor, on a hazard cell).
+        """
+        if not self.body.alive:
+            return
+        model = self.model  # type: HHModel
+        if not getattr(model, "auto_reproduction_enabled", False):
+            return
+        if model.reproduction_config is None:
+            return
+        # Build the same occupancy view the deliberative policy uses, so
+        # auto and voluntary triggers see identical eligibility state.
+        occupied = model.occupied_cells_excluding(self)
+        if not can_reproduce(model.world, self.body, model.reproduction_config, occupied):
+            return
+        # Emit ReproductionRequested so existing aggregators that count
+        # requests still see the intent (mirror of voluntary REPRODUCE
+        # apply_action emission).
+        request = ReproductionRequested(agent_id=self.body.id, x=self.body.x, y=self.body.y)
+        model.record_event(request)
+        model.queue_birth(self)
 
     def death_sweep(self) -> bool:
         """Mark the body dead (and remove from the grid + AgentSet) if vitals zeroed.

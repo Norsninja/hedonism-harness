@@ -197,6 +197,19 @@ class HHModel(mesa.Model):
         # log empty even when enabled.
         self._policy_decision_log: list[tuple[bool, int, int]] | None = None
 
+        # v0.2 reflex-cell substrate — automatic reproduction trigger.
+        # When ``auto_reproduction_enabled`` is True, ``HHAgent.apply_auto_reproduction``
+        # fires each tick (model.step() phase 4.5) and queues a birth for
+        # any agent whose body state satisfies ``can_reproduce``. Default
+        # False preserves v0.7..v0.13 voluntary-REPRODUCE behavior; the
+        # v0.14 comparison driver flips it to True for arms B and C.
+        self.auto_reproduction_enabled: bool = False
+
+        # v0.14 per-lineage trait fingerprint log. One entry per agent
+        # spawned (founders + births). Used by the speciation analysis
+        # pipeline. Always populated; cheap (one dict copy per spawn).
+        self.trait_fingerprints: list[dict[str, object]] = []
+
         # ---- Place founders --------------------------------------------
         for spec in founders:
             self._spawn_founder(spec)
@@ -280,7 +293,46 @@ class HHModel(mesa.Model):
             agent_rng=agent_rng,
             policy_factory=spec.policy_factory,
         )
+        self._record_trait_fingerprint(agent.body, birth_tick=0)
         return agent
+
+    def _record_trait_fingerprint(self, body: object, *, birth_tick: int) -> None:
+        """Append one entry to ``self.trait_fingerprints`` for a spawned agent.
+
+        Called at founder spawn (birth_tick=0) and at each child birth in
+        ``_process_birth_queue`` (birth_tick = tick the child was queued
+        and processed). The entry includes lineage_id, parent_id (None
+        for founders), the agent_id, and the full trait vector at spawn
+        time. Lineage-ancestry analysis stitches entries by parent_id.
+        """
+        traits = body.traits  # type: ignore[attr-defined]
+        entry: dict[str, object] = {
+            "agent_id": int(body.id),  # type: ignore[attr-defined]
+            "parent_id": (
+                None if body.parent_id is None else int(body.parent_id)  # type: ignore[attr-defined]
+            ),
+            "lineage_id": int(body.lineage_id),  # type: ignore[attr-defined]
+            "birth_tick": int(birth_tick),
+            "spawn_x": int(body.x),  # type: ignore[attr-defined]
+            "spawn_y": int(body.y),  # type: ignore[attr-defined]
+        }
+        for trait_name in (
+            "hunger_pain_sensitivity",
+            "injury_pain_sensitivity",
+            "fear_sensitivity",
+            "pleasure_sensitivity",
+            "reproduction_drive",
+            "novelty_drive",
+            "uncertainty_aversion",
+            "pain_tolerance",
+            "risk_tolerance",
+            "memory_strength",
+            "memory_decay_rate",
+            "sensor_radius",
+            "metabolic_rate",
+        ):
+            entry[trait_name] = getattr(traits, trait_name)
+        self.trait_fingerprints.append(entry)
 
     # ------------------------------------------------------------------
     # Wrapper-side queries (read by HHAgent.step)
@@ -388,6 +440,14 @@ class HHModel(mesa.Model):
                 agent.apply_metabolism_step()
                 agent.apply_memory_decay()
 
+        # 4.5 v0.2 reflex-cell substrate: automatic reproduction trigger.
+        # No-op for the v0.7..v0.13 deliberative-voluntary path
+        # (auto_reproduction_enabled defaults to False).
+        if self.auto_reproduction_enabled:
+            for agent in self.agents:
+                if isinstance(agent, HHAgent):
+                    agent.apply_auto_reproduction()
+
         # 5. Hazard residency damage.
         for agent in self.agents:
             if isinstance(agent, HHAgent):
@@ -457,6 +517,7 @@ class HHModel(mesa.Model):
                 policy_factory=policy_factory,
             )
             assert child_body.parent_id is not None  # children always have a parent_id.
+            self._record_trait_fingerprint(child_body, birth_tick=self.tick_count)
             born = AgentBorn(
                 agent_id=child_body.id,
                 parent_id=child_body.parent_id,
