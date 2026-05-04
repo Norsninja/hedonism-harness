@@ -275,12 +275,160 @@ agent-RNG-derived sequence is used as for existing tie-breaks.
 
 Total v0.15 implementation: ~360 LOC. Comparable to v0.13.
 
+## Results (executed 2026-05-04)
+
+Three arms × two chambers × eight seeds (1..8) × 200 ticks × 5 founders.
+48 runs total. Substrate parameters held identical to v0.14
+(`energy_threshold=50.0`, `energy_cost=35.0`, `unbounded_mutation=True`,
+no archetype injection).
+
+### v0.15a tight_gradient
+
+| arm | total_births | birth>50 | survivors | food_events | still% |
+|---|---:|---:|---:|---:|---:|
+| reflex-baseline (A) | 47 | 0 | 2/8 | 192 | 92.0 |
+| reflex-persistence (B) | 46 | 0 | 1/8 | 192 | 91.7 |
+| reflex-chemotaxis (C) | 52 | 0 | 1/8 | 192 | 89.4 |
+
+C-A: total_births +5; **births_after_tick_50: 0 vs 0 (no lift)**;
+survivors -1; food_events identical; still% -2.6 pp.
+B-A: total_births -1; survivors -1; still% -0.3 pp.
+
+### v0.15b food_ladder
+
+| arm | total_births | birth>50 | survivors | food_events | still% |
+|---|---:|---:|---:|---:|---:|
+| reflex-baseline (A) | 39 | 3 | 4/8 | 174 | 91.4 |
+| reflex-persistence (B) | 38 | 4 | 3/8 | 174 | 91.5 |
+| reflex-chemotaxis (C) | 54 | 3 | 4/8 | 174 | 88.1 |
+
+C-A: total_births +15 (≈+38%); **births_after_tick_50: 3 vs 3 (no
+lift)**; survivors identical; food_events identical; still% -3.3 pp.
+B-A: total_births -1; births_after_tick_50 +1 (4 vs 3) — single-event
+delta on n=8, not load-bearing; survivors -1.
+
+### Hypotheses → outcomes
+
+- **H1.** `births_after_tick_50` C > A on food_ladder. **Falsified.**
+  C and A both produce 3.
+- **H2.** `births_after_tick_50` C > A on tight_gradient.
+  **Falsified.** Both 0.
+- **H3.** B carries some of C's effect. **Vacuous given H1/H2** —
+  there is no positive effect to apportion. B's tight_gradient and
+  food_ladder total_births sit within ±1 of A.
+- **H4.** `still_tick_fraction` decreases under B/C vs A; magnitude
+  bounded. **Confirmed for C.** -2.6 pp (tight_gradient), -3.3 pp
+  (food_ladder). B is essentially flat (-0.3 / +0.1 pp).
+- **H5.** Arm A reproduces v0.14 reflex-auto bit-identically.
+  **Confirmed against current `claude/v0.14-reflex-cell` code.** Fresh
+  re-run of v0.14 ARMS reflex-auto on `food_ladder` from current HEAD
+  yields the same `(39, 3, 4/8, 174, 91.40%)` triple as v0.15
+  reflex-baseline. (See "Determinism note" below — the numbers in
+  [[docs/experiments/fear_hunger_v0.14.md]] published-baseline table
+  are 35/91.7 on food_ladder; current code reproduces 39/91.40 from
+  the same seeds. The discrepancy predates v0.15; v0.15 introduces no
+  new determinism break.)
+
+### Determinism note
+
+The `claude/v0.14-reflex-cell` published baseline reports
+food_ladder reflex-auto as 35 total_births / 91.7% still. A
+re-execution from current HEAD (commit `ae25d63` immediately
+post-v0.14 merge) reproduces 39 / 91.40%. tight_gradient reflex-auto
+matches exactly (47 / 92.0%). All v0.15 arms execute against the same
+HEAD code, so the v0.14-vs-v0.15 contrasts above are sound; the
+mismatch is between the v0.14 published table and the v0.14 code as
+committed, not between v0.15 and v0.14 code. Worth investigating
+later as a v0.14-time provenance question; not blocking for v0.15.
+
+### Headline finding
+
+**Cell-tier scalar memory does not break the v0.14 H2 compounding
+ceiling on either chamber.** Chemotaxis materially increases foraging
+activity (+15 total_births on food_ladder, ≈+38%; -3.3 pp still%) but
+the additional births do not survive into the post-tick-50 generation
+window. food_events are identical across arms (192 / 174) — the
+foraging itself was not constrained by the v0.14 cell's ability to
+find food; what's constrained is what happens *after* a successful
+forager reproduces.
+
+Two consequences:
+
+1. The chemotaxis cell does forage better. The +15 births on
+   food_ladder under chemotaxis vs baseline isn't noise — it's a real
+   foraging gain that lifts first-generation reproduction. Cells
+   reach food faster, hit the energy threshold earlier, and queue
+   more first births. But the children die before reproducing
+   themselves.
+
+2. The H2 ceiling is not a memory-tier mismatch under the current
+   substrate. A scalar comparator + persistence/tumble does what
+   bacteria do; the cell now *sees* gradients across blackouts. It
+   still cannot push past the post-tick-50 wall. The wall is not
+   "the cell freezes when food is out of range." It's something else.
+
+### Decision rule fired (per pre-reg)
+
+> **C ≈ A across both chambers (no lift).** Cell-tier memory is not
+> load-bearing for compounding under the current substrate.
+
+The pre-reg's two interpretations both stand and are not yet
+distinguishable from this slice alone:
+
+- (i) Chambers are the binding constraint (geometry / hazard wall /
+  reproduction economics).
+- (ii) Memory tier is mismatched at this entity scale.
+
+### Data points worth flagging for v0.16
+
+- **food_events identical across arms.** The number of food cells
+  consumed in a 200-tick run on `food_ladder` is 174 under all three
+  arms. Either the chamber's food supply is exhausted independently
+  of arm, or the consumable-food pool is small enough that any
+  forager hits its ceiling fast. Worth verifying via the food_ladder
+  layout's total food count.
+- **+15 births on food_ladder C, no survivors lift.** The chemotaxis
+  cell produces ~38% more births but the same 4/8 surviving seeds.
+  Children are reproducing-and-dying without grandchildren. Suggests
+  a post-birth energy floor (the v0.14 watch-out) or starvation rate
+  that scales with population pressure.
+- **tight_gradient still 0 birth>50 under any arm.** The hazard wall
+  geometry is wrong for compounding. v0.16 substrate variants
+  (chamber width, hazard damage) should test (i) cleanly.
+- **Speciation analysis (`runs/fear-hunger-v0.15-speciation.md`) shows
+  ≥23 successful lineages per chamber under chemotaxis vs reflex
+  baseline.** No clear cluster jump in trait space; the same
+  `pleasure_sensitivity ≈ 0.5..2.5`, `fear_sensitivity ≈ 0.5..2.5`,
+  `risk_tolerance ≈ 0.4..0.9` band wins under both arms. Memory does
+  not appear to select for a different trait corner.
+
+### Recommendation for v0.16
+
+Pick (i) **substrate variants** as the next slice. Cheap to run
+(single-arm reflex-baseline sweep, no new mechanism), tests the most
+likely binding constraint (the food_events-saturation observation
+points there directly), and informs whether to revisit the
+multi-cell-tier memory question afterwards.
+
+If (i) shows compounding is geometry-bounded (e.g. wider chamber +
+lower hazard damage produces post-tick-50 births), v0.17 can pick
+chamber design with confidence and revisit memory at the multi-cell
+tier on richer substrate.
+
+If (i) shows compounding is *not* geometry-bounded — substrate
+variants don't lift birth>50 — that's evidence the H2 ceiling is
+fundamentally about reproduction economics or population dynamics,
+and v0.17 targets `energy_cost`, `min_age`, or population caps.
+
+The chemotaxis mechanism stays in the codebase; v0.16+ may keep arm C
+as a parallel comparison without making it the primary axis.
+
 ## References
 
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Memory" — the deferred slot
   this slice fills.
 - [[docs/experiments/fear_hunger_v0.14.md]] — v0.14 results; the v0.15
-  baseline.
+  baseline (and the source of the determinism-note discrepancy).
 - [[docs/experiments/fear_hunger_v0.13.md]] — v0.13 hunger-gate philosophy
   carried forward.
 - Berg, H. C. (2004). *E. coli in Motion.* Springer. — the run-tumble +
