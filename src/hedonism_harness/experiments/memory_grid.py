@@ -86,7 +86,10 @@ from hedonism_harness.experiments.fear_hunger_chamber import (
     run_chamber,
     spread_y,
 )
-from hedonism_harness.experiments.layouts import tight_gradient_layout
+from hedonism_harness.experiments.layouts import (
+    food_ladder_layout,
+    tight_gradient_layout,
+)
 from hedonism_harness.experiments.memory_telemetry import (
     MemoryTelemetry,
     MemoryTelemetryCollector,
@@ -125,6 +128,23 @@ BASELINE_CELL_ID: str = "mem-off"
 DEFAULT_N_FOUNDERS: int = 5
 OVERPOPULATION_MULTIPLIER: int = 3
 
+# Layout choices supported by this driver. v0.9 ran on tight_gradient (the
+# hard problem); v0.10 reuses the same 10-cell grid on food_ladder as the
+# memory positive-control. Layout is a config-time choice for the whole
+# run, not a sweep axis — making it an axis would steal interpretive weight
+# from the memory question.
+_LAYOUT_FACTORIES = {
+    "tight_gradient": tight_gradient_layout,
+    "food_ladder": food_ladder_layout,
+}
+
+
+def _resolve_layout(name: str) -> ChamberLayout:
+    if name not in _LAYOUT_FACTORIES:
+        msg = f"Unknown layout {name!r}; valid: {sorted(_LAYOUT_FACTORIES)}"
+        raise ValueError(msg)
+    return _LAYOUT_FACTORIES[name]()
+
 
 def memory_cell_label(*, memory_strength_min: float, memory_decay_rate_max: float) -> str:
     """Filesystem-safe id for a memory-on grid cell.
@@ -137,18 +157,23 @@ def memory_cell_label(*, memory_strength_min: float, memory_decay_rate_max: floa
 
 @dataclass(frozen=True)
 class MemoryCell:
-    """One point in the v0.9 grid.
+    """One point in the memory grid.
 
     The single ``mem-off`` cell sets ``use_memory=False`` and uses the v0.6
     winner trait config directly; its ``memory_strength_min`` /
     ``memory_decay_rate_max`` fields are SPEC defaults but ignored at run
     time because the founders have no memory to update. Memory-on cells
     carry the per-cell trait-range bounds.
+
+    ``layout_name`` selects the chamber for the whole run. v0.9 used
+    ``tight_gradient`` (the hard problem); v0.10 uses ``food_ladder`` as
+    the positive control. Default keeps v0.9 callers bit-identical.
     """
 
     use_memory: bool
     memory_strength_min: float
     memory_decay_rate_max: float
+    layout_name: str = "tight_gradient"
 
     @property
     def id(self) -> str:
@@ -160,12 +185,13 @@ class MemoryCell:
         )
 
     def to_layout(self) -> ChamberLayout:
-        # All v0.9 cells run on tight_gradient (the hard problem).
-        return tight_gradient_layout()
+        return _resolve_layout(self.layout_name)
 
     def to_trait_config(self) -> TraitConfig:
         if not self.use_memory:
-            # The v0.6 winner identity (matches v0.8 tight-sr1).
+            # The v0.6 winner identity (matches v0.8 tight-sr1 / ladder-sr1
+            # at sensor_radius_min=1; the eligibility_trait_config wrapper
+            # used in v0.8 reduces to this same TraitConfig at sr_min=1).
             return tuned_trait_config(fear_max=1.5, hunger_min=1.0, risk_min=0.55)
         return memory_trait_config(
             memory_strength_min=self.memory_strength_min,
@@ -179,13 +205,15 @@ class MemoryCell:
         )
 
 
-def all_grid_cells() -> list[MemoryCell]:
-    """Return the 1 baseline + 9 memory cells in stable order.
+def all_grid_cells(*, layout_name: str = "tight_gradient") -> list[MemoryCell]:
+    """Return the 1 baseline + 9 memory cells for ``layout_name``.
 
     Baseline first (so it appears at the top of comparison.csv), then
     the 9 memory cells in (strength_min, decay_max) lexicographic order.
     """
-    cells: list[MemoryCell] = [baseline_cell()]
+    # Validate up front so a typo fails loudly here, not deep in run loop.
+    _resolve_layout(layout_name)
+    cells: list[MemoryCell] = [baseline_cell(layout_name=layout_name)]
     for ms_min, md_max in itertools.product(
         MEMORY_STRENGTH_MIN_LEVELS, MEMORY_DECAY_RATE_MAX_LEVELS
     ):
@@ -194,17 +222,19 @@ def all_grid_cells() -> list[MemoryCell]:
                 use_memory=True,
                 memory_strength_min=ms_min,
                 memory_decay_rate_max=md_max,
+                layout_name=layout_name,
             )
         )
     return cells
 
 
-def baseline_cell() -> MemoryCell:
-    """The non-memory baseline: tight_gradient + use_memory=False."""
+def baseline_cell(*, layout_name: str = "tight_gradient") -> MemoryCell:
+    """The non-memory baseline: ``use_memory=False`` on ``layout_name``."""
     return MemoryCell(
         use_memory=False,
         memory_strength_min=PERMISSIVE_MEMORY_STRENGTH_MIN,
         memory_decay_rate_max=PERMISSIVE_MEMORY_DECAY_RATE_MAX,
+        layout_name=layout_name,
     )
 
 
@@ -538,10 +568,13 @@ def run_memory_grid(
     if write_snapshots_for_winner and winner is not None:
         snapshots_dir = batch_root / "snapshots"
         snapshots_dir.mkdir(exist_ok=True)
+        # The winner is always a memory-on cell; pick its layout off the
+        # matching MemoryCell input so the snapshot uses the run's chamber.
+        winner_cell = next(c for c in cells if c.id == winner.cell_id)
         snapshot = _capture_snapshot(
             seed=snapshot_seed,
             n_founders=n_founders,
-            layout=tight_gradient_layout(),
+            layout=winner_cell.to_layout(),
             snapshot_tick=snapshot_tick,
             trait_config=memory_trait_config(
                 memory_strength_min=winner.memory_strength_min,

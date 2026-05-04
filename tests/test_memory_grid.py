@@ -145,6 +145,120 @@ def test_memory_cell_id_uses_short_form() -> None:
 
 
 # ---------------------------------------------------------------------------
+# v0.10 layout parameterization
+# ---------------------------------------------------------------------------
+
+
+def test_memory_cell_default_layout_is_tight_gradient() -> None:
+    """Default keeps the v0.9 caller bit-identical."""
+    from hedonism_harness.experiments.layouts import tight_gradient_layout
+
+    cell = MemoryCell(use_memory=True, memory_strength_min=0.0, memory_decay_rate_max=0.1)
+    assert cell.layout_name == "tight_gradient"
+    assert cell.to_layout() == tight_gradient_layout()
+
+
+def test_memory_cell_food_ladder_layout_resolves() -> None:
+    """v0.10: ``layout_name='food_ladder'`` returns the food_ladder factory."""
+    from hedonism_harness.experiments.layouts import food_ladder_layout
+
+    cell = MemoryCell(
+        use_memory=True,
+        memory_strength_min=0.0,
+        memory_decay_rate_max=0.1,
+        layout_name="food_ladder",
+    )
+    assert cell.to_layout() == food_ladder_layout()
+
+
+def test_memory_cell_unknown_layout_raises() -> None:
+    cell = MemoryCell(
+        use_memory=True,
+        memory_strength_min=0.0,
+        memory_decay_rate_max=0.1,
+        layout_name="not_a_real_layout",
+    )
+    with pytest.raises(ValueError, match="Unknown layout"):
+        cell.to_layout()
+
+
+def test_baseline_cell_threads_layout_name() -> None:
+    """The mem-off baseline must run on the same layout as the rest of the grid."""
+    base_tight = baseline_cell()
+    base_ladder = baseline_cell(layout_name="food_ladder")
+    assert base_tight.layout_name == "tight_gradient"
+    assert base_ladder.layout_name == "food_ladder"
+    # Cell ID is layout-agnostic — the layout context lives in batch_id.
+    assert base_tight.id == BASELINE_CELL_ID
+    assert base_ladder.id == BASELINE_CELL_ID
+
+
+def test_all_grid_cells_threads_layout_name() -> None:
+    """Every cell in the v0.10 grid carries layout_name='food_ladder'."""
+    cells = all_grid_cells(layout_name="food_ladder")
+    assert len(cells) == 10
+    for c in cells:
+        assert c.layout_name == "food_ladder"
+
+
+def test_all_grid_cells_rejects_unknown_layout() -> None:
+    with pytest.raises(ValueError, match="Unknown layout"):
+        all_grid_cells(layout_name="nonsense_layout")
+
+
+def test_baseline_mem_off_uses_v06_winner_trait_config_on_food_ladder() -> None:
+    """The v0.10 mem-off cell must reproduce v0.8 ladder-sr1 setup exactly:
+    same trait config (v0.6 winner = eligibility_trait_config(sr_min=1)),
+    same reproduction config (et=50, ec=35), same layout (food_ladder),
+    use_memory=False. This is the criterion-3 baseline reference and the
+    determinism cross-check against the v0.8 artifact.
+    """
+    from hedonism_harness.experiments.trait_configs import (
+        eligibility_trait_config,
+        tuned_trait_config,
+    )
+
+    base = baseline_cell(layout_name="food_ladder")
+    assert base.use_memory is False
+    # v0.6 winner identity is what tuned_trait_config produces.
+    expected = tuned_trait_config(fear_max=1.5, hunger_min=1.0, risk_min=0.55)
+    assert base.to_trait_config() == expected
+    # And that's the same TraitConfig as v0.8's eligibility_trait_config(sr_min=1).
+    assert expected == eligibility_trait_config(sensor_radius_min=1)
+
+
+def test_food_ladder_smoke_run(tmp_path: Path) -> None:
+    """End-to-end: a tiny v0.10 grid on food_ladder runs and writes the
+    same artifact tree shape as v0.9. Confirms layout parameterization
+    flows through the driver."""
+    from hedonism_harness.experiments.memory_grid import run_memory_grid
+
+    cells = [
+        baseline_cell(layout_name="food_ladder"),
+        MemoryCell(
+            use_memory=True,
+            memory_strength_min=0.0,
+            memory_decay_rate_max=0.1,
+            layout_name="food_ladder",
+        ),
+    ]
+    aggs, baseline, _winner = run_memory_grid(
+        seeds=[1],
+        runs_root=tmp_path,
+        batch_id="ladder-smoke",
+        n_ticks=10,
+        n_founders=2,
+        snapshot_tick=5,
+        cells=cells,
+    )
+    assert len(aggs) == 2
+    assert baseline.cell_id == BASELINE_CELL_ID
+    batch_root = tmp_path / "ladder-smoke"
+    for cell in cells:
+        assert (batch_root / "cells" / cell.id / "seed-1").is_dir()
+
+
+# ---------------------------------------------------------------------------
 # MemoryTelemetryCollector — behavior on a real model
 # ---------------------------------------------------------------------------
 
