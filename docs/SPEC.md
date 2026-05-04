@@ -69,6 +69,8 @@ Secondary questions:
 
 ## 4. Recommended Repo Structure
 
+> **Superseded by §26.2 and §27.** Retained for historical context. The authoritative repo structure and module layout are defined in §27.
+
 ```text
 hedonism-harness/
     README.md
@@ -1360,3 +1362,254 @@ The first proof point is not visual beauty. The first proof point is:
 ```text
 Given the same seed, the same model config produces the same world, same first N events, and same final metrics.
 ```
+
+---
+
+## 27. Resolved Decisions (Pre-Implementation)
+
+This section records the architectural decisions agreed before any code is written. It supersedes §4 and refines §26.2. If anything in earlier sections conflicts with this section, this section wins.
+
+### 27.1 Grid Storage
+
+Use Mesa 3.x `PropertyLayer` for terrain attributes. One layer per attribute:
+
+```text
+kind            (uint8 enum: EMPTY, FOOD, HAZARD, WALL, SAFE)
+food_value      (float32)
+hazard_damage   (float32)
+safe_value      (float32)
+```
+
+`Cell` is not a stored object. It exists only as a read-only view helper returned by a function in `core/world.py`:
+
+```python
+def cell_at(world, x, y) -> Cell: ...
+```
+
+Rationale: NumPy-backed layers vectorize cleanly, support future SciPy convolutions for sensor signals, and avoid per-cell object overhead.
+
+### 27.2 Policy Abstraction
+
+One Mesa agent class wraps `body + policy + memory`. Policies are composed in, not subclassed:
+
+```text
+RandomPolicy
+ReflexPolicy
+HedonismPolicy
+MemoryHedonismPolicy
+```
+
+All policies implement a common interface defined in `policies/base.py`:
+
+```python
+class Policy(Protocol):
+    def decide(
+        self,
+        observation: Observation,
+        body: AgentBody,
+        memory: ValenceMemory | None,
+        rng: np.random.Generator,
+    ) -> tuple[Action, ValenceBreakdown | None]: ...
+```
+
+`HedonismPolicy` returns the chosen `ValenceBreakdown`; `RandomPolicy` and `ReflexPolicy` return `None`.
+
+### 27.3 RNG Layering
+
+NumPy only. No Python `random` module. No use of Mesa's `model.random`.
+
+```text
+master_rng = np.random.default_rng(seed)
+named streams via master_rng.spawn(n):
+    world_gen
+    mutation
+    action_noise
+    hazard_resolution
+    agent_order        (per-tick shuffle)
+per-agent RNG spawned at birth from the mutation stream
+```
+
+Per-agent RNG enables lineage-reproducible behavior independent of population-wide call order.
+
+### 27.4 Tick Loop and Scheduler
+
+Use the Mesa 3.x `AgentSet` API:
+
+```python
+model.agents.shuffle_do("step")
+```
+
+Per-tick order:
+
+1. Shuffle living agents (using `agent_order` RNG).
+2. For each agent: observe → decide → apply_action → update memory → emit events.
+3. Apply per-tick metabolism + hazard residency damage.
+4. Death sweep → emit `AgentDied` events.
+5. Process births queued during step 2 → newborns are added to the AgentSet but **do not act this tick**.
+6. Snapshot collectors run (Mesa DataCollector).
+7. tick++.
+
+### 27.5 Predict-One-Step
+
+Single source of truth: `apply_action(world, body, action, config, rng) -> ActionResult`.
+
+For action scoring, the policy invokes the same `apply_action` against:
+
+- a cheap `body.copy()` (dataclass replace)
+- a lightweight `WorldDelta` overlay (dict of changed cell coords + values) layered over the real world
+
+No separate predictor function. Prevents drift between predicted and actual valence.
+
+### 27.6 Hazard Mechanics
+
+Deterministic for v0.1: any agent occupying a `HAZARD` cell at the end of a tick loses `hazard_damage` HP. Probabilistic hazards deferred to later versions.
+
+### 27.7 Reproduction Atomicity
+
+`get_valid_actions(body, world)` filters `REPRODUCE` out when:
+
+- `body.energy < reproduction_energy_threshold`
+- `body.age < min_reproduction_age`
+- no adjacent empty cell exists
+- `local_hazard_risk > reproduction_hazard_threshold`
+
+Filtered-out actions are never selected; no energy is lost on invalid attempts.
+
+Each founder agent in the initial population receives a unique `lineage_id`. Children inherit `lineage_id` from parent.
+
+### 27.8 Event Architecture and Layering
+
+```text
+core/events.py
+    typed event dataclasses
+    blinker signals
+
+metrics/
+    collectors.py     # Mesa DataCollector wiring (snapshot metrics)
+    aggregators.py    # event subscribers that maintain running tallies
+
+io/
+    csv_writer.py
+    jsonl_writer.py
+    run_writer.py     # writes runs/{run_id}/config.json + manifests
+    debug_logger.py
+```
+
+**Layering rule:** `core/` emits, `metrics/` interprets, `io/` persists.
+
+### 27.9 Agent Body Module
+
+The pure agent body dataclass and lifecycle helpers live in `core/body.py`, separate from the Mesa agent wrapper. Naming uses `AgentBody` (not `Agent`) to avoid colliding with Mesa's `Agent` concept:
+
+```python
+@dataclass
+class AgentBody:
+    id: int
+    lineage_id: int
+    parent_id: int | None
+    x: int
+    y: int
+    energy: float
+    health: float
+    age: int
+    traits: Traits
+    alive: bool = True
+    death_cause: DeathCause | None = None
+```
+
+`core/body.py` also exposes:
+
+```python
+DeathCause              # Enum: STARVATION, INJURY
+apply_metabolism(body, config) -> AgentBody
+apply_damage(body, amount) -> AgentBody
+is_dead(body) -> bool
+mark_dead(body, cause) -> AgentBody
+```
+
+`mesa_agents.py` is a thin adapter only.
+
+### 27.10 Authoritative Repo Structure
+
+```text
+src/hedonism_harness/
+    __init__.py
+    model.py                  # Mesa Model subclass
+    mesa_agents.py            # Single Mesa agent class wrapping body + policy + memory
+
+    core/
+        __init__.py
+        actions.py            # apply_action + WorldDelta overlay; single source of truth
+        body.py               # AgentBody dataclass + lifecycle helpers
+        config.py             # Pydantic v2 composed configs
+        events.py             # typed event dataclasses + blinker signals
+        memory.py             # ValenceMemory + update/decay
+        reproduction.py       # validity checks + child construction
+        rng.py                # named NumPy stream factory + per-agent spawn
+        sensors.py            # observe(world, body, memory) -> Observation
+        traits.py             # Traits dataclass + generation + mutation
+        valence.py            # ValenceBreakdown + harness evaluator
+        world.py              # PropertyLayer wiring + Cell view helper
+
+    policies/
+        __init__.py
+        base.py               # Policy Protocol
+        random_policy.py
+        reflex_policy.py
+        hedonism_policy.py
+        memory_hedonism_policy.py
+
+    metrics/
+        __init__.py
+        collectors.py
+        aggregators.py
+
+    io/
+        __init__.py
+        csv_writer.py
+        jsonl_writer.py
+        run_writer.py
+        debug_logger.py
+
+    experiments/
+        __init__.py
+        fear_hunger_chamber.py
+        batch.py
+
+    viz/
+        __init__.py
+        terminal.py           # Rich-based ASCII renderer
+        mesa_viz.py           # optional Solara viz, deferred
+
+tests/
+    test_world.py
+    test_body.py
+    test_traits.py
+    test_actions.py
+    test_sensors.py
+    test_valence.py
+    test_memory.py
+    test_reproduction.py
+    test_policies.py
+    test_simulation_determinism.py
+    test_metrics.py
+    test_events.py
+```
+
+### 27.11 Dependency Direction
+
+Strict, enforced by code review and (later) import-linter:
+
+```text
+core/         -> imports stdlib + numpy + pydantic + blinker. NO policy imports. NO Mesa.
+policies/     -> imports core. NO Mesa. NO io. NO metrics.
+mesa_agents.py-> imports Mesa + core + policies.
+model.py      -> imports Mesa + core + policies + metrics + io.
+metrics/      -> imports core/events. NO io.
+io/           -> imports metrics + core/events.
+experiments/  -> imports model + metrics + io.
+viz/          -> imports core (read-only) + metrics (read-only).
+tests/        -> may import anything.
+```
+
+The scientific core (`core/` + `policies/`) is independent of Mesa, IO, and persistence. This is what keeps the experiment portable, fast to test, and free of god-modules.
