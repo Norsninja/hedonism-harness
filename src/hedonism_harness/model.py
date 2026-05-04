@@ -30,7 +30,7 @@ from hedonism_harness.core.events import AgentBorn, AgentDied, LoggedEvent, emit
 from hedonism_harness.core.memory import make_memory
 from hedonism_harness.core.reproduction import process_reproduction
 from hedonism_harness.core.rng import RngStreams, make_streams, spawn_agent_rng
-from hedonism_harness.core.traits import TraitConfig, random_traits
+from hedonism_harness.core.traits import TraitConfig, Traits, random_traits
 from hedonism_harness.core.world import World, build_world
 from hedonism_harness.mesa_agents import HHAgent
 
@@ -48,9 +48,15 @@ class FounderSpec:
     """Declarative founder agent description.
 
     The model assigns ``lineage_id`` (sequential, 0..N-1) and per-agent RNG.
+
+    ``traits_override``: when provided, the founder is built with exactly those
+    traits and ``random_traits`` is not consulted. This is the seam used by the
+    v0.2 positive-control experiment to inject deterministic archetype Traits.
+    Leave ``None`` (default) to keep the v0.1 behavior of sampling each founder
+    from the configured ``TraitConfig`` ranges.
     """
 
-    __slots__ = ("policy_factory", "use_memory", "x", "y")
+    __slots__ = ("policy_factory", "traits_override", "use_memory", "x", "y")
 
     def __init__(
         self,
@@ -58,11 +64,13 @@ class FounderSpec:
         y: int,
         policy_factory: PolicyFactory,
         use_memory: bool = False,
+        traits_override: Traits | None = None,
     ) -> None:
         self.x = x
         self.y = y
         self.policy_factory = policy_factory
         self.use_memory = use_memory
+        self.traits_override = traits_override
 
 
 class HHModel(mesa.Model):
@@ -185,7 +193,11 @@ class HHModel(mesa.Model):
         lineage_id = self._next_lineage_id
         self._next_lineage_id += 1
 
-        traits = random_traits(self.trait_config, self.streams.mutation)
+        traits = (
+            spec.traits_override
+            if spec.traits_override is not None
+            else random_traits(self.trait_config, self.streams.mutation)
+        )
         body = make_body(
             body_id=self._next_body_id,
             lineage_id=lineage_id,

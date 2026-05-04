@@ -50,6 +50,7 @@ from hedonism_harness.policies.hedonism_policy import HedonismPolicy
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from hedonism_harness.core.traits import Traits
     from hedonism_harness.policies.base import Policy
 
 
@@ -158,8 +159,15 @@ def run_chamber(
     layout: ChamberLayout | None = None,
     policy_factory: Callable[[], Policy] = default_policy_factory,
     write_outputs: bool = True,
+    traits_override: Traits | None = None,
+    condition: str | None = None,
 ) -> ChamberRunResult:
-    """Run one Fear-Hunger Chamber episode and (optionally) persist its outputs."""
+    """Run one Fear-Hunger Chamber episode and (optionally) persist its outputs.
+
+    ``traits_override``: when provided, every founder shares this exact
+    ``Traits`` instance (the v0.2 positive-control seam). When ``None`` the
+    v0.1 behavior holds: each founder samples from the default ``TraitConfig``.
+    """
     layout = layout or ChamberLayout()
     world_cfg = build_chamber_layout(layout).model_copy(update={"seed": seed})
     body_cfg = BodyConfig()
@@ -170,7 +178,15 @@ def run_chamber(
     # Founders spaced along the safe zone's left column.
     spawn_x = layout.safe_x_min + 1
     spawn_ys = _spread_y(n_founders, layout.height)
-    founders = [FounderSpec(x=spawn_x, y=y, policy_factory=policy_factory) for y in spawn_ys]
+    founders = [
+        FounderSpec(
+            x=spawn_x,
+            y=y,
+            policy_factory=policy_factory,
+            traits_override=traits_override,
+        )
+        for y in spawn_ys
+    ]
 
     model = HHModel(
         world_cfg,
@@ -238,7 +254,10 @@ def run_chamber(
                 ticks_completed=model.tick_count,
                 population_start=n_founders,
                 population_end=population_end,
-                notes={"experiment": "fear_hunger_chamber"},
+                notes={
+                    "experiment": "fear_hunger_chamber",
+                    **({"condition": condition} if condition else {}),
+                },
             ),
         )
         write_episode_metrics(
