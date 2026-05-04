@@ -1,6 +1,6 @@
 """Per-agent valence memory (SPEC §13).
 
-Two memory representations live here:
+Three memory representations live here:
 
   - ``ValenceMemory`` (cell-exact, the v0.1 default): four parallel
     ``(width, height)`` NumPy layers — ``pleasure_ema``, ``pain_ema``,
@@ -12,12 +12,22 @@ Two memory representations live here:
     ``pleasure_tendency[N,S,E,W]`` and ``pain_tendency[N,S,E,W]``.
     Records "moving north tended to be good/bad." Survives food
     consumption naturally because the abstraction was never about a
-    specific cell. Bacterial-chemotaxis-style — primitive.
+    specific cell. Multi-cell-tier abstraction; rich for what a single
+    cell would have.
+  - ``ScalarMemory`` (v0.15 abstraction): one float
+    ``last_total_food_signal`` plus the last move direction
+    ``last_move_action``. The prokaryotic-chemotaxis tier — minimum
+    state that yields run/tumble behavior. Used by ``GradientPolicy``
+    in the sensor-blackout branch only (when ``best_net == 0``); see
+    [[docs/experiments/fear_hunger_v0.15.md]] §"Mechanism".
 
 Per SPEC §13.4, individual memories are not inherited — each newborn
 agent gets a fresh memory if its policy is memory-enabled.
 
-Per SPEC §27.11 this module imports stdlib + numpy only.
+Per SPEC §27.11 this module imports stdlib + numpy only — except for
+``Action``, which lives in ``core.actions`` and is needed by
+``ScalarMemory.last_move_action``. ``core.actions`` does not import
+``core.memory`` so the dependency is acyclic.
 
 Memory is intentionally mutable: ``update_at*`` and ``decay_*`` mutate
 arrays in place to avoid allocating per agent per tick.
@@ -29,6 +39,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from hedonism_harness.core.actions import Action
 from hedonism_harness.core.traits import Traits
 
 
@@ -241,3 +252,57 @@ def directional_signals_directional(memory: DirectionalMemory) -> dict[str, floa
         out[f"remembered_good_{name}"] = p if p > 0.0 else 0.0
         out[f"remembered_bad_{name}"] = q if q > 0.0 else 0.0
     return out
+
+
+# ---------------------------------------------------------------------------
+# ScalarMemory (v0.15): chemotaxis-tier scalar memory. Two fields, no EMA,
+# no spatial map. Used by ``GradientPolicy`` in the sensor-blackout branch
+# only (when no direction has a strictly-positive net pull); see
+# [[docs/experiments/fear_hunger_v0.15.md]] §"Mechanism".
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ScalarMemory:
+    """Per-agent scalar comparator + last-move record.
+
+    ``last_total_food_signal``: the sum of the four cardinal
+    ``obs.food_signal_*`` channels at the previous tick. The cell uses
+    the one-tick-lag derivative (``current_total - last_total_food_signal``)
+    as a "is the food situation getting better" comparator, mirroring
+    prokaryotic chemotaxis run/tumble.
+
+    ``last_move_action``: the action selected on the previous tick.
+    ``Action.STAY`` at construction (founders have no last move). Used
+    by the policy's persistence branch to repeat the previous direction
+    when the gradient is in blackout but the recent past was at least
+    as good as the present.
+
+    Defaults reflect the founder state: the cell has not yet sensed
+    anything and has not yet moved.
+    """
+
+    last_total_food_signal: float = 0.0
+    last_move_action: Action = Action.STAY
+
+
+def make_scalar_memory() -> ScalarMemory:
+    """Allocate a fresh ``ScalarMemory`` in its founder default state."""
+    return ScalarMemory()
+
+
+def update_scalar(
+    memory: ScalarMemory,
+    *,
+    total_food_signal: float,
+    action: Action,
+) -> None:
+    """In-place update of ``memory`` after a decision.
+
+    Called once per tick after ``policy.decide`` has chosen ``action``
+    against the observation that produced ``total_food_signal``. The
+    one-tick lag the policy reads next tick is exactly the values
+    written here.
+    """
+    memory.last_total_food_signal = float(total_food_signal)
+    memory.last_move_action = action
