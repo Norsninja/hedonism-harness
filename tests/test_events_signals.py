@@ -46,6 +46,27 @@ def test_signal_for_returns_named_singletons() -> None:
     assert a is b
 
 
+def test_event_log_carries_tick_envelope() -> None:
+    """``HHModel.event_log`` stores ``LoggedEvent`` envelopes, not raw events.
+
+    The envelope's ``tick`` must equal ``model.tick_count`` at emission time
+    (the value of ``tick_count`` *before* it's incremented at end-of-step,
+    so events emitted during step T carry tick T).
+    """
+    cfg = WorldConfig(seed=1, width=4, height=4, food_density=0.0, hazard_density=0.0)
+    model = HHModel(cfg, founders=[FounderSpec(x=1, y=1, policy_factory=RandomPolicy)])
+    assert model.event_log == []
+
+    model.step()  # tick 0 emits at least one AgentMoved or AgentStayed.
+    assert len(model.event_log) >= 1
+    for entry in model.event_log:
+        assert entry.tick == 0
+
+    model.step()  # tick 1 entries should now be present.
+    tick_1 = [e for e in model.event_log if e.tick == 1]
+    assert tick_1, "tick-1 events should be present after second step"
+
+
 def test_record_event_fires_signal() -> None:
     cap = _Capture(AteFood)
     try:

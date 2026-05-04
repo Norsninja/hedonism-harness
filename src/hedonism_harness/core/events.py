@@ -108,6 +108,21 @@ AnyEvent = (
 )
 
 
+@dataclass(frozen=True)
+class LoggedEvent:
+    """Tick-stamped envelope for an event in ``HHModel.event_log``.
+
+    Most events do not carry their own ``tick`` field (movements, eats,
+    hazard damage). Instead of bloating every event dataclass with a tick
+    field, the model wraps each event with the current ``tick_count`` at
+    emission time. ``io/jsonl_writer.py`` reads the envelope to produce
+    ``{"tick": T, "type": ..., "event": {...}}`` JSONL lines.
+    """
+
+    tick: int
+    event: AnyEvent
+
+
 # ---------------------------------------------------------------------------
 # Named blinker signals — one per event type
 # ---------------------------------------------------------------------------

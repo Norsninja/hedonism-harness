@@ -17,6 +17,7 @@ from hedonism_harness.core.events import (
     AgentBorn,
     AgentDied,
     AteFood,
+    LoggedEvent,
     emit,
 )
 from hedonism_harness.core.traits import TraitConfig
@@ -146,20 +147,29 @@ def test_lineages_csv_extinct_when_all_dead(tmp_path: Path) -> None:
     assert row["extinct"] == "1"
 
 
-def test_events_jsonl_one_line_per_event(tmp_path: Path) -> None:
+def test_events_jsonl_one_line_per_envelope(tmp_path: Path) -> None:
     paths = make_run_dir(tmp_path / "runs", "j1")
-    events = [
-        AgentBorn(agent_id=2, parent_id=1, lineage_id=0, x=0, y=0, tick=5),
-        AteFood(agent_id=1, x=1, y=1, food_gained=10.0),
-        AgentDied(agent_id=2, cause=DeathCause.STARVATION, tick=20),
+    logged = [
+        LoggedEvent(
+            tick=5, event=AgentBorn(agent_id=2, parent_id=1, lineage_id=0, x=0, y=0, tick=5)
+        ),
+        LoggedEvent(tick=12, event=AteFood(agent_id=1, x=1, y=1, food_gained=10.0)),
+        LoggedEvent(tick=20, event=AgentDied(agent_id=2, cause=DeathCause.STARVATION, tick=20)),
     ]
-    write_events_jsonl(paths.events_jsonl, events)
+    write_events_jsonl(paths.events_jsonl, logged)
     lines = paths.events_jsonl.read_text().strip().split("\n")
     assert len(lines) == 3
     payloads = [json.loads(line) for line in lines]
-    assert payloads[0]["event"] == "AgentBorn"
-    assert payloads[2]["event"] == "AgentDied"
-    assert payloads[2]["cause"] == "STARVATION"
+    # Envelope shape: {"tick": int, "type": str, "event": dict}.
+    assert payloads[0] == {
+        "tick": 5,
+        "type": "AgentBorn",
+        "event": {"agent_id": 2, "parent_id": 1, "lineage_id": 0, "x": 0, "y": 0, "tick": 5},
+    }
+    assert payloads[1]["tick"] == 12
+    assert payloads[1]["type"] == "AteFood"
+    assert payloads[2]["type"] == "AgentDied"
+    assert payloads[2]["event"]["cause"] == "STARVATION"
 
 
 def test_full_run_writes_all_files(tmp_path: Path) -> None:

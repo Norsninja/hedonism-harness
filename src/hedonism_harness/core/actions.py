@@ -207,15 +207,22 @@ def apply_action(
     raise ValueError(msg)
 
 
-def action_energy_cost(action: Action, action_config: ActionConfig) -> float:
+def action_energy_cost(
+    action: Action,
+    action_config: ActionConfig,
+    reproduction_config: ReproductionConfig | None = None,
+) -> float:
     """Return the energy cost the body pays for taking ``action``.
 
     Used by the Hedonism Harness to compute ``effort_cost`` independent of body
     energy clamping (which would otherwise hide costs when energy hits the cap
     after eating).
 
-    REPRODUCE returns 0 in v0.1 step 6; the reproduction energy cost lands
-    with step 9.
+    REPRODUCE returns ``reproduction_config.energy_cost`` when a config is
+    provided so the harness "feels" the same cost the simulation later
+    charges in ``process_reproduction``. Returns 0.0 when no config is
+    provided (preserves the v0.1-step-6 behavior for tests that only care
+    about move/stay/eat costs and never trigger reproduction scoring).
     """
     if action == Action.STAY:
         return action_config.stay_cost
@@ -224,7 +231,7 @@ def action_energy_cost(action: Action, action_config: ActionConfig) -> float:
     if action == Action.EAT:
         return action_config.eat_cost
     if action == Action.REPRODUCE:
-        return 0.0
+        return reproduction_config.energy_cost if reproduction_config is not None else 0.0
     msg = f"Unknown action: {action!r}"
     raise ValueError(msg)
 

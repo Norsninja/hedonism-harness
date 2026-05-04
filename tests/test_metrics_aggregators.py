@@ -81,6 +81,42 @@ def test_lifetime_aggregator_records_per_agent() -> None:
     assert parent_rec.offspring_count == 1
 
 
+def test_episode_aggregator_filters_by_sender() -> None:
+    """Two aggregators scoped to two different senders must not cross-contaminate.
+
+    This is the batch-run safety net: with sender filtering each aggregator
+    only sees its own model's events.
+    """
+    sender_a = object()
+    sender_b = object()
+    agg_a = EpisodeAggregator(model=sender_a)
+    agg_b = EpisodeAggregator(model=sender_b)
+    agg_a.connect()
+    agg_b.connect()
+    try:
+        emit(sender_a, AteFood(agent_id=1, x=0, y=0, food_gained=10.0))
+        emit(sender_a, AteFood(agent_id=1, x=1, y=0, food_gained=10.0))
+        emit(sender_b, AteFood(agent_id=2, x=0, y=0, food_gained=5.0))
+    finally:
+        agg_a.disconnect()
+        agg_b.disconnect()
+
+    assert agg_a.tally.food_events == 2
+    assert agg_b.tally.food_events == 1
+
+
+def test_unscoped_aggregator_listens_to_all_senders() -> None:
+    """Default ``model=None`` preserves the existing process-wide behavior."""
+    agg = EpisodeAggregator()
+    agg.connect()
+    try:
+        emit(object(), AteFood(agent_id=1, x=0, y=0, food_gained=1.0))
+        emit(None, AteFood(agent_id=1, x=1, y=0, food_gained=1.0))
+    finally:
+        agg.disconnect()
+    assert agg.tally.food_events == 2
+
+
 def test_aggregator_disconnect_is_idempotent() -> None:
     agg = EpisodeAggregator()
     agg.connect()

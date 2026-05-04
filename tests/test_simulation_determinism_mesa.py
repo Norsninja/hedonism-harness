@@ -77,17 +77,18 @@ def _hash_world_and_bodies(model: HHModel) -> str:
     return h.hexdigest()
 
 
-def _event_trace(model: HHModel) -> list[tuple[str, tuple]]:
-    """Return a deterministic per-event trace: (type_name, repr_tuple).
+def _event_trace(model: HHModel) -> list[tuple[int, str, tuple]]:
+    """Return a deterministic per-event trace: (tick, type_name, repr_tuple).
 
-    ``dataclasses.astuple`` is not used because ``DeathCause`` enum doesn't
-    serialize cleanly — ``repr`` is good enough for byte-identity comparison.
+    Each ``model.event_log`` entry is a ``LoggedEvent`` envelope; we read both
+    the tick and the inner event so a single off-by-one tick mismatch fails
+    this assertion immediately.
     """
-    return [(type(e).__name__, repr(e)) for e in model.event_log]
+    return [(le.tick, type(le.event).__name__, repr(le.event)) for le in model.event_log]
 
 
 def _event_counts(model: HHModel) -> Counter[str]:
-    return Counter(type(e).__name__ for e in model.event_log)
+    return Counter(type(le.event).__name__ for le in model.event_log)
 
 
 def _founders_at(

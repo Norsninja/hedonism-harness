@@ -13,12 +13,13 @@ from hedonism_harness.core.actions import (
     Action,
     CellMutation,
     WorldDelta,
+    action_energy_cost,
     apply_action,
     commit_delta,
     get_valid_actions,
 )
 from hedonism_harness.core.body import AgentBody, make_body
-from hedonism_harness.core.config import ActionConfig, BodyConfig, WorldConfig
+from hedonism_harness.core.config import ActionConfig, BodyConfig, ReproductionConfig, WorldConfig
 from hedonism_harness.core.events import (
     AgentMoved,
     AgentStayed,
@@ -309,6 +310,23 @@ def test_commit_empty_delta_is_noop() -> None:
 # ---------------------------------------------------------------------------
 # Predict-one-step contract (SPEC §27.5)
 # ---------------------------------------------------------------------------
+
+
+def test_action_energy_cost_reproduce_returns_zero_without_repro_config(action_config) -> None:
+    """Default behavior: REPRODUCE costs 0 if no reproduction config supplied."""
+    assert action_energy_cost(Action.REPRODUCE, action_config) == 0.0
+
+
+def test_action_energy_cost_reproduce_uses_reproduction_config() -> None:
+    """When the policy passes reproduction_config, REPRODUCE feels its real cost.
+
+    Regression guard for the bias that scoring REPRODUCE as free creates: a
+    HedonismPolicy would over-select reproduction even when its real cost
+    (charged later by process_reproduction) outweighs the benefit.
+    """
+    repro_cfg = ReproductionConfig(energy_cost=42.5)
+    cost = action_energy_cost(Action.REPRODUCE, ActionConfig(), repro_cfg)
+    assert cost == pytest.approx(42.5)
 
 
 def test_predict_one_step_can_score_all_valid_actions_without_drift(

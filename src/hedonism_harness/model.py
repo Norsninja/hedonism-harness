@@ -26,7 +26,7 @@ from hedonism_harness.core.config import (
     ReproductionConfig,
     WorldConfig,
 )
-from hedonism_harness.core.events import AgentBorn, AgentDied, emit
+from hedonism_harness.core.events import AgentBorn, AgentDied, LoggedEvent, emit
 from hedonism_harness.core.memory import make_memory
 from hedonism_harness.core.reproduction import process_reproduction
 from hedonism_harness.core.rng import RngStreams, make_streams, spawn_agent_rng
@@ -124,7 +124,11 @@ class HHModel(mesa.Model):
 
         # ---- Tick / event bookkeeping ----------------------------------
         self.tick_count: int = 0
-        self.event_log: list[AnyEvent] = []
+        # Every entry is a ``LoggedEvent`` carrying the emission tick. The
+        # JSONL writer reads ``.tick`` and ``.event``; aggregators read the
+        # raw event off the signal (which is sender + event-only — no
+        # envelope on the wire).
+        self.event_log: list[LoggedEvent] = []
         self._birth_queue: list[HHAgent] = []
         self._next_body_id: int = 1
         self._next_lineage_id: int = 0
@@ -225,19 +229,20 @@ class HHModel(mesa.Model):
         self._birth_queue.append(parent)
 
     def record_event(self, event: AnyEvent) -> None:
-        """Append to the in-memory log AND emit on the event's named signal.
+        """Append a tick-stamped envelope AND emit on the event's named signal.
 
-        Subscribers (``metrics/aggregators.py``) connect to the signals; the
-        log persists everything for IO writers and tests.
+        Subscribers (``metrics/aggregators.py``) connect to the signals and
+        receive the raw event; the log carries the tick alongside for IO
+        writers and per-tick analyses.
         """
-        self.event_log.append(event)
+        self.event_log.append(LoggedEvent(tick=self.tick_count, event=event))
         emit(self, event)
 
     def record_death(self, agent: HHAgent) -> None:
         cause = agent.body.death_cause
         assert cause is not None  # death_sweep only records after mark_dead.
         died = AgentDied(agent_id=agent.body.id, cause=cause, tick=self.tick_count)
-        self.event_log.append(died)
+        self.event_log.append(LoggedEvent(tick=self.tick_count, event=died))
         emit(self, died)
 
     # ------------------------------------------------------------------
@@ -331,7 +336,7 @@ class HHModel(mesa.Model):
                 y=child_body.y,
                 tick=self.tick_count,
             )
-            self.event_log.append(born)
+            self.event_log.append(LoggedEvent(tick=self.tick_count, event=born))
             emit(self, born)
             # ``child_agent`` is intentionally referenced via model.agents only.
             del child_agent

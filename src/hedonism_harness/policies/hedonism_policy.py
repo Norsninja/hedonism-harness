@@ -64,7 +64,7 @@ class HedonismPolicy:
             # ``obs_before.current_food_value`` for food_gained, so the
             # un-committed cell does not pollute the score.
             predicted_obs = observe(ctx.world, result.body, ctx.body_config, ctx.memory)
-            cost = action_energy_cost(candidate, ctx.action_config)
+            cost = action_energy_cost(candidate, ctx.action_config, ctx.reproduction_config)
             breakdown = evaluate(
                 ctx.observation,
                 predicted_obs,

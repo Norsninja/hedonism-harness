@@ -6,7 +6,15 @@ Aggregators connect to the named blinker signals defined in
   - owns a small dataclass of running tallies,
   - exposes ``connect()`` / ``disconnect()`` symmetric methods so tests and
     experiments can opt in/out cleanly,
+  - optionally scopes to a single ``model`` sender so concurrent batch runs
+    do not cross-contaminate (per blinker's per-sender connection model),
   - never writes to disk (that's ``io/``'s job).
+
+Sender filtering: pass ``model=<HHModel instance>`` to the constructor and
+the aggregator will only react to signals emitted with that exact sender.
+Multiple aggregators in the same process — one per model — stay isolated.
+Without ``model`` the aggregator listens to every model in the process,
+which is the right default for single-run scripts and tests.
 
 The two aggregators here cover the SPEC §17 metric set:
 
@@ -74,8 +82,9 @@ class EpisodeAggregator:
     ``disconnect()`` to avoid stale handlers across test runs.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, model: object | None = None) -> None:
         self.tally = EpisodeTally()
+        self._model = model
         self._connected = False
         self._handlers = (
             (AgentBorn, self._on_born),
@@ -92,14 +101,22 @@ class EpisodeAggregator:
         if self._connected:
             return
         for event_type, handler in self._handlers:
-            signal_for(event_type).connect(handler)
+            sig = signal_for(event_type)
+            if self._model is not None:
+                sig.connect(handler, sender=self._model)
+            else:
+                sig.connect(handler)
         self._connected = True
 
     def disconnect(self) -> None:
         if not self._connected:
             return
         for event_type, handler in self._handlers:
-            signal_for(event_type).disconnect(handler)
+            sig = signal_for(event_type)
+            if self._model is not None:
+                sig.disconnect(handler, sender=self._model)
+            else:
+                sig.disconnect(handler)
         self._connected = False
 
     # Handlers — blinker calls them as (sender, **kwargs). The kwarg name
@@ -168,8 +185,9 @@ class LifetimeAggregator:
     (the IO layer does this from ``model.agents`` at run-end).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, model: object | None = None) -> None:
         self.records: dict[int, LifetimeRecord] = defaultdict(lambda: LifetimeRecord(agent_id=-1))
+        self._model = model
         self._connected = False
         self._handlers = (
             (AgentBorn, self._on_born),
@@ -191,14 +209,22 @@ class LifetimeAggregator:
         if self._connected:
             return
         for event_type, handler in self._handlers:
-            signal_for(event_type).connect(handler)
+            sig = signal_for(event_type)
+            if self._model is not None:
+                sig.connect(handler, sender=self._model)
+            else:
+                sig.connect(handler)
         self._connected = True
 
     def disconnect(self) -> None:
         if not self._connected:
             return
         for event_type, handler in self._handlers:
-            signal_for(event_type).disconnect(handler)
+            sig = signal_for(event_type)
+            if self._model is not None:
+                sig.disconnect(handler, sender=self._model)
+            else:
+                sig.disconnect(handler)
         self._connected = False
 
     # Handlers ----------------------------------------------------------
