@@ -217,3 +217,64 @@ def eligibility_trait_config(*, sensor_radius_min: int) -> TraitConfig:
     return base.model_copy(
         update={"sensor_radius": TraitRange(min=sensor_radius_min, max=spec.sensor_radius.max)}
     )
+
+
+# ---------------------------------------------------------------------------
+# v0.9 memory-arm helper
+# ---------------------------------------------------------------------------
+
+
+def memory_trait_config(
+    *,
+    memory_strength_min: float,
+    memory_decay_rate_max: float,
+) -> TraitConfig:
+    """v0.9 factory: v0.6 winner trait ranges with overridden memory bounds.
+
+    Holds every other axis at the v0.6 winner setting and overrides only the
+    two memory ranges:
+
+      - ``memory_strength`` floor raised from SPEC default ``0.0`` to
+        ``memory_strength_min`` (ceiling stays at SPEC ``1.0``).
+      - ``memory_decay_rate`` ceiling lowered from SPEC default ``0.1`` to
+        ``memory_decay_rate_max`` (floor stays at SPEC ``0.0``).
+
+    The cell ``(memory_strength_min=0.0, memory_decay_rate_max=0.1)`` is the
+    SPEC-permissive memory identity — same range bounds as the v0.6 winner.
+    Higher ``memory_strength_min`` narrows the range upward (slower per-cell
+    EMA updates); lower ``memory_decay_rate_max`` narrows the range downward
+    (slower per-tick forgetting).
+    """
+    spec = TraitConfig()
+    if not (spec.memory_strength.min <= memory_strength_min <= spec.memory_strength.max):
+        msg = (
+            f"memory_strength_min={memory_strength_min} outside SPEC memory_strength range "
+            f"[{spec.memory_strength.min}, {spec.memory_strength.max}]"
+        )
+        raise ValueError(msg)
+    if not (spec.memory_decay_rate.min <= memory_decay_rate_max <= spec.memory_decay_rate.max):
+        msg = (
+            f"memory_decay_rate_max={memory_decay_rate_max} outside SPEC memory_decay_rate range "
+            f"[{spec.memory_decay_rate.min}, {spec.memory_decay_rate.max}]"
+        )
+        raise ValueError(msg)
+    base = tuned_trait_config(fear_max=1.5, hunger_min=1.0, risk_min=0.55)
+    return base.model_copy(
+        update={
+            "memory_strength": TraitRange(
+                min=memory_strength_min, max=spec.memory_strength.max
+            ),
+            "memory_decay_rate": TraitRange(
+                min=spec.memory_decay_rate.min, max=memory_decay_rate_max
+            ),
+        }
+    )
+
+
+def memory_cell_id(*, memory_strength_min: float, memory_decay_rate_max: float) -> str:
+    """Filesystem-safe id for a v0.9 memory grid cell.
+
+    Format: ``ms{strength_min}-md{decay_max}``. ``:g`` formatting trims trailing
+    zeros so ``(0.0, 0.1)`` formats as ``ms0-md0.1``.
+    """
+    return f"ms{memory_strength_min:g}-md{memory_decay_rate_max:g}"
