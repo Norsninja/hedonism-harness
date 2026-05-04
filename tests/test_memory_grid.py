@@ -227,6 +227,98 @@ def test_baseline_mem_off_uses_v06_winner_trait_config_on_food_ladder() -> None:
     assert expected == eligibility_trait_config(sensor_radius_min=1)
 
 
+# ---------------------------------------------------------------------------
+# v0.11 memory_type parameterization
+# ---------------------------------------------------------------------------
+
+
+def test_memory_cell_default_memory_type_is_cell_exact() -> None:
+    """Default keeps v0.9/v0.10 callers bit-identical."""
+    cell = MemoryCell(use_memory=True, memory_strength_min=0.0, memory_decay_rate_max=0.1)
+    assert cell.memory_type == "cell_exact"
+
+
+def test_all_grid_cells_threads_memory_type() -> None:
+    cells = all_grid_cells(layout_name="tight_gradient", memory_type="directional")
+    assert len(cells) == 10
+    for c in cells:
+        assert c.memory_type == "directional"
+
+
+def test_baseline_cell_threads_memory_type() -> None:
+    """Baseline records memory_type for completeness; ignored at run time
+    because use_memory=False."""
+    base = baseline_cell(memory_type="directional")
+    assert base.memory_type == "directional"
+    assert base.use_memory is False
+
+
+def test_run_chamber_directional_seam_writes_directional_memory(tmp_path: Path) -> None:
+    """End-to-end: run_chamber(use_memory=True, memory_type='directional')
+    must hand founders a DirectionalMemory, not a ValenceMemory."""
+    from hedonism_harness.core.memory import DirectionalMemory
+    from hedonism_harness.experiments.fear_hunger_chamber import (
+        ChamberLayout,
+        run_chamber,
+    )
+    from hedonism_harness.mesa_agents import HHAgent
+
+    captured_types: list[type] = []
+
+    def setup(model: HHModel) -> None:
+        for agent in model.agents:
+            if isinstance(agent, HHAgent) and agent.memory is not None:
+                captured_types.append(type(agent.memory))
+
+    run_chamber(
+        seed=1,
+        runs_root=tmp_path,
+        run_id="dir-seam-test",
+        n_founders=3,
+        n_ticks=1,
+        layout=ChamberLayout(),
+        write_outputs=False,
+        use_memory=True,
+        memory_type="directional",
+        setup_observer=setup,
+    )
+
+    assert len(captured_types) == 3
+    assert all(t is DirectionalMemory for t in captured_types)
+
+
+def test_run_chamber_default_memory_type_remains_cell_exact(tmp_path: Path) -> None:
+    """Backward compatibility: omitting memory_type yields ValenceMemory
+    (the v0.9/v0.10 default)."""
+    from hedonism_harness.core.memory import ValenceMemory
+    from hedonism_harness.experiments.fear_hunger_chamber import (
+        ChamberLayout,
+        run_chamber,
+    )
+    from hedonism_harness.mesa_agents import HHAgent
+
+    captured_types: list[type] = []
+
+    def setup(model: HHModel) -> None:
+        for agent in model.agents:
+            if isinstance(agent, HHAgent) and agent.memory is not None:
+                captured_types.append(type(agent.memory))
+
+    run_chamber(
+        seed=1,
+        runs_root=tmp_path,
+        run_id="default-mem-test",
+        n_founders=2,
+        n_ticks=1,
+        layout=ChamberLayout(),
+        write_outputs=False,
+        use_memory=True,
+        setup_observer=setup,
+    )
+
+    assert all(t is ValenceMemory for t in captured_types)
+
+
 def test_food_ladder_smoke_run(tmp_path: Path) -> None:
     """End-to-end: a tiny v0.10 grid on food_ladder runs and writes the
     same artifact tree shape as v0.9. Confirms layout parameterization

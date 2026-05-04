@@ -1,19 +1,26 @@
-"""Per-agent valence memory map (SPEC §13).
+"""Per-agent valence memory (SPEC §13).
 
-A ``ValenceMemory`` holds four parallel ``(width, height)`` NumPy layers:
+Two memory representations live here:
 
-  - ``pleasure_ema``: exponential moving average of pleasure felt at each cell.
-  - ``pain_ema``: same for pain.
-  - ``visits``: visit count per cell.
-  - ``last_seen_tick``: tick number of the most recent visit.
+  - ``ValenceMemory`` (cell-exact, the v0.1 default): four parallel
+    ``(width, height)`` NumPy layers — ``pleasure_ema``, ``pain_ema``,
+    ``visits``, ``last_seen_tick``. Records "this cell was good/bad."
+    Used by v0.9 + v0.10. Mismatched to consumable food: cells stay
+    "good" in memory after their food is consumed (a stale-attractor
+    pull), partially mitigated by per-tick decay (SPEC §13.3).
+  - ``DirectionalMemory`` (v0.11 abstraction): two 4-vectors
+    ``pleasure_tendency[N,S,E,W]`` and ``pain_tendency[N,S,E,W]``.
+    Records "moving north tended to be good/bad." Survives food
+    consumption naturally because the abstraction was never about a
+    specific cell. Bacterial-chemotaxis-style — primitive.
 
-Per SPEC §13.4, individual memories are not inherited in v0.1 — each newborn
-agent gets a fresh memory if its policy is the memory-enabled variant.
+Per SPEC §13.4, individual memories are not inherited — each newborn
+agent gets a fresh memory if its policy is memory-enabled.
 
 Per SPEC §27.11 this module imports stdlib + numpy only.
 
-Memory is intentionally mutable: ``update_at`` and ``decay_all`` mutate arrays
-in place to avoid allocating ~64 KB per agent per tick.
+Memory is intentionally mutable: ``update_at*`` and ``decay_*`` mutate
+arrays in place to avoid allocating per agent per tick.
 """
 
 from __future__ import annotations
@@ -128,4 +135,109 @@ def directional_signals(
                 bad += q / d
         out[f"remembered_good_{name}"] = good
         out[f"remembered_bad_{name}"] = bad
+    return out
+
+
+# ---------------------------------------------------------------------------
+# DirectionalMemory (v0.11): bacterial-chemotaxis-style relative-direction
+# learning. The agent does not record "this cell was good"; it records
+# "moving north tended to be good/bad."
+# ---------------------------------------------------------------------------
+
+# Index convention for the 4-vectors. Matches ``actions.MOVE_DIRECTIONS``
+# semantics: north = +y, east = +x.
+_DIR_NORTH: int = 0
+_DIR_SOUTH: int = 1
+_DIR_EAST: int = 2
+_DIR_WEST: int = 3
+DIRECTION_NAMES: tuple[str, ...] = ("north", "south", "east", "west")
+
+
+@dataclass
+class DirectionalMemory:
+    """Per-agent directional valence tendencies (4 directions).
+
+    ``pleasure_tendency`` and ``pain_tendency`` each carry one EMA-tracked
+    scalar per cardinal direction (north, south, east, west). Updates
+    fire only when the agent moves: the move direction's slot absorbs
+    the realized pleasure/pain through the same EMA recurrence as
+    ``ValenceMemory`` (``alpha = alpha_for_strength(traits.memory_strength)``).
+    """
+
+    pleasure_tendency: np.ndarray  # float32 (4,)
+    pain_tendency: np.ndarray  # float32 (4,)
+
+
+def make_directional_memory() -> DirectionalMemory:
+    """Allocate fresh zeroed directional tendencies."""
+    return DirectionalMemory(
+        pleasure_tendency=np.zeros(4, dtype=np.float32),
+        pain_tendency=np.zeros(4, dtype=np.float32),
+    )
+
+
+def _direction_index(dx: int, dy: int) -> int | None:
+    """Map a move displacement to its direction slot. ``None`` if no move."""
+    if dx == 0 and dy == 1:
+        return _DIR_NORTH
+    if dx == 0 and dy == -1:
+        return _DIR_SOUTH
+    if dx == 1 and dy == 0:
+        return _DIR_EAST
+    if dx == -1 and dy == 0:
+        return _DIR_WEST
+    return None
+
+
+def update_directional(
+    memory: DirectionalMemory,
+    dx: int,
+    dy: int,
+    pleasure: float,
+    pain: float,
+    traits: Traits,
+) -> None:
+    """EMA-update the tendency for the move direction implied by ``(dx, dy)``.
+
+    Mutates ``memory`` in place. Skips when ``(dx, dy)`` is not a unit
+    cardinal move (STAY / EAT / REPRODUCE keep the agent in place; those
+    actions produce no directional learning signal).
+    """
+    idx = _direction_index(dx, dy)
+    if idx is None:
+        return
+    alpha = alpha_for_strength(traits.memory_strength)
+    memory.pleasure_tendency[idx] = (1.0 - alpha) * memory.pleasure_tendency[idx] + alpha * pleasure
+    memory.pain_tendency[idx] = (1.0 - alpha) * memory.pain_tendency[idx] + alpha * pain
+
+
+def decay_directional(memory: DirectionalMemory, decay_rate: float) -> None:
+    """In-place per-tick decay of pleasure / pain tendency vectors.
+
+    Per SPEC §13.3. ``decay_rate`` typically comes from
+    ``traits.memory_decay_rate``.
+    """
+    if decay_rate <= 0.0:
+        return
+    factor = 1.0 - decay_rate
+    memory.pleasure_tendency *= factor
+    memory.pain_tendency *= factor
+
+
+def directional_signals_directional(memory: DirectionalMemory) -> dict[str, float]:
+    """Read the 8 ``remembered_good/bad_<dir>`` signals from a DirectionalMemory.
+
+    Mirrors the output shape of ``directional_signals`` (cell-exact) so
+    the sensor layer can treat both memory representations uniformly:
+    each direction's good signal is ``max(0, pleasure_tendency)`` and
+    each bad signal is ``max(0, pain_tendency)``. Negative tendencies
+    (e.g., from a tick where pleasure was unusually low) clamp to 0 so
+    the harness never sees "anti-pleasure" in a pleasure channel.
+    """
+    out: dict[str, float] = {}
+    for idx, name in enumerate(DIRECTION_NAMES):
+        p = float(memory.pleasure_tendency[idx])
+        q = float(memory.pain_tendency[idx])
+        out[f"remembered_good_{name}"] = p if p > 0.0 else 0.0
+        out[f"remembered_bad_{name}"] = q if q > 0.0 else 0.0
     return out

@@ -168,12 +168,17 @@ class MemoryCell:
     ``layout_name`` selects the chamber for the whole run. v0.9 used
     ``tight_gradient`` (the hard problem); v0.10 uses ``food_ladder`` as
     the positive control. Default keeps v0.9 callers bit-identical.
+
+    ``memory_type`` selects the memory representation (v0.11). ``"cell_exact"``
+    (default) is the v0.9/v0.10 ValenceMemory; ``"directional"`` is the
+    bacterial-chemotaxis-style 4-vector DirectionalMemory.
     """
 
     use_memory: bool
     memory_strength_min: float
     memory_decay_rate_max: float
     layout_name: str = "tight_gradient"
+    memory_type: str = "cell_exact"
 
     @property
     def id(self) -> str:
@@ -205,15 +210,21 @@ class MemoryCell:
         )
 
 
-def all_grid_cells(*, layout_name: str = "tight_gradient") -> list[MemoryCell]:
-    """Return the 1 baseline + 9 memory cells for ``layout_name``.
+def all_grid_cells(
+    *,
+    layout_name: str = "tight_gradient",
+    memory_type: str = "cell_exact",
+) -> list[MemoryCell]:
+    """Return the 1 baseline + 9 memory cells for ``(layout_name, memory_type)``.
 
     Baseline first (so it appears at the top of comparison.csv), then
     the 9 memory cells in (strength_min, decay_max) lexicographic order.
+    The baseline cell carries ``memory_type`` for record-keeping but
+    ignores it at run time (use_memory=False -> memory=None regardless).
     """
     # Validate up front so a typo fails loudly here, not deep in run loop.
     _resolve_layout(layout_name)
-    cells: list[MemoryCell] = [baseline_cell(layout_name=layout_name)]
+    cells: list[MemoryCell] = [baseline_cell(layout_name=layout_name, memory_type=memory_type)]
     for ms_min, md_max in itertools.product(
         MEMORY_STRENGTH_MIN_LEVELS, MEMORY_DECAY_RATE_MAX_LEVELS
     ):
@@ -223,18 +234,28 @@ def all_grid_cells(*, layout_name: str = "tight_gradient") -> list[MemoryCell]:
                 memory_strength_min=ms_min,
                 memory_decay_rate_max=md_max,
                 layout_name=layout_name,
+                memory_type=memory_type,
             )
         )
     return cells
 
 
-def baseline_cell(*, layout_name: str = "tight_gradient") -> MemoryCell:
-    """The non-memory baseline: ``use_memory=False`` on ``layout_name``."""
+def baseline_cell(
+    *,
+    layout_name: str = "tight_gradient",
+    memory_type: str = "cell_exact",
+) -> MemoryCell:
+    """The non-memory baseline: ``use_memory=False`` on ``layout_name``.
+
+    ``memory_type`` is recorded for completeness but doesn't affect
+    behavior (memory=None either way when use_memory=False).
+    """
     return MemoryCell(
         use_memory=False,
         memory_strength_min=PERMISSIVE_MEMORY_STRENGTH_MIN,
         memory_decay_rate_max=PERMISSIVE_MEMORY_DECAY_RATE_MAX,
         layout_name=layout_name,
+        memory_type=memory_type,
     )
 
 
@@ -412,6 +433,7 @@ def _capture_snapshot(
     trait_config: TraitConfig,
     reproduction_config: ReproductionConfig,
     use_memory: bool,
+    memory_type: str = "cell_exact",
 ) -> str:
     world_cfg = WorldConfig(
         seed=seed,
@@ -431,6 +453,7 @@ def _capture_snapshot(
             y=y,
             policy_factory=_policy_factory,
             use_memory=use_memory,
+            memory_type=memory_type,
         )
         for y in spawn_ys
     ]
@@ -489,6 +512,7 @@ def _run_one_cell_seed(
             trait_config=trait_cfg,
             reproduction_config=repro_cfg,
             use_memory=cell.use_memory,
+            memory_type=cell.memory_type,
             condition=cell.id,
             setup_observer=setup,
             tick_observer=observe,
@@ -585,6 +609,7 @@ def run_memory_grid(
                 energy_cost=FIXED_ENERGY_COST,
             ),
             use_memory=True,
+            memory_type=winner_cell.memory_type,
         )
         (snapshots_dir / f"{winner.cell_id}.txt").write_text(
             f"# winner cell={winner.cell_id} seed={snapshot_seed} tick={snapshot_tick}\n"

@@ -30,15 +30,22 @@ from hedonism_harness.core.body import (
     mark_dead,
 )
 from hedonism_harness.core.events import HazardDamageApplied, ReproductionRequested
+from hedonism_harness.core.memory import (
+    DirectionalMemory,
+    ValenceMemory,
+    update_at,
+    update_directional,
+)
 from hedonism_harness.core.memory import decay_all as _decay_memory_all
-from hedonism_harness.core.memory import update_at
+from hedonism_harness.core.memory import (
+    decay_directional as _decay_memory_directional,
+)
 from hedonism_harness.core.sensors import observe
 from hedonism_harness.core.world import CellKind
 from hedonism_harness.policies.base import DecisionContext
 
 if TYPE_CHECKING:
     from hedonism_harness.core.events import AnyEvent
-    from hedonism_harness.core.memory import ValenceMemory
     from hedonism_harness.model import HHModel
     from hedonism_harness.policies.base import Policy
 
@@ -55,7 +62,7 @@ class HHAgent(CellAgent):
         model: HHModel,
         body: AgentBody,
         policy: Policy,
-        memory: ValenceMemory | None,
+        memory: ValenceMemory | DirectionalMemory | None,
         agent_rng: np.random.Generator,
         policy_factory: Callable[[], Policy] | None = None,
     ) -> None:
@@ -121,15 +128,32 @@ class HHAgent(CellAgent):
         if self.memory is not None:
             pleasure = decision.breakdown.pleasure if decision.breakdown else 0.0
             pain = decision.breakdown.pain if decision.breakdown else 0.0
-            update_at(
-                self.memory,
-                result.body.x,
-                result.body.y,
-                pleasure=pleasure,
-                pain=pain,
-                traits=self.body.traits,
-                tick=model.tick_count,
-            )
+            if isinstance(self.memory, ValenceMemory):
+                # Cell-exact: associate (pleasure, pain) with the cell the
+                # agent landed on this tick.
+                update_at(
+                    self.memory,
+                    result.body.x,
+                    result.body.y,
+                    pleasure=pleasure,
+                    pain=pain,
+                    traits=self.body.traits,
+                    tick=model.tick_count,
+                )
+            elif isinstance(self.memory, DirectionalMemory):
+                # Chemotaxis-style: associate (pleasure, pain) with the
+                # direction of this tick's move. STAY / EAT / REPRODUCE
+                # leave (dx, dy) at (0, 0); update_directional skips those.
+                dx = result.body.x - self.body.x
+                dy = result.body.y - self.body.y
+                update_directional(
+                    self.memory,
+                    dx=dx,
+                    dy=dy,
+                    pleasure=pleasure,
+                    pain=pain,
+                    traits=self.body.traits,
+                )
 
         self.body = result.body
         # Sync Mesa cell position with body position.
@@ -183,15 +207,20 @@ class HHAgent(CellAgent):
     def apply_memory_decay(self) -> None:
         """Apply per-tick exponential decay to the agent's valence memory.
 
-        Per SPEC §13.3 the per-cell ``pleasure_ema`` and ``pain_ema`` arrays
-        decay by a factor of ``(1 - traits.memory_decay_rate)`` each tick so
-        stale associations fade as the world changes (food consumed, hazards
-        re-located). No-op when the agent has no memory (``use_memory=False``)
-        or is dead. ``decay_all`` itself is a no-op when ``decay_rate <= 0``.
+        Per SPEC §13.3 the EMA layers / tendency vectors decay by a
+        factor of ``(1 - traits.memory_decay_rate)`` each tick so stale
+        associations fade as the world changes (food consumed, hazards
+        re-located). No-op when the agent has no memory or is dead.
+        Dispatches on memory type — both decay functions early-return
+        when ``decay_rate <= 0``.
         """
         if not self.body.alive or self.memory is None:
             return
-        _decay_memory_all(self.memory, float(self.body.traits.memory_decay_rate))
+        decay_rate = float(self.body.traits.memory_decay_rate)
+        if isinstance(self.memory, ValenceMemory):
+            _decay_memory_all(self.memory, decay_rate)
+        elif isinstance(self.memory, DirectionalMemory):
+            _decay_memory_directional(self.memory, decay_rate)
 
     def death_sweep(self) -> bool:
         """Mark the body dead (and remove from the grid + AgentSet) if vitals zeroed.
