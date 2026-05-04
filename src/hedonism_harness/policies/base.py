@@ -53,10 +53,20 @@ class PolicyDecision:
 
     ``breakdown`` is ``None`` for policies that do not score actions
     (RandomPolicy, ReflexPolicy). HedonismPolicy populates it.
+
+    ``swayed_by_memory`` and ``action_without_memory`` are the v0.12
+    action-aware-directional-memory introspection seam. They are
+    populated only by ``HedonismPolicy`` when ``ctx.memory`` is a
+    ``DirectionalMemory``: the policy then scores every candidate twice
+    (once with the memory projection applied, once with memory zeroed)
+    and reports whether the two argmax winners diverged. Other policies
+    and other memory types leave these fields at their defaults.
     """
 
     action: Action
     breakdown: ValenceBreakdown | None = None
+    swayed_by_memory: bool = False
+    action_without_memory: Action | None = None
 
 
 class Policy(Protocol):

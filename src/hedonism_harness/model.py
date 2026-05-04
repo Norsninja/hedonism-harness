@@ -41,7 +41,7 @@ from hedonism_harness.mesa_agents import HHAgent
 
 if TYPE_CHECKING:
     from hedonism_harness.core.events import AnyEvent
-    from hedonism_harness.policies.base import Policy
+    from hedonism_harness.policies.base import Policy, PolicyDecision
 
 
 # A founder spec lets the caller declare population without exposing the
@@ -186,6 +186,17 @@ class HHModel(mesa.Model):
         self._next_body_id: int = 1
         self._next_lineage_id: int = 0
 
+        # v0.12 action-aware-directional-memory introspection log.
+        # ``None`` by default — opt-in via ``enable_policy_decision_log``,
+        # which is what ``MemoryTelemetryCollector.connect()`` does on
+        # directional sweeps. Each entry is a tuple
+        # ``(swayed_by_memory: bool, action_int: int,
+        #    action_without_memory_int: int)``. Only HedonismPolicy on a
+        # ``DirectionalMemory`` fills the contributing ``PolicyDecision``
+        # fields, so other (policy, memory_type) combinations leave the
+        # log empty even when enabled.
+        self._policy_decision_log: list[tuple[bool, int, int]] | None = None
+
         # ---- Place founders --------------------------------------------
         for spec in founders:
             self._spawn_founder(spec)
@@ -296,6 +307,48 @@ class HHModel(mesa.Model):
         every caller.
         """
         return self.grid._cells[(x, y)]
+
+    # ------------------------------------------------------------------
+    # v0.12 policy-decision introspection log
+    # ------------------------------------------------------------------
+
+    def enable_policy_decision_log(self) -> None:
+        """Begin recording per-decision argmax-with/without-memory outcomes.
+
+        ``MemoryTelemetryCollector`` calls this from ``connect()`` so the
+        log is live before the first ``model.step()``. Idempotent.
+        """
+        if self._policy_decision_log is None:
+            self._policy_decision_log = []
+
+    def disable_policy_decision_log(self) -> None:
+        """Stop recording and clear the policy-decision log."""
+        self._policy_decision_log = None
+
+    @property
+    def policy_decision_log(self) -> list[tuple[bool, int, int]] | None:
+        """Read-only view of the recorded log, or ``None`` when disabled."""
+        return self._policy_decision_log
+
+    def note_policy_decision(self, decision: PolicyDecision) -> None:
+        """Append one entry to the policy-decision log if recording is on.
+
+        No-op when the log is disabled, when ``decision.action_without_memory``
+        is ``None`` (every non-directional code path), or when the agent
+        is dead. Called from ``HHAgent.step()`` immediately after
+        ``policy.decide(ctx)``.
+        """
+        if self._policy_decision_log is None:
+            return
+        if decision.action_without_memory is None:
+            return
+        self._policy_decision_log.append(
+            (
+                decision.swayed_by_memory,
+                int(decision.action),
+                int(decision.action_without_memory),
+            )
+        )
 
     def record_event(self, event: AnyEvent) -> None:
         """Append a tick-stamped envelope AND emit on the event's named signal.

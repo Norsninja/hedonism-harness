@@ -293,6 +293,12 @@ class MemoryCellAggregate:
     total_memory_updates: int
     total_repeat_food_visits: int
     mean_median_food_event_tick: float  # NaN if no seed observed AteFood
+    # v0.12 directional-projection diagnostics. Zero / empty for cell-exact
+    # and mem-off cells (HedonismPolicy only fills the contributing
+    # PolicyDecision fields on DirectionalMemory runs).
+    total_directional_decisions: int = 0
+    total_argmax_changes: int = 0
+    argmax_change_rate: float = 0.0
 
 
 def aggregate(
@@ -326,6 +332,9 @@ def aggregate(
             total_memory_updates=0,
             total_repeat_food_visits=0,
             mean_median_food_event_tick=math.nan,
+            total_directional_decisions=0,
+            total_argmax_changes=0,
+            argmax_change_rate=0.0,
         )
     results = [r for r, _t in pairs]
     telems = [t for _r, t in pairs]
@@ -333,6 +342,13 @@ def aggregate(
     total_requests = sum(r.reproduction_requests for r in results)
     medians = [t.median_food_event_tick for t in telems if not math.isnan(t.median_food_event_tick)]
     mean_median = sum(medians) / len(medians) if medians else math.nan
+    total_directional_decisions = sum(t.directional_decisions for t in telems)
+    total_argmax_changes = sum(t.argmax_changes for t in telems)
+    argmax_change_rate = (
+        total_argmax_changes / total_directional_decisions
+        if total_directional_decisions > 0
+        else 0.0
+    )
     return MemoryCellAggregate(
         cell_id=cell.id,
         use_memory=cell.use_memory,
@@ -358,6 +374,9 @@ def aggregate(
         total_memory_updates=sum(t.total_memory_updates for t in telems),
         total_repeat_food_visits=sum(t.repeat_food_visits for t in telems),
         mean_median_food_event_tick=mean_median,
+        total_directional_decisions=total_directional_decisions,
+        total_argmax_changes=total_argmax_changes,
+        argmax_change_rate=argmax_change_rate,
     )
 
 
@@ -649,6 +668,9 @@ def _write_comparison_csv(
         "total_memory_updates",
         "total_repeat_food_visits",
         "mean_median_food_event_tick",
+        "total_directional_decisions",
+        "total_argmax_changes",
+        "argmax_change_rate",
     ]
     others = [c for c in cells if c.cell_id != baseline.cell_id]
     with path.open("w", newline="") as f:
@@ -664,6 +686,7 @@ def _write_comparison_csv(
                 if not math.isnan(row.mean_median_food_event_tick)
                 else ""
             )
+            data["argmax_change_rate"] = round(row.argmax_change_rate, 6)
             writer.writerow(data)
 
 
@@ -705,6 +728,11 @@ def _write_winner_text(
         f"total_memory_updates={winner.total_memory_updates}\n"
         f"repeat_food_visits={winner.total_repeat_food_visits}\n"
         f"mean_median_food_event_tick={winner.mean_median_food_event_tick}\n"
+        f"\n"
+        f"-- v0.12 directional projection --\n"
+        f"directional_decisions={winner.total_directional_decisions}\n"
+        f"argmax_changes={winner.total_argmax_changes}\n"
+        f"argmax_change_rate={round(winner.argmax_change_rate, 6)}\n"
         f"\n"
         f"-- baseline (mem-off) reference --\n"
         f"baseline_births={baseline.total_births} "
