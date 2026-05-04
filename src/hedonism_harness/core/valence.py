@@ -60,6 +60,12 @@ def _hazard_signal_total(obs: Observation) -> float:
     )
 
 
+def _food_signal_total(obs: Observation) -> float:
+    return (
+        obs.food_signal_north + obs.food_signal_south + obs.food_signal_east + obs.food_signal_west
+    )
+
+
 def _remembered_good_total(obs: Observation) -> float:
     return (
         obs.remembered_good_north
@@ -121,6 +127,21 @@ def evaluate(
     safety_reduction = max(0.0, hazard_before - hazard_after)
     safety_pleasure = safety_reduction * traits.pleasure_sensitivity
 
+    # Anticipated food pleasure (v0.4): symmetric counterpart to safety_pleasure.
+    # Without this term, the harness has anticipated avoidance but no anticipated
+    # pursuit — the v0.3 batch showed agents ignored visible food entirely. Gain
+    # is clipped at 0 (matches safety_pleasure convention); gating on
+    # ``hunger_level`` (raw 1-energy_ratio, NOT pain-tolerance-filtered) ensures
+    # full agents are not pulled, and that even a max-pain-tolerance Reckless
+    # — whose hunger_pain is zeroed by SPEC §11.2 — still receives the food
+    # gradient via this pleasure channel.
+    food_signal_before = _food_signal_total(obs_before)
+    food_signal_after = _food_signal_total(obs_after)
+    food_signal_gain = max(0.0, food_signal_after - food_signal_before)
+    anticipated_food_pleasure = (
+        food_signal_gain * obs_before.hunger_level * traits.pleasure_sensitivity
+    )
+
     # Recovery: positive health delta. Always zero in v0.1 (no regen mechanic).
     health_recovered = max(0.0, body_after.health - body_before.health)
     recovery_pleasure = health_recovered * traits.pleasure_sensitivity
@@ -138,6 +159,7 @@ def evaluate(
     pleasure = (
         eating_pleasure
         + safety_pleasure
+        + anticipated_food_pleasure
         + recovery_pleasure
         + reproduction_pleasure
         + novelty_pleasure
@@ -174,6 +196,8 @@ def evaluate(
         "predicted_hazard_risk": predicted_hazard_risk,
         "eating_pleasure": eating_pleasure,
         "safety_pleasure": safety_pleasure,
+        "anticipated_food_pleasure": anticipated_food_pleasure,
+        "food_signal_gain": food_signal_gain,
         "recovery_pleasure": recovery_pleasure,
         "reproduction_pleasure": reproduction_pleasure,
         "novelty_pleasure": novelty_pleasure,

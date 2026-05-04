@@ -309,3 +309,121 @@ def test_action_energy_cost_returns_configured_costs(action_config) -> None:
     assert action_energy_cost(Action.MOVE_EAST, action_config) == action_config.move_cost
     assert action_energy_cost(Action.EAT, action_config) == action_config.eat_cost
     assert action_energy_cost(Action.REPRODUCE, action_config) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Anticipated food pleasure (v0.4) — added in response to the v0.3 null result.
+#
+# v0.3 evidence: in `tight_gradient` (food + hazard both in sensor range from
+# spawn x=1), agents never moved east toward food. Reading valence.py revealed
+# the directional ``food_signal_*`` sensor fields existed on Observation but
+# were never read — fear/safety drove avoidance, but no symmetric anticipation
+# pulled toward food. These tests pin the contract for the missing term.
+#
+# Formula (per v0.4 design):
+#
+#     food_signal_gain = max(0, sum(food_signal_*_after) - sum(food_signal_*_before))
+#     anticipated_food_pleasure = (
+#         food_signal_gain * obs_before.hunger_level * traits.pleasure_sensitivity
+#     )
+#
+# Gating by ``hunger_level`` is load-bearing: full agents must not be pulled.
+# ---------------------------------------------------------------------------
+
+
+def test_anticipated_food_pleasure_pulls_east_when_food_visible_east_and_hungry(
+    traits, body_config
+) -> None:
+    """The candidate that increases the food signal must score higher pleasure.
+
+    Setup: hungry agent, no food visible from current cell. Predicted MOVE_EAST
+    increases ``food_signal_east``; predicted MOVE_WEST decreases it. East
+    must win on the new ``anticipated_food_pleasure`` field.
+    """
+    body = _body(5, 5, traits, body_config)
+    obs_before = _zero_obs(hunger_level=0.8, food_signal_east=2.0)
+    obs_after_east = _zero_obs(hunger_level=0.8, food_signal_east=10.0)  # closer
+    obs_after_west = _zero_obs(hunger_level=0.8, food_signal_east=0.5)  # farther
+
+    east = evaluate(obs_before, obs_after_east, body, body, Action.MOVE_EAST, 1.0, traits)
+    west = evaluate(obs_before, obs_after_west, body, body, Action.MOVE_WEST, 1.0, traits)
+
+    assert east.details["anticipated_food_pleasure"] > 0.0
+    assert west.details["anticipated_food_pleasure"] == 0.0  # clipped at 0
+    assert east.pleasure > west.pleasure
+
+
+def test_anticipated_food_pleasure_is_zero_when_full(traits, body_config) -> None:
+    """Full agents (hunger_level == 0) get no pull from food signal gain.
+
+    Without this gate, satiated agents would chase food forever; food
+    anticipation must scale with felt hunger to be biologically reasonable.
+    """
+    body = _body(5, 5, traits, body_config)
+    obs_before = _zero_obs(hunger_level=0.0, food_signal_east=2.0)
+    obs_after = _zero_obs(hunger_level=0.0, food_signal_east=10.0)
+    bd = evaluate(obs_before, obs_after, body, body, Action.MOVE_EAST, 1.0, traits)
+    assert bd.details["anticipated_food_pleasure"] == 0.0
+
+
+def test_anticipated_food_pleasure_scales_monotonically_with_hunger_level(
+    traits, body_config
+) -> None:
+    body = _body(5, 5, traits, body_config)
+    food_after = _zero_obs(hunger_level=0.0, food_signal_east=10.0)  # placeholder
+
+    def _score(hunger: float) -> float:
+        obs_before = _zero_obs(hunger_level=hunger, food_signal_east=2.0)
+        obs_after = dataclasses.replace(food_after, hunger_level=hunger)
+        bd = evaluate(obs_before, obs_after, body, body, Action.MOVE_EAST, 1.0, traits)
+        return bd.details["anticipated_food_pleasure"]
+
+    low = _score(0.2)
+    mid = _score(0.5)
+    high = _score(0.9)
+    assert low < mid < high
+
+
+def test_anticipated_food_pleasure_uses_sum_across_directions(traits, body_config) -> None:
+    """Gain must be computed on the SUM of all four directional food signals,
+    not a single axis. Otherwise an agent at a 4-way symmetric food junction
+    (gain on multiple axes) would only feel one direction's pull."""
+    body = _body(5, 5, traits, body_config)
+    obs_before = _zero_obs(hunger_level=0.7)
+    # Two axes light up after the move — the sum gain is 12, not 6.
+    obs_after = _zero_obs(hunger_level=0.7, food_signal_east=6.0, food_signal_north=6.0)
+    bd = evaluate(obs_before, obs_after, body, body, Action.MOVE_EAST, 1.0, traits)
+    expected = 12.0 * 0.7 * traits.pleasure_sensitivity
+    assert bd.details["anticipated_food_pleasure"] == pytest.approx(expected)
+
+
+def test_existing_fear_still_pushes_west_when_hazard_visible_east(body_config) -> None:
+    """Regression guard: the v0.3 fix must NOT change avoidance behavior.
+
+    Fearful agent, hazard visible east, food invisible. Predicted MOVE_EAST
+    increases hazard_signal_east; MOVE_WEST decreases it. West must still
+    win on net total (fear up east, safety_pleasure up west).
+    """
+    cfg = TraitConfig()
+    fearful = Traits(
+        hunger_pain_sensitivity=cfg.hunger_pain_sensitivity.min,
+        injury_pain_sensitivity=cfg.injury_pain_sensitivity.max,
+        fear_sensitivity=cfg.fear_sensitivity.max,
+        pleasure_sensitivity=(cfg.pleasure_sensitivity.min + cfg.pleasure_sensitivity.max) / 2,
+        reproduction_drive=(cfg.reproduction_drive.min + cfg.reproduction_drive.max) / 2,
+        novelty_drive=(cfg.novelty_drive.min + cfg.novelty_drive.max) / 2,
+        uncertainty_aversion=(cfg.uncertainty_aversion.min + cfg.uncertainty_aversion.max) / 2,
+        pain_tolerance=cfg.pain_tolerance.min,
+        risk_tolerance=cfg.risk_tolerance.min,
+        memory_strength=(cfg.memory_strength.min + cfg.memory_strength.max) / 2,
+        memory_decay_rate=(cfg.memory_decay_rate.min + cfg.memory_decay_rate.max) / 2,
+        sensor_radius=4,
+        metabolic_rate=(cfg.metabolic_rate.min + cfg.metabolic_rate.max) / 2,
+    )
+    body = _body(5, 5, fearful, body_config)
+    obs_before = _zero_obs(hunger_level=0.3, hazard_signal_east=6.0)
+    obs_east = _zero_obs(hunger_level=0.3, hazard_signal_east=12.0)  # closer to hazard
+    obs_west = _zero_obs(hunger_level=0.3, hazard_signal_east=4.0)  # farther
+    east = evaluate(obs_before, obs_east, body, body, Action.MOVE_EAST, 1.0, fearful)
+    west = evaluate(obs_before, obs_west, body, body, Action.MOVE_WEST, 1.0, fearful)
+    assert west.total > east.total, "Fearful's existing avoidance is broken: west should beat east."
