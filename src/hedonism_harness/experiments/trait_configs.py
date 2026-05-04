@@ -186,3 +186,34 @@ def motivation_trait_config(*, drive_min: float) -> TraitConfig:
     return base.model_copy(
         update={"reproduction_drive": TraitRange(min=drive_min, max=spec.reproduction_drive.max)}
     )
+
+
+# ---------------------------------------------------------------------------
+# v0.8 eligibility-rescue helper
+# ---------------------------------------------------------------------------
+
+
+def eligibility_trait_config(*, sensor_radius_min: int) -> TraitConfig:
+    """v0.8 factory: v0.6 winner trait ranges with a raised
+    ``sensor_radius`` floor.
+
+    Holds every other axis at the v0.6 winner setting and overrides only
+    the ``sensor_radius`` range floor. Used to study whether wider
+    perception (and the higher per-tick metabolic cost it carries via
+    ``BodyConfig.sensor_radius_metabolic_cost``) raises eligibility
+    supply enough to produce reproduction across multiple seeds.
+
+    The ceiling stays at SPEC §8.1 (``6``) so a higher floor narrows the
+    range upward; ``sensor_radius_min=1`` is the v0.6 winner identity.
+    """
+    spec = TraitConfig()
+    if not (spec.sensor_radius.min <= sensor_radius_min <= spec.sensor_radius.max):
+        msg = (
+            f"sensor_radius_min={sensor_radius_min} outside SPEC sensor_radius range "
+            f"[{spec.sensor_radius.min}, {spec.sensor_radius.max}]"
+        )
+        raise ValueError(msg)
+    base = tuned_trait_config(fear_max=1.5, hunger_min=1.0, risk_min=0.55)
+    return base.model_copy(
+        update={"sensor_radius": TraitRange(min=sensor_radius_min, max=spec.sensor_radius.max)}
+    )

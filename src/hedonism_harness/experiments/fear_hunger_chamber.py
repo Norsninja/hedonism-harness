@@ -70,6 +70,11 @@ class ChamberLayout:
     the v0.1/v0.2 default of ``safe_x_min + 1``. Set explicitly to test
     spawn-position variants without changing the chamber proportions
     (see v0.3 ``near_hazard_layout``).
+
+    ``pre_food_x_min`` / ``pre_food_x_max`` (optional, v0.8): an additional
+    FOOD band stamped *before* the hazard zone. Used by the v0.8
+    ``food_ladder_layout`` so founders can refill in the corridor before
+    facing the hazard wall. Both must be set together (or both ``None``).
     """
 
     safe_x_min: int = 0
@@ -80,6 +85,8 @@ class ChamberLayout:
     food_x_max: int = 19
     height: int = 6
     spawn_x: int | None = None
+    pre_food_x_min: int | None = None
+    pre_food_x_max: int | None = None
 
     @property
     def width(self) -> int:
@@ -89,6 +96,10 @@ class ChamberLayout:
     def resolved_spawn_x(self) -> int:
         """Effective spawn column — falls back to ``safe_x_min + 1``."""
         return self.safe_x_min + 1 if self.spawn_x is None else self.spawn_x
+
+    @property
+    def has_pre_food(self) -> bool:
+        return self.pre_food_x_min is not None and self.pre_food_x_max is not None
 
 
 def build_chamber_layout(layout: ChamberLayout, hazard_damage: float = 8.0) -> WorldConfig:
@@ -114,12 +125,21 @@ def paint_chamber(model: HHModel, layout: ChamberLayout) -> None:
     Writes go through ``model.world`` (which shares storage with the four
     PropertyLayers built in ``HHModel.__init__``) so the chamber terrain is
     visible to Mesa-side consumers as well.
+
+    When ``layout.has_pre_food`` is True, an additional FOOD band is
+    stamped at the pre-food columns (used by the v0.8 food_ladder layout).
     """
     cfg = model.world_config
     for y in range(cfg.height):
         for x in range(layout.safe_x_min, layout.safe_x_max + 1):
             model.world.kind_layer[x, y] = CellKind.SAFE
             model.world.safe_value[x, y] = cfg.safe_value_default
+        if layout.has_pre_food:
+            assert layout.pre_food_x_min is not None
+            assert layout.pre_food_x_max is not None
+            for x in range(layout.pre_food_x_min, layout.pre_food_x_max + 1):
+                model.world.kind_layer[x, y] = CellKind.FOOD
+                model.world.food_value[x, y] = cfg.food_value_default
         for x in range(layout.hazard_x_min, layout.hazard_x_max + 1):
             model.world.kind_layer[x, y] = CellKind.HAZARD
             model.world.hazard_damage[x, y] = cfg.hazard_damage_default
@@ -174,6 +194,7 @@ def run_chamber(
     condition: str | None = None,
     trait_config: TraitConfig | None = None,
     reproduction_config: ReproductionConfig | None = None,
+    tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
     """Run one Fear-Hunger Chamber episode and (optionally) persist its outputs.
 
@@ -189,6 +210,10 @@ def run_chamber(
     ``reproduction_config``: when provided, replaces the SPEC §7/§14 default
     ``ReproductionConfig`` (the v0.7 reproduction-emergence seam). When
     ``None`` the SPEC defaults hold.
+
+    ``tick_observer``: optional callable invoked with the model after each
+    ``model.step()`` (the v0.8 eligibility-telemetry seam). Runs even on
+    the final tick. ``None`` keeps the existing behavior.
     """
     layout = layout or ChamberLayout()
     world_cfg = build_chamber_layout(layout).model_copy(update={"seed": seed})
@@ -230,6 +255,8 @@ def run_chamber(
     try:
         for _ in range(n_ticks):
             model.step()
+            if tick_observer is not None:
+                tick_observer(model)
             if not _any_alive(model):
                 break
     finally:
