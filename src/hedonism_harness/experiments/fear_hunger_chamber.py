@@ -260,6 +260,7 @@ def run_chamber(
     condition: str | None = None,
     trait_config: TraitConfig | None = None,
     reproduction_config: ReproductionConfig | None = None,
+    use_memory: bool = False,
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
@@ -277,6 +278,12 @@ def run_chamber(
     ``reproduction_config``: when provided, replaces the SPEC §7/§14 default
     ``ReproductionConfig`` (the v0.7 reproduction-emergence seam). When
     ``None`` the SPEC defaults hold.
+
+    ``use_memory``: when ``True``, every founder is created with a fresh
+    ``ValenceMemory`` (the v0.9 memory-arm seam). Children of memory-enabled
+    parents also receive fresh memory per SPEC §13.4. When ``False`` (default),
+    founders have ``memory=None`` and the memory directional signals score as
+    zeros in ``core/valence``.
 
     ``setup_observer``: optional callable invoked with the model **after**
     ``paint_chamber`` and aggregator ``connect()``, **before** the first
@@ -304,6 +311,7 @@ def run_chamber(
             y=y,
             policy_factory=policy_factory,
             traits_override=traits_override,
+            use_memory=use_memory,
         )
         for y in spawn_ys
     ]

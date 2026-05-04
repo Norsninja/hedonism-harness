@@ -219,3 +219,139 @@ def test_run_chamber_rejects_overflow_founders() -> None:
             layout=layout,
             write_outputs=False,
         )
+
+
+# ---------------------------------------------------------------------------
+# v0.9 use_memory seam
+# ---------------------------------------------------------------------------
+
+
+def test_run_chamber_use_memory_false_gives_founders_with_no_memory() -> None:
+    """v0.9 default: ``use_memory=False`` produces founders whose ``memory``
+    is ``None``. Captured at tick 0 via ``setup_observer`` to inspect the
+    founders before any step runs."""
+    from hedonism_harness.mesa_agents import HHAgent
+
+    captured: list[bool] = []
+
+    def setup(model: HHModel) -> None:
+        for agent in model.agents:
+            if isinstance(agent, HHAgent):
+                captured.append(agent.memory is None)
+
+    run_chamber(
+        seed=1,
+        runs_root=Path("/tmp"),
+        run_id="memory-off-test",
+        n_founders=3,
+        n_ticks=1,
+        layout=ChamberLayout(),
+        write_outputs=False,
+        setup_observer=setup,
+    )
+
+    assert len(captured) == 3
+    assert all(captured), "use_memory=False must give founders memory=None"
+
+
+def test_run_chamber_use_memory_true_gives_founders_with_valence_memory() -> None:
+    """v0.9 seam: ``use_memory=True`` produces founders whose ``memory`` is
+    a fresh ``ValenceMemory`` sized to the chamber. Snapshot inside the
+    setup callback before any step runs (otherwise the same memory object
+    is mutated by the agent's first update_at)."""
+    from hedonism_harness.mesa_agents import HHAgent
+
+    captured: list[dict[str, int]] = []
+
+    def setup(model: HHModel) -> None:
+        for agent in model.agents:
+            if isinstance(agent, HHAgent):
+                assert agent.memory is not None, "use_memory=True must give founders memory"
+                captured.append(
+                    {
+                        "width": agent.memory.width,
+                        "height": agent.memory.height,
+                        "visits_sum": int(agent.memory.visits.sum()),
+                        "last_seen_min": int(agent.memory.last_seen_tick.min()),
+                        "last_seen_max": int(agent.memory.last_seen_tick.max()),
+                    }
+                )
+
+    layout = ChamberLayout()
+    run_chamber(
+        seed=1,
+        runs_root=Path("/tmp"),
+        run_id="memory-on-test",
+        n_founders=3,
+        n_ticks=1,
+        layout=layout,
+        write_outputs=False,
+        use_memory=True,
+        setup_observer=setup,
+    )
+
+    assert len(captured) == 3
+    for snap in captured:
+        assert snap["width"] == layout.width
+        assert snap["height"] == layout.height
+        assert snap["visits_sum"] == 0
+        assert snap["last_seen_min"] == -1
+        assert snap["last_seen_max"] == -1
+
+
+def test_run_chamber_use_memory_true_children_get_fresh_memory() -> None:
+    """SPEC §13.4: children of memory-enabled parents must receive a fresh
+    ``ValenceMemory``, not inherit the parent's. v0.9 depends on this so
+    that memory experience is per-lifetime, not heritable.
+
+    Strategy: build a tiny model where the founder is forced to reproduce
+    every tick, run a few ticks, find a child, assert its ``visits``
+    array is all-zero relative to the parent's accumulated visits."""
+    from hedonism_harness.core.actions import Action, get_valid_actions
+    from hedonism_harness.core.config import BodyConfig, ReproductionConfig, WorldConfig
+    from hedonism_harness.core.memory import ValenceMemory
+    from hedonism_harness.mesa_agents import HHAgent
+    from hedonism_harness.model import FounderSpec, HHModel
+    from hedonism_harness.policies.base import PolicyDecision
+
+    class _AlwaysReproducePolicy:
+        def decide(self, ctx):  # type: ignore[no-untyped-def]
+            valid = get_valid_actions(ctx.world, ctx.body, ctx.reproduction_config, ctx.occupied)
+            if Action.REPRODUCE in valid:
+                return PolicyDecision(action=Action.REPRODUCE, breakdown=None)
+            return PolicyDecision(action=Action.STAY, breakdown=None)
+
+    world_cfg = WorldConfig(seed=42, width=8, height=8, food_density=0.0, hazard_density=0.0)
+    body_cfg = BodyConfig(starting_energy=100.0)  # max_energy default
+    repro_cfg = ReproductionConfig(min_age=0, hazard_threshold=10.0, energy_cost=20.0)
+    model = HHModel(
+        world_cfg,
+        founders=[FounderSpec(x=4, y=4, policy_factory=_AlwaysReproducePolicy, use_memory=True)],
+        body_config=body_cfg,
+        reproduction_config=repro_cfg,
+    )
+
+    # Tick exactly once: the parent reproduces (one update_at call against
+    # the parent's memory), the child is appended at end-of-tick, and per
+    # SPEC §27.4 the newborn does NOT step on its birth tick. So at this
+    # point the child has never run update_at on its own memory.
+    model.step()
+
+    agents = [a for a in model.agents if isinstance(a, HHAgent)]
+    parent = next(a for a in agents if a.body.parent_id is None)
+    children = [a for a in agents if a.body.parent_id is not None]
+
+    assert children, "expected at least one child after the reproduction tick"
+    assert parent.memory is not None
+    # Parent has been updating memory each step — visits are nonzero.
+    assert int(parent.memory.visits.sum()) > 0
+
+    for child in children:
+        assert child.memory is not None
+        assert isinstance(child.memory, ValenceMemory)
+        # Child memory must NOT be the parent's instance.
+        assert child.memory is not parent.memory
+        # Child memory is fresh on the birth tick (newborn-defer keeps it
+        # un-stepped until T+1). Per SPEC §13.4, no inheritance.
+        assert int(child.memory.visits.sum()) == 0
+        assert int(child.memory.last_seen_tick.min()) == -1
