@@ -172,19 +172,25 @@ def run_chamber(
     write_outputs: bool = True,
     traits_override: Traits | None = None,
     condition: str | None = None,
+    trait_config: TraitConfig | None = None,
 ) -> ChamberRunResult:
     """Run one Fear-Hunger Chamber episode and (optionally) persist its outputs.
 
     ``traits_override``: when provided, every founder shares this exact
     ``Traits`` instance (the v0.2 positive-control seam). When ``None`` the
-    v0.1 behavior holds: each founder samples from the default ``TraitConfig``.
+    v0.1 behavior holds: each founder samples from the configured
+    ``TraitConfig``.
+
+    ``trait_config``: when provided, founders sample from this config's
+    ranges (the v0.5 default-tuning seam). When ``None`` the SPEC §8.1
+    default ``TraitConfig`` is used.
     """
     layout = layout or ChamberLayout()
     world_cfg = build_chamber_layout(layout).model_copy(update={"seed": seed})
     body_cfg = BodyConfig()
     action_cfg = ActionConfig()
     repro_cfg = ReproductionConfig()
-    trait_cfg = TraitConfig()
+    trait_cfg = trait_config if trait_config is not None else TraitConfig()
 
     # Founders spaced along the chamber's spawn column.
     spawn_x = layout.resolved_spawn_x
