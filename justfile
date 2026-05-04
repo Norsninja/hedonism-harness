@@ -13,6 +13,15 @@ test-fast:
 test-determinism:
     uv run pytest -m determinism
 
+smoke:
+    uv run python scripts/core_smoke_test.py
+
+ci:
+    uv run ruff check .
+    uv run ruff format --check .
+    uv run pytest
+    uv run python scripts/core_smoke_test.py
+
 lint:
     uv run ruff check .
 

@@ -40,11 +40,15 @@ See [`docs/SPEC.md` §27](docs/SPEC.md) for the authoritative architecture and d
 just install            # uv sync with dev extras
 just test               # run pytest
 just test-determinism   # run only determinism-tagged tests
+just smoke              # run scripts/core_smoke_test.py end-to-end
 just lint               # ruff check
 just format             # ruff format
 just fix                # ruff check --fix && ruff format
+just ci                 # the exact sequence CI runs locally
 just precommit-install  # install git hooks
 ```
+
+The smoke test (`scripts/core_smoke_test.py`) is the gate that proves the Mesa-free core loop coheres end-to-end: build world → create body → assign traits → observe → choose action → apply action → commit delta → update memory → emit events → repeat → same seed reproduces same final state. It runs in CI after pytest.
 
 ### Cloud workflow
 

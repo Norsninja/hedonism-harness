@@ -48,6 +48,12 @@ jobs:
       - name: Run tests
         run: uv run pytest -ra
 
+      - name: Core smoke test
+        # End-to-end demonstration that the Mesa-free core loop coheres.
+        # Same gate the user runs locally via `just smoke`. See
+        # scripts/core_smoke_test.py for what it proves.
+        run: uv run python scripts/core_smoke_test.py
+
       - name: Upload run artifacts
         # No-op until the simulation actually writes runs/ — wired now so
         # post-Mesa runs are immediately retrievable from the Checks tab.
