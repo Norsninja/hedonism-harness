@@ -101,6 +101,11 @@ class HHAgent(CellAgent):
         )
         decision = self.policy.decide(ctx)
 
+        # v0.12 action-aware directional memory introspection. The model
+        # holds a per-tick log only when MemoryTelemetryCollector enabled
+        # it; this call is a no-op (one None-check) on every other path.
+        model.note_policy_decision(decision)
+
         # Defensive: every policy must select from get_valid_actions(...).
         # A bug in a custom policy that returns an out-of-set action would
         # otherwise silently pass through apply_action with broken semantics
