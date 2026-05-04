@@ -61,11 +61,20 @@ _LAYOUT_FACTORIES = {
 
 @dataclass(frozen=True)
 class Arm:
-    """One leg of the v0.14 comparison."""
+    """One leg of a comparison.
+
+    ``memory_type`` (v0.15) selects the per-agent memory representation
+    constructed by the chamber driver. ``None`` (v0.14 default) is the
+    no-memory arm. ``"scalar"`` (v0.15) attaches a ``ScalarMemory`` to
+    every founder + descendant. Other values (``"cell_exact"``,
+    ``"directional"``) feed the existing memory machinery and are
+    available if a future comparison wants to reuse this driver.
+    """
 
     label: str
     policy_factory: Callable[[], Policy]
     auto_reproduction: bool
+    memory_type: str | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -76,7 +85,15 @@ def _gradient_policy_factory() -> Policy:
     return GradientPolicy()
 
 
-# Three arms per pre-reg (A / B / C).
+def _gradient_policy_persistence_only_factory() -> Policy:
+    return GradientPolicy(blackout_mode="persistence_only")
+
+
+def _gradient_policy_chemotaxis_factory() -> Policy:
+    return GradientPolicy(blackout_mode="chemotaxis")
+
+
+# v0.14 arms (A / B / C) — preserved for re-runs and bit-identity checks.
 ARMS: tuple[Arm, ...] = (
     Arm(
         label="deliberative-voluntary",
@@ -92,6 +109,32 @@ ARMS: tuple[Arm, ...] = (
         label="reflex-auto",
         policy_factory=_gradient_policy_factory,
         auto_reproduction=True,
+    ),
+)
+
+
+# v0.15 arms — chemotaxis-tier scalar memory comparison. Arm A reproduces
+# the v0.14 reflex-auto baseline; B isolates persistence; C tests the full
+# persistence + derivative-tumble mechanism. See
+# [[docs/experiments/fear_hunger_v0.15.md]].
+V0_15_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="reflex-baseline",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+    ),
+    Arm(
+        label="reflex-persistence",
+        policy_factory=_gradient_policy_persistence_only_factory,
+        auto_reproduction=True,
+        memory_type="scalar",
+    ),
+    Arm(
+        label="reflex-chemotaxis",
+        policy_factory=_gradient_policy_chemotaxis_factory,
+        auto_reproduction=True,
+        memory_type="scalar",
     ),
 )
 
@@ -278,6 +321,9 @@ def _run_one_arm_seed(
         model.auto_reproduction_enabled = arm.auto_reproduction
         captured["model"] = model
 
+    use_memory = arm.memory_type is not None
+    memory_type = arm.memory_type or "cell_exact"  # only consulted when use_memory=True
+
     result = run_chamber(
         seed=seed,
         runs_root=runs_root,
@@ -288,7 +334,8 @@ def _run_one_arm_seed(
         policy_factory=arm.policy_factory,
         trait_config=trait_cfg,
         reproduction_config=repro_cfg,
-        use_memory=False,
+        use_memory=use_memory,
+        memory_type=memory_type,
         condition=arm.label,
         setup_observer=setup,
     )

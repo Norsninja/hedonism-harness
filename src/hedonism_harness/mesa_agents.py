@@ -32,9 +32,11 @@ from hedonism_harness.core.body import (
 from hedonism_harness.core.events import HazardDamageApplied, ReproductionRequested
 from hedonism_harness.core.memory import (
     DirectionalMemory,
+    ScalarMemory,
     ValenceMemory,
     update_at,
     update_directional,
+    update_scalar,
 )
 from hedonism_harness.core.memory import decay_all as _decay_memory_all
 from hedonism_harness.core.memory import (
@@ -147,9 +149,10 @@ class HHAgent(CellAgent):
                     tick=model.tick_count,
                 )
             elif isinstance(self.memory, DirectionalMemory):
-                # Chemotaxis-style: associate (pleasure, pain) with the
-                # direction of this tick's move. STAY / EAT / REPRODUCE
-                # leave (dx, dy) at (0, 0); update_directional skips those.
+                # Multi-cell-tier directional EMA: associate (pleasure, pain)
+                # with the direction of this tick's move. STAY / EAT /
+                # REPRODUCE leave (dx, dy) at (0, 0); update_directional
+                # skips those.
                 dx = result.body.x - self.body.x
                 dy = result.body.y - self.body.y
                 update_directional(
@@ -159,6 +162,23 @@ class HHAgent(CellAgent):
                     pleasure=pleasure,
                     pain=pain,
                     traits=self.body.traits,
+                )
+            elif isinstance(self.memory, ScalarMemory):
+                # v0.15 prokaryotic-chemotaxis tier: record the total
+                # cardinal food signal the policy saw (the pre-action
+                # ``observation``) and the action chosen. Pleasure / pain
+                # are not consumed — ScalarMemory is a chemotaxis
+                # comparator, not a valence EMA.
+                total = (
+                    observation.food_signal_north
+                    + observation.food_signal_south
+                    + observation.food_signal_east
+                    + observation.food_signal_west
+                )
+                update_scalar(
+                    self.memory,
+                    total_food_signal=total,
+                    action=decision.action,
                 )
 
         self.body = result.body
@@ -227,6 +247,8 @@ class HHAgent(CellAgent):
             _decay_memory_all(self.memory, decay_rate)
         elif isinstance(self.memory, DirectionalMemory):
             _decay_memory_directional(self.memory, decay_rate)
+        # ScalarMemory: intentionally no decay. One-tick lag is the entire
+        # memory window; the next ``update_scalar`` overwrites both fields.
 
     def apply_auto_reproduction(self) -> None:
         """v0.2 substrate phase: trigger reproduction without policy intent.

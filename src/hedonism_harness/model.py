@@ -29,9 +29,11 @@ from hedonism_harness.core.config import (
 from hedonism_harness.core.events import AgentBorn, AgentDied, LoggedEvent, emit
 from hedonism_harness.core.memory import (
     DirectionalMemory,
+    ScalarMemory,
     ValenceMemory,
     make_directional_memory,
     make_memory,
+    make_scalar_memory,
 )
 from hedonism_harness.core.reproduction import process_reproduction
 from hedonism_harness.core.rng import RngStreams, make_streams, spawn_agent_rng
@@ -51,12 +53,15 @@ PolicyFactory = Callable[[], "Policy"]
 
 MEMORY_TYPE_CELL_EXACT: str = "cell_exact"
 MEMORY_TYPE_DIRECTIONAL: str = "directional"
-_VALID_MEMORY_TYPES: frozenset[str] = frozenset({MEMORY_TYPE_CELL_EXACT, MEMORY_TYPE_DIRECTIONAL})
+MEMORY_TYPE_SCALAR: str = "scalar"
+_VALID_MEMORY_TYPES: frozenset[str] = frozenset(
+    {MEMORY_TYPE_CELL_EXACT, MEMORY_TYPE_DIRECTIONAL, MEMORY_TYPE_SCALAR}
+)
 
 
 def _make_memory_for_spec(
     *, use_memory: bool, memory_type: str, width: int, height: int
-) -> ValenceMemory | DirectionalMemory | None:
+) -> ValenceMemory | DirectionalMemory | ScalarMemory | None:
     """Build a fresh per-agent memory matching ``memory_type``.
 
     Returns ``None`` when ``use_memory=False`` (the default — keeps v0.1
@@ -68,6 +73,8 @@ def _make_memory_for_spec(
         return make_memory(width, height)
     if memory_type == MEMORY_TYPE_DIRECTIONAL:
         return make_directional_memory()
+    if memory_type == MEMORY_TYPE_SCALAR:
+        return make_scalar_memory()
     msg = f"Unknown memory_type {memory_type!r}; valid: {sorted(_VALID_MEMORY_TYPES)}"
     raise ValueError(msg)
 
@@ -83,10 +90,12 @@ class FounderSpec:
     Leave ``None`` (default) to keep the v0.1 behavior of sampling each founder
     from the configured ``TraitConfig`` ranges.
 
-    ``memory_type``: the v0.11 memory-representation seam. Only consulted
-    when ``use_memory=True``. ``"cell_exact"`` (the v0.1 default) keeps
-    callers bit-identical to v0.9/v0.10 behavior; ``"directional"`` uses
-    the bacterial-chemotaxis-style 4-vector ``DirectionalMemory``.
+    ``memory_type``: the v0.11 / v0.15 memory-representation seam. Only
+    consulted when ``use_memory=True``. ``"cell_exact"`` (the v0.1 default)
+    keeps callers bit-identical to v0.9/v0.10 behavior; ``"directional"``
+    uses the multi-cell-tier 4-vector ``DirectionalMemory``;
+    ``"scalar"`` (v0.15) uses the prokaryotic-chemotaxis-tier
+    ``ScalarMemory`` (one float + last move direction).
     """
 
     __slots__ = (
@@ -496,11 +505,13 @@ class HHModel(mesa.Model):
             # SPEC §13.4: children get fresh memory of the parent's
             # representation type, never inherit parent's accumulated state.
             if parent.memory is None:
-                child_memory: ValenceMemory | DirectionalMemory | None = None
+                child_memory: ValenceMemory | DirectionalMemory | ScalarMemory | None = None
             elif isinstance(parent.memory, ValenceMemory):
                 child_memory = make_memory(self.world_config.width, self.world_config.height)
             elif isinstance(parent.memory, DirectionalMemory):
                 child_memory = make_directional_memory()
+            elif isinstance(parent.memory, ScalarMemory):
+                child_memory = make_scalar_memory()
             else:
                 msg = f"Unknown parent memory type {type(parent.memory)!r}"
                 raise TypeError(msg)
