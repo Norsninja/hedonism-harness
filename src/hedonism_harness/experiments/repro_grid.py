@@ -67,6 +67,7 @@ from hedonism_harness.experiments.fear_hunger_chamber import (
     ChamberRunResult,
     paint_chamber,
     run_chamber,
+    spread_y,
 )
 from hedonism_harness.experiments.layouts import tight_gradient_layout
 from hedonism_harness.experiments.repro_configs import (
@@ -299,12 +300,7 @@ def _capture_snapshot(
         safe_value_default=1.0,
     )
     spawn_x = layout.resolved_spawn_x
-    step = max(1, layout.height // n_founders) if n_founders > 1 else 1
-    spawn_ys = (
-        [layout.height // 2]
-        if n_founders <= 1
-        else [min(layout.height - 1, i * step) for i in range(n_founders)]
-    )
+    spawn_ys = spread_y(n_founders, layout.height)
     founders = [FounderSpec(x=spawn_x, y=y, policy_factory=_policy_factory) for y in spawn_ys]
     model = HHModel(
         world_cfg,

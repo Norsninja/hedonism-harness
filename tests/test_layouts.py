@@ -151,6 +151,78 @@ def test_food_ladder_has_pre_food_band() -> None:
     assert layout.pre_food_x_max == 4
 
 
+# ---------------------------------------------------------------------------
+# ChamberLayout.__post_init__ pre-food validation (v0.8 hygiene-2)
+# ---------------------------------------------------------------------------
+
+
+def test_chamber_layout_rejects_half_set_pre_food_min_only() -> None:
+    """Setting one of (pre_food_x_min, pre_food_x_max) without the other
+    is a typo that would silently disable the band — must raise."""
+    from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+
+    with pytest.raises(ValueError, match="set together"):
+        ChamberLayout(pre_food_x_min=4)
+
+
+def test_chamber_layout_rejects_half_set_pre_food_max_only() -> None:
+    from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+
+    with pytest.raises(ValueError, match="set together"):
+        ChamberLayout(pre_food_x_max=4)
+
+
+def test_chamber_layout_rejects_inverted_pre_food_range() -> None:
+    """``pre_food_x_min > pre_food_x_max`` paints zero columns silently."""
+    from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+
+    with pytest.raises(ValueError, match="inverted"):
+        ChamberLayout(pre_food_x_min=5, pre_food_x_max=4)
+
+
+def test_chamber_layout_rejects_pre_food_overlapping_safe_band() -> None:
+    """A pre-food column that overlaps the safe band would get stamped
+    twice with conflicting CellKind values; last write wins silently."""
+    from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+
+    # default safe is [0..5]; pre_food at x=2 overlaps.
+    with pytest.raises(ValueError, match="overlaps safe band"):
+        ChamberLayout(pre_food_x_min=2, pre_food_x_max=2)
+
+
+def test_chamber_layout_rejects_pre_food_overlapping_hazard_band() -> None:
+    from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+
+    # default hazard is [8..11]; pre_food at x=9 overlaps.
+    with pytest.raises(ValueError, match="overlaps hazard band"):
+        ChamberLayout(pre_food_x_min=9, pre_food_x_max=10)
+
+
+def test_chamber_layout_rejects_pre_food_overlapping_terminal_food_band() -> None:
+    from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+
+    # default food is [14..19]; pre_food at x=15 overlaps.
+    with pytest.raises(ValueError, match="overlaps food band"):
+        ChamberLayout(pre_food_x_min=15, pre_food_x_max=15)
+
+
+def test_chamber_layout_accepts_valid_pre_food() -> None:
+    """The food_ladder configuration must continue to construct cleanly:
+    pre_food=[4,4] sits between safe=[0..2] and hazard=[6..8]."""
+    layout = food_ladder_layout()
+    assert layout.has_pre_food
+    assert layout.pre_food_x_min == 4
+    assert layout.pre_food_x_max == 4
+
+
+def test_chamber_layout_accepts_no_pre_food() -> None:
+    """Default layouts (no pre-food) must continue to construct."""
+    from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+
+    layout = ChamberLayout()
+    assert not layout.has_pre_food
+
+
 def test_food_ladder_pre_food_is_painted_as_food_band() -> None:
     """End-to-end: paint_chamber must stamp the pre-food column as FOOD
     cells with the standard food_value, in every row."""

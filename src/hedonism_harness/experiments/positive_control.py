@@ -37,6 +37,7 @@ from hedonism_harness.experiments.fear_hunger_chamber import (
     ChamberRunResult,
     paint_chamber,
     run_chamber,
+    spread_y,
 )
 from hedonism_harness.experiments.snapshots import render_model_snapshot
 from hedonism_harness.experiments.trait_archetypes import ARCHETYPE_NAMES, archetype_traits
@@ -129,12 +130,7 @@ def _capture_snapshot(
         safe_value_default=1.0,
     )
     spawn_x = layout.resolved_spawn_x
-    step = max(1, layout.height // n_founders) if n_founders > 1 else 1
-    spawn_ys = (
-        [layout.height // 2]
-        if n_founders <= 1
-        else [min(layout.height - 1, i * step) for i in range(n_founders)]
-    )
+    spawn_ys = spread_y(n_founders, layout.height)
     traits_override = None if condition == DEFAULT_CONDITION else archetype_traits(condition)
     founders = [
         FounderSpec(

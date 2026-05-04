@@ -592,3 +592,107 @@ def test_run_chamber_food_ladder_runs_without_crashing() -> None:
         write_outputs=False,
     )
     assert result.ticks_completed > 0
+
+
+# ---------------------------------------------------------------------------
+# v0.8 hygiene-2: setup_observer fires before first step
+# ---------------------------------------------------------------------------
+
+
+def test_run_chamber_setup_observer_fires_before_first_step() -> None:
+    """The setup_observer hook must run AFTER paint_chamber (so the
+    chamber terrain is in place) and AFTER aggregator.connect() (so
+    pre-existing subscribers are live), but BEFORE the first
+    model.step() (so any subscribers installed by setup_observer
+    receive every tick-0 event)."""
+    from hedonism_harness.experiments.fear_hunger_chamber import run_chamber
+
+    setup_observations: list[int] = []
+    tick_observations: list[int] = []
+
+    def setup(model: HHModel) -> None:
+        setup_observations.append(model.tick_count)
+
+    def tick(model: HHModel) -> None:
+        tick_observations.append(model.tick_count)
+
+    run_chamber(
+        seed=1,
+        runs_root=Path("/tmp"),
+        run_id="setup-observer-test",
+        n_founders=2,
+        n_ticks=3,
+        layout=tight_gradient_layout(),
+        write_outputs=False,
+        setup_observer=setup,
+        tick_observer=tick,
+    )
+
+    # setup_observer fires exactly once, with model.tick_count == 0
+    # (no tick has run yet).
+    assert setup_observations == [0]
+    # tick_observer fires AFTER each step, so all observations are
+    # strictly greater than the setup observation.
+    assert all(t > setup_observations[0] for t in tick_observations)
+    assert tick_observations == sorted(tick_observations)
+
+
+def test_run_chamber_setup_observer_sees_painted_chamber_and_founders() -> None:
+    """setup_observer must observe the model in its post-paint, post-
+    aggregator-connect state — i.e., the chamber is painted and founders
+    are placed when the hook fires."""
+    from hedonism_harness.core.world import CellKind
+    from hedonism_harness.experiments.fear_hunger_chamber import run_chamber
+    from hedonism_harness.mesa_agents import HHAgent
+
+    captured: dict[str, object] = {}
+
+    def setup(model: HHModel) -> None:
+        captured["n_founders"] = sum(
+            1 for a in model.agents if isinstance(a, HHAgent) and a.body.alive
+        )
+        # Sanity: a hazard cell on the painted chamber has CellKind.HAZARD.
+        layout = tight_gradient_layout()
+        captured["hazard_painted"] = (
+            CellKind(int(model.world.kind_layer[layout.hazard_x_min, 0])) == CellKind.HAZARD
+        )
+
+    run_chamber(
+        seed=1,
+        runs_root=Path("/tmp"),
+        run_id="setup-observer-state-test",
+        n_founders=3,
+        n_ticks=1,
+        layout=tight_gradient_layout(),
+        write_outputs=False,
+        setup_observer=setup,
+    )
+
+    assert captured["n_founders"] == 3
+    assert captured["hazard_painted"] is True
+
+
+# ---------------------------------------------------------------------------
+# v0.8 hygiene-2: snapshot helpers use spread_y (overflow propagates)
+# ---------------------------------------------------------------------------
+
+
+def test_eligibility_snapshot_helper_uses_spread_y_overflow_check(tmp_path: Path) -> None:
+    """The eligibility-grid snapshot path now uses spread_y(). Passing
+    n_founders > layout.height to the snapshot path must surface as the
+    same ValueError run_chamber raises, not as a silent founder
+    collision deep in Mesa placement."""
+    from hedonism_harness.experiments.eligibility_grid import _capture_snapshot
+    from hedonism_harness.experiments.repro_configs import tuned_reproduction_config
+
+    layout = tight_gradient_layout()  # height=6
+
+    with pytest.raises(ValueError, match="capacity=1"):
+        _capture_snapshot(
+            seed=1,
+            n_founders=10,  # > height
+            layout=layout,
+            snapshot_tick=1,
+            trait_config=eligibility_trait_config(sensor_radius_min=1),
+            reproduction_config=tuned_reproduction_config(energy_threshold=50.0, energy_cost=35.0),
+        )

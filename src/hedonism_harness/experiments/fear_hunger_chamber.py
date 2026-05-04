@@ -101,6 +101,72 @@ class ChamberLayout:
     def has_pre_food(self) -> bool:
         return self.pre_food_x_min is not None and self.pre_food_x_max is not None
 
+    def __post_init__(self) -> None:
+        """Validate the pre-food contract.
+
+        Three invariants pinned (v0.8 hygiene-2 follow-up):
+
+          1. Both ``pre_food_x_min`` and ``pre_food_x_max`` are set
+             together, or both are ``None``. A half-set pair is a typo
+             that would silently disable the band.
+          2. ``pre_food_x_min <= pre_food_x_max``. Inverted ranges
+             paint zero columns silently.
+          3. The pre-food band must not overlap any of the safe,
+             hazard, or terminal-food bands. Overlapping columns get
+             stamped twice with conflicting ``CellKind`` values; the
+             last write wins, which is order-of-statement in
+             ``paint_chamber`` — a fragile and silent failure mode.
+
+        Validation only fires when the pre-food fields are set (the
+        v0.8 ``food_ladder`` is the only stock layout that uses them).
+        Other layout invariants (band ordering, non-overlap among
+        safe/hazard/food, in-bounds-ness) are deliberately out of
+        scope for this slice — broader layout validation is its own
+        follow-up.
+        """
+        # Invariant 1: both-or-neither.
+        min_set = self.pre_food_x_min is not None
+        max_set = self.pre_food_x_max is not None
+        if min_set != max_set:
+            msg = (
+                "ChamberLayout.pre_food_x_min and pre_food_x_max must be "
+                f"set together (or both None); got min={self.pre_food_x_min!r} "
+                f"max={self.pre_food_x_max!r}"
+            )
+            raise ValueError(msg)
+        if not min_set:
+            return  # No pre-food band; remaining invariants are vacuous.
+
+        # Type narrowing for the checks below — both are non-None here.
+        pf_min = self.pre_food_x_min
+        pf_max = self.pre_food_x_max
+        assert pf_min is not None
+        assert pf_max is not None
+
+        # Invariant 2: ordering.
+        if pf_min > pf_max:
+            msg = (
+                f"ChamberLayout.pre_food_x_min ({pf_min}) must be "
+                f"<= pre_food_x_max ({pf_max}); inverted ranges paint zero columns"
+            )
+            raise ValueError(msg)
+
+        # Invariant 3: no overlap with safe / hazard / terminal-food bands.
+        bands = (
+            ("safe", self.safe_x_min, self.safe_x_max),
+            ("hazard", self.hazard_x_min, self.hazard_x_max),
+            ("food", self.food_x_min, self.food_x_max),
+        )
+        for name, lo, hi in bands:
+            # Inclusive-range overlap: max(starts) <= min(ends).
+            if max(pf_min, lo) <= min(pf_max, hi):
+                msg = (
+                    f"ChamberLayout.pre_food band [{pf_min}, {pf_max}] overlaps "
+                    f"{name} band [{lo}, {hi}]; paint_chamber would stamp these "
+                    "columns with conflicting CellKind values"
+                )
+                raise ValueError(msg)
+
 
 def build_chamber_layout(layout: ChamberLayout, hazard_damage: float = 8.0) -> WorldConfig:
     """Return a ``WorldConfig`` sized for ``layout``. Terrain is painted by
@@ -194,6 +260,7 @@ def run_chamber(
     condition: str | None = None,
     trait_config: TraitConfig | None = None,
     reproduction_config: ReproductionConfig | None = None,
+    setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
     """Run one Fear-Hunger Chamber episode and (optionally) persist its outputs.
@@ -211,6 +278,12 @@ def run_chamber(
     ``ReproductionConfig`` (the v0.7 reproduction-emergence seam). When
     ``None`` the SPEC defaults hold.
 
+    ``setup_observer``: optional callable invoked with the model **after**
+    ``paint_chamber`` and aggregator ``connect()``, **before** the first
+    ``model.step()``. The v0.8 eligibility-telemetry seam uses this hook
+    to install per-event signal subscribers eagerly so events emitted
+    during tick 0 are not missed. ``None`` keeps the existing behavior.
+
     ``tick_observer``: optional callable invoked with the model after each
     ``model.step()`` (the v0.8 eligibility-telemetry seam). Runs even on
     the final tick. ``None`` keeps the existing behavior.
@@ -224,7 +297,7 @@ def run_chamber(
 
     # Founders spaced along the chamber's spawn column.
     spawn_x = layout.resolved_spawn_x
-    spawn_ys = _spread_y(n_founders, layout.height)
+    spawn_ys = spread_y(n_founders, layout.height)
     founders = [
         FounderSpec(
             x=spawn_x,
@@ -250,6 +323,11 @@ def run_chamber(
     lifetime = LifetimeAggregator(model=model)
     episode.connect()
     lifetime.connect()
+
+    # External setup hook fires AFTER aggregator connects but BEFORE the
+    # first step so subscribers see every tick-0 event.
+    if setup_observer is not None:
+        setup_observer(model)
 
     started_at = now_unix()
     try:
@@ -336,7 +414,7 @@ def run_chamber(
 # ---------------------------------------------------------------------------
 
 
-def _spread_y(n: int, height: int) -> list[int]:
+def spread_y(n: int, height: int) -> list[int]:
     """Evenly distribute ``n`` y-coordinates across the chamber height.
 
     Raises ``ValueError`` when ``n > height`` — the Mesa grid is
@@ -367,7 +445,7 @@ def _spread_y(n: int, height: int) -> list[int]:
     # impossible, but assert it explicitly so any future change to the
     # algorithm fails loudly instead of silently colliding founders.
     if len(set(spread)) != len(spread):
-        msg = f"_spread_y produced duplicate y-coordinates for n={n}, height={height}: {spread}"
+        msg = f"spread_y produced duplicate y-coordinates for n={n}, height={height}: {spread}"
         raise AssertionError(msg)
     return spread
 

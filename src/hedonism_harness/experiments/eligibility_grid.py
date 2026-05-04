@@ -89,6 +89,7 @@ from hedonism_harness.experiments.fear_hunger_chamber import (
     ChamberRunResult,
     paint_chamber,
     run_chamber,
+    spread_y,
 )
 from hedonism_harness.experiments.layouts import (
     food_ladder_layout,
@@ -391,12 +392,7 @@ def _capture_snapshot(
         safe_value_default=1.0,
     )
     spawn_x = layout.resolved_spawn_x
-    step = max(1, layout.height // n_founders) if n_founders > 1 else 1
-    spawn_ys = (
-        [layout.height // 2]
-        if n_founders <= 1
-        else [min(layout.height - 1, i * step) for i in range(n_founders)]
-    )
+    spawn_ys = spread_y(n_founders, layout.height)
     founders = [FounderSpec(x=spawn_x, y=y, policy_factory=_policy_factory) for y in spawn_ys]
     model = HHModel(
         world_cfg,
@@ -420,22 +416,26 @@ def _run_one_cell_seed(
     n_ticks: int,
     n_founders: int,
 ) -> tuple[ChamberRunResult, EligibilityTelemetry]:
-    """Run one (cell, seed) pair with telemetry instrumentation."""
+    """Run one (cell, seed) pair with telemetry instrumentation.
+
+    The collector is instantiated + connected via ``run_chamber``'s
+    ``setup_observer`` hook so its event subscriptions are live BEFORE
+    the first ``model.step()``. The previous lazy-init-on-first-tick
+    pattern silently dropped any tick-0 events.
+    """
     layout = cell.to_layout()
     trait_cfg = cell.to_trait_config()
     repro_cfg = cell.to_reproduction_config()
 
-    # We need a handle to the model for the telemetry collector. Construct
-    # the collector lazily via a closure — the first observer call sees the
-    # model and instantiates + connects the collector.
     collector_holder: list[EligibilityTelemetryCollector | None] = [None]
 
-    def observer(model: HHModel) -> None:
-        if collector_holder[0] is None:
-            c = EligibilityTelemetryCollector(model, repro_cfg)
-            c.connect()
-            collector_holder[0] = c
-        # mypy: collector_holder[0] is non-None after the branch above
+    def setup(model: HHModel) -> None:
+        c = EligibilityTelemetryCollector(model, repro_cfg)
+        c.connect()
+        collector_holder[0] = c
+
+    def observe(model: HHModel) -> None:
+        # setup() ran before the first step, so the collector is always set.
         assert collector_holder[0] is not None
         collector_holder[0].observe_tick()
 
@@ -451,7 +451,8 @@ def _run_one_cell_seed(
             trait_config=trait_cfg,
             reproduction_config=repro_cfg,
             condition=cell.id,
-            tick_observer=observer,
+            setup_observer=setup,
+            tick_observer=observe,
         )
     finally:
         if collector_holder[0] is not None:
