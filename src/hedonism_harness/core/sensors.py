@@ -28,6 +28,7 @@ from dataclasses import dataclass
 
 from hedonism_harness.core.body import AgentBody
 from hedonism_harness.core.config import BodyConfig
+from hedonism_harness.core.memory import ValenceMemory, directional_signals
 from hedonism_harness.core.world import CellKind, World, in_bounds
 
 
@@ -161,28 +162,29 @@ def observe(
     )
 
 
+_MEMORY_KEYS: tuple[str, ...] = (
+    "remembered_good_north",
+    "remembered_good_south",
+    "remembered_good_east",
+    "remembered_good_west",
+    "remembered_bad_north",
+    "remembered_bad_south",
+    "remembered_bad_east",
+    "remembered_bad_west",
+)
+
+
 def _read_memory_directional(
     memory: object | None, body: AgentBody, world: World
 ) -> dict[str, float]:
     """Return the eight memory-direction fields as a dict.
 
-    Returns all zeros when ``memory`` is ``None``. The non-None branch is a
-    placeholder that lands properly with memory.py (SPEC §26.12 step 12).
+    Returns all zeros when ``memory`` is ``None`` or not a ``ValenceMemory``.
+    Otherwise delegates to ``memory.directional_signals`` to scan along each
+    axis, mirroring the external sensor geometry.
     """
-    keys = (
-        "remembered_good_north",
-        "remembered_good_south",
-        "remembered_good_east",
-        "remembered_good_west",
-        "remembered_bad_north",
-        "remembered_bad_south",
-        "remembered_bad_east",
-        "remembered_bad_west",
-    )
-    if memory is None:
-        return dict.fromkeys(keys, 0.0)
+    if memory is None or not isinstance(memory, ValenceMemory):
+        _ = world  # silence unused for the None / unknown-shape branch
+        return dict.fromkeys(_MEMORY_KEYS, 0.0)
 
-    # memory.py is not implemented yet (SPEC §26.12 step 12). When it lands,
-    # this branch reads remembered pleasure/pain along each axis.
-    _ = body, world  # silence unused warnings until wired up
-    return dict.fromkeys(keys, 0.0)
+    return directional_signals(memory, body.x, body.y, int(body.traits.sensor_radius))
