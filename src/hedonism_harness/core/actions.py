@@ -97,14 +97,18 @@ def get_valid_actions(
     """Return the actions ``body`` may legally take from its current state.
 
     - ``STAY`` is always valid.
-    - Movement is invalid when destination is out of bounds or a WALL cell.
+    - Movement is invalid when destination is out of bounds, a WALL cell, or
+      (when ``occupied`` is provided) currently occupied by another agent.
     - ``EAT`` is valid only when the current cell is FOOD.
     - ``REPRODUCE`` is included only when ``reproduction_config`` is provided
       and ``reproduction.can_reproduce(...)`` returns True.
 
-    ``occupied`` is the set of currently occupied cells (for adjacency checks
-    when placing offspring). Passed through by the Mesa wrapper; ``None`` here
-    means "no occupancy info" — adjacency check still verifies bounds + WALL.
+    ``occupied`` is the set of currently occupied cells. ``None`` means "no
+    occupancy info" — only bounds + WALL are checked (terrain-only mode used
+    by core tests). The Mesa wrapper passes a real frozenset so movement and
+    reproduction adjacency consult the same view. The body's own cell does not
+    block its own moves: callers should exclude ``(body.x, body.y)`` from
+    ``occupied`` (the wrapper does this naturally by iterating other agents).
     """
     valid: list[Action] = [Action.STAY]
 
@@ -113,6 +117,8 @@ def get_valid_actions(
         if not in_bounds(world, nx, ny):
             continue
         if CellKind(int(world.kind_layer[nx, ny])) == CellKind.WALL:
+            continue
+        if occupied is not None and (nx, ny) in occupied:
             continue
         valid.append(action)
 

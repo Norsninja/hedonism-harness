@@ -120,6 +120,41 @@ def test_reproduce_filtered_in_v01_step_6(traits, body_config) -> None:
     assert Action.REPRODUCE not in get_valid_actions(world, body)
 
 
+def test_occupied_blocks_movement(traits, body_config) -> None:
+    """Mesa wrapper passes ``occupied``; movement into an occupied cell must be filtered."""
+    world = _empty_world()
+    body = _body_at(2, 2, traits, body_config)
+    occupied = frozenset({(2, 3), (3, 2)})  # block N and E
+    valid = get_valid_actions(world, body, occupied=occupied)
+    assert Action.MOVE_NORTH not in valid
+    assert Action.MOVE_EAST not in valid
+    assert Action.MOVE_SOUTH in valid
+    assert Action.MOVE_WEST in valid
+    assert Action.STAY in valid
+
+
+def test_occupied_none_ignores_occupancy(traits, body_config) -> None:
+    """Default ``occupied=None`` is the existing terrain-only behavior."""
+    world = _empty_world()
+    body = _body_at(2, 2, traits, body_config)
+    valid = get_valid_actions(world, body, occupied=None)
+    assert Action.MOVE_NORTH in valid
+    assert Action.MOVE_SOUTH in valid
+    assert Action.MOVE_EAST in valid
+    assert Action.MOVE_WEST in valid
+
+
+def test_occupied_empty_set_matches_none(traits, body_config) -> None:
+    """An empty frozenset is equivalent to None for movement purposes."""
+    world = _empty_world()
+    body = _body_at(2, 2, traits, body_config)
+    valid = get_valid_actions(world, body, occupied=frozenset())
+    assert Action.MOVE_NORTH in valid
+    assert Action.MOVE_SOUTH in valid
+    assert Action.MOVE_EAST in valid
+    assert Action.MOVE_WEST in valid
+
+
 # ---------------------------------------------------------------------------
 # apply_action — STAY
 # ---------------------------------------------------------------------------
