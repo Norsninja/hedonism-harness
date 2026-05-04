@@ -1,5 +1,13 @@
 """HedonismPolicy — predict-one-step + harness scoring (SPEC §12, §15.3).
 
+Status under v0.2 reflex-cell substrate:
+  This is the **deliberative comparison branch**. v0.2 spec defines the
+  reflex-cell architecture (``GradientPolicy`` + automatic reproduction +
+  no memory) as the primary thesis-aligned organism model.
+  ``HedonismPolicy`` is retained without modification as the comparison
+  baseline; v0.14+ comparisons score reflex-cell dynamics against this
+  deliberative architecture. See [[docs/specs/v0.2_reflex_cell_spec.md]].
+
 Per SPEC §27.5 the policy uses ``apply_action`` itself (single source of truth)
 to predict each candidate action's outcome against a body copy, then scores
 the predicted state with the Hedonism Harness. The action with the highest
