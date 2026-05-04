@@ -27,7 +27,12 @@ from hedonism_harness.core.config import (
     WorldConfig,
 )
 from hedonism_harness.core.events import AgentBorn, AgentDied, LoggedEvent, emit
-from hedonism_harness.core.memory import make_memory
+from hedonism_harness.core.memory import (
+    DirectionalMemory,
+    ValenceMemory,
+    make_directional_memory,
+    make_memory,
+)
 from hedonism_harness.core.reproduction import process_reproduction
 from hedonism_harness.core.rng import RngStreams, make_streams, spawn_agent_rng
 from hedonism_harness.core.traits import TraitConfig, Traits, random_traits
@@ -44,6 +49,29 @@ if TYPE_CHECKING:
 PolicyFactory = Callable[[], "Policy"]
 
 
+MEMORY_TYPE_CELL_EXACT: str = "cell_exact"
+MEMORY_TYPE_DIRECTIONAL: str = "directional"
+_VALID_MEMORY_TYPES: frozenset[str] = frozenset({MEMORY_TYPE_CELL_EXACT, MEMORY_TYPE_DIRECTIONAL})
+
+
+def _make_memory_for_spec(
+    *, use_memory: bool, memory_type: str, width: int, height: int
+) -> ValenceMemory | DirectionalMemory | None:
+    """Build a fresh per-agent memory matching ``memory_type``.
+
+    Returns ``None`` when ``use_memory=False`` (the default — keeps v0.1
+    behavior bit-identical for callers that never asked for memory).
+    """
+    if not use_memory:
+        return None
+    if memory_type == MEMORY_TYPE_CELL_EXACT:
+        return make_memory(width, height)
+    if memory_type == MEMORY_TYPE_DIRECTIONAL:
+        return make_directional_memory()
+    msg = f"Unknown memory_type {memory_type!r}; valid: {sorted(_VALID_MEMORY_TYPES)}"
+    raise ValueError(msg)
+
+
 class FounderSpec:
     """Declarative founder agent description.
 
@@ -54,9 +82,21 @@ class FounderSpec:
     v0.2 positive-control experiment to inject deterministic archetype Traits.
     Leave ``None`` (default) to keep the v0.1 behavior of sampling each founder
     from the configured ``TraitConfig`` ranges.
+
+    ``memory_type``: the v0.11 memory-representation seam. Only consulted
+    when ``use_memory=True``. ``"cell_exact"`` (the v0.1 default) keeps
+    callers bit-identical to v0.9/v0.10 behavior; ``"directional"`` uses
+    the bacterial-chemotaxis-style 4-vector ``DirectionalMemory``.
     """
 
-    __slots__ = ("policy_factory", "traits_override", "use_memory", "x", "y")
+    __slots__ = (
+        "memory_type",
+        "policy_factory",
+        "traits_override",
+        "use_memory",
+        "x",
+        "y",
+    )
 
     def __init__(
         self,
@@ -65,12 +105,17 @@ class FounderSpec:
         policy_factory: PolicyFactory,
         use_memory: bool = False,
         traits_override: Traits | None = None,
+        memory_type: str = MEMORY_TYPE_CELL_EXACT,
     ) -> None:
+        if memory_type not in _VALID_MEMORY_TYPES:
+            msg = f"Unknown memory_type {memory_type!r}; valid: {sorted(_VALID_MEMORY_TYPES)}"
+            raise ValueError(msg)
         self.x = x
         self.y = y
         self.policy_factory = policy_factory
         self.use_memory = use_memory
         self.traits_override = traits_override
+        self.memory_type = memory_type
 
 
 class HHModel(mesa.Model):
@@ -209,10 +254,11 @@ class HHModel(mesa.Model):
         )
         self._next_body_id += 1
 
-        memory = (
-            make_memory(self.world_config.width, self.world_config.height)
-            if spec.use_memory
-            else None
+        memory = _make_memory_for_spec(
+            use_memory=spec.use_memory,
+            memory_type=spec.memory_type,
+            width=self.world_config.width,
+            height=self.world_config.height,
         )
         agent_rng = spawn_agent_rng(self.streams.mutation)
         agent = HHAgent(
@@ -334,11 +380,17 @@ class HHModel(mesa.Model):
             parent.body = updated_parent_body
             self._next_body_id += 1
 
-            child_memory = (
-                make_memory(self.world_config.width, self.world_config.height)
-                if parent.memory is not None
-                else None
-            )
+            # SPEC §13.4: children get fresh memory of the parent's
+            # representation type, never inherit parent's accumulated state.
+            if parent.memory is None:
+                child_memory: ValenceMemory | DirectionalMemory | None = None
+            elif isinstance(parent.memory, ValenceMemory):
+                child_memory = make_memory(self.world_config.width, self.world_config.height)
+            elif isinstance(parent.memory, DirectionalMemory):
+                child_memory = make_directional_memory()
+            else:
+                msg = f"Unknown parent memory type {type(parent.memory)!r}"
+                raise TypeError(msg)
             child_rng = spawn_agent_rng(self.streams.mutation)
             # Reuse the parent's policy factory so the child gets a policy with
             # the same configuration (e.g. HedonismPolicy.exploration_noise).

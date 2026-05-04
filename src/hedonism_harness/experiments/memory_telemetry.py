@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from hedonism_harness.core.events import AteFood, signal_for
+from hedonism_harness.core.memory import DirectionalMemory, ValenceMemory
 from hedonism_harness.mesa_agents import HHAgent
 
 if TYPE_CHECKING:
@@ -98,17 +99,35 @@ class MemoryTelemetryCollector:
     # ------------------------------------------------------------------
 
     def observe_tick(self) -> None:
-        """Snapshot every living agent's ``memory.visits.sum()``."""
+        """Snapshot a per-tick "memory activity" count for every living agent.
+
+        Dispatches on memory type:
+
+          - ``ValenceMemory``: uses ``visits.sum()`` (total ``update_at``
+            calls, equals ticks the agent has stepped while alive).
+          - ``DirectionalMemory``: uses the count of nonzero tendency
+            slots (max 8: 4 pleasure + 4 pain). This is a different unit
+            from the cell-exact case (saturating, not monotone-with-time);
+            interpret per-cell, not across memory types.
+        """
         for agent in self._model.agents:
             if not isinstance(agent, HHAgent) or not agent.body.alive:
                 continue
             if agent.memory is None:
                 continue
-            visits_total = int(agent.memory.visits.sum())
+            if isinstance(agent.memory, ValenceMemory):
+                activity = int(agent.memory.visits.sum())
+            elif isinstance(agent.memory, DirectionalMemory):
+                # Count direction slots that have any nonzero tendency.
+                pleasure_slots = int((agent.memory.pleasure_tendency != 0).sum())
+                pain_slots = int((agent.memory.pain_tendency != 0).sum())
+                activity = pleasure_slots + pain_slots
+            else:
+                continue
             aid = agent.body.id
             prior = self._max_visits_per_agent.get(aid, 0)
-            if visits_total > prior:
-                self._max_visits_per_agent[aid] = visits_total
+            if activity > prior:
+                self._max_visits_per_agent[aid] = activity
 
     # ------------------------------------------------------------------
     # Event handlers

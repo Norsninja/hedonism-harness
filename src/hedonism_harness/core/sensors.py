@@ -28,7 +28,12 @@ from dataclasses import dataclass
 
 from hedonism_harness.core.body import AgentBody
 from hedonism_harness.core.config import BodyConfig
-from hedonism_harness.core.memory import ValenceMemory, directional_signals
+from hedonism_harness.core.memory import (
+    DirectionalMemory,
+    ValenceMemory,
+    directional_signals,
+    directional_signals_directional,
+)
 from hedonism_harness.core.world import CellKind, World, in_bounds
 
 
@@ -179,12 +184,18 @@ def _read_memory_directional(
 ) -> dict[str, float]:
     """Return the eight memory-direction fields as a dict.
 
-    Returns all zeros when ``memory`` is ``None`` or not a ``ValenceMemory``.
-    Otherwise delegates to ``memory.directional_signals`` to scan along each
-    axis, mirroring the external sensor geometry.
-    """
-    if memory is None or not isinstance(memory, ValenceMemory):
-        _ = world  # silence unused for the None / unknown-shape branch
-        return dict.fromkeys(_MEMORY_KEYS, 0.0)
+    Dispatches on memory type:
 
-    return directional_signals(memory, body.x, body.y, int(body.traits.sensor_radius))
+      - ``None`` -> all zeros (no memory, the v0.1 default).
+      - ``ValenceMemory`` (cell-exact) -> axial scan of ``pleasure_ema /
+        distance`` and ``pain_ema / distance`` to ``traits.sensor_radius``.
+      - ``DirectionalMemory`` (v0.11 chemotaxis-style) -> direct read
+        of the 4-vector tendencies; no spatial scan.
+    """
+    if isinstance(memory, ValenceMemory):
+        return directional_signals(memory, body.x, body.y, int(body.traits.sensor_radius))
+    if isinstance(memory, DirectionalMemory):
+        _ = world  # silence unused for the directional branch
+        return directional_signals_directional(memory)
+    _ = world  # silence unused for the None / unknown-shape branch
+    return dict.fromkeys(_MEMORY_KEYS, 0.0)

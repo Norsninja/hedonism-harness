@@ -261,6 +261,7 @@ def run_chamber(
     trait_config: TraitConfig | None = None,
     reproduction_config: ReproductionConfig | None = None,
     use_memory: bool = False,
+    memory_type: str = "cell_exact",
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
@@ -280,10 +281,16 @@ def run_chamber(
     ``None`` the SPEC defaults hold.
 
     ``use_memory``: when ``True``, every founder is created with a fresh
-    ``ValenceMemory`` (the v0.9 memory-arm seam). Children of memory-enabled
+    memory of the type chosen by ``memory_type`` (the v0.9 memory-arm seam,
+    extended in v0.11 to select representation). Children of memory-enabled
     parents also receive fresh memory per SPEC §13.4. When ``False`` (default),
     founders have ``memory=None`` and the memory directional signals score as
     zeros in ``core/valence``.
+
+    ``memory_type``: only consulted when ``use_memory=True``. ``"cell_exact"``
+    (default — keeps v0.9/v0.10 callers bit-identical) uses ``ValenceMemory``;
+    ``"directional"`` uses the v0.11 ``DirectionalMemory`` (4-vector
+    chemotaxis-style tendencies, no spatial map).
 
     ``setup_observer``: optional callable invoked with the model **after**
     ``paint_chamber`` and aggregator ``connect()``, **before** the first
@@ -312,6 +319,7 @@ def run_chamber(
             policy_factory=policy_factory,
             traits_override=traits_override,
             use_memory=use_memory,
+            memory_type=memory_type,
         )
         for y in spawn_ys
     ]
