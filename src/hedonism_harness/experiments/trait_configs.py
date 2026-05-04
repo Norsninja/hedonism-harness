@@ -78,3 +78,79 @@ def trait_config_by_name(name: str) -> TraitConfig:
         msg = f"Unknown trait config {name!r}; valid names: {sorted(ALL_TRAIT_CONFIGS)}"
         raise KeyError(msg)
     return ALL_TRAIT_CONFIGS[name]
+
+
+# ---------------------------------------------------------------------------
+# v0.6 grid-sweep parametric factory
+# ---------------------------------------------------------------------------
+
+
+def tuned_trait_config(
+    *,
+    fear_max: float,
+    hunger_min: float,
+    risk_min: float,
+) -> TraitConfig:
+    """Parametric ``TraitConfig`` for the v0.6 grid sweep.
+
+    Holds every other axis at the v0.5 ``permissive`` setting so the only
+    degrees of freedom are the three load-bearing knobs from the v0.4
+    evidence:
+
+      - ``fear_max``     — ceiling on ``fear_sensitivity`` range.
+      - ``hunger_min``   — floor on ``hunger_pain_sensitivity`` range.
+      - ``risk_min``     — floor on ``risk_tolerance`` range.
+
+    All other ranges (injury ceiling, pleasure floor, pain-tolerance floor,
+    plus all SPEC-default axes) match ``permissive_trait_config()``. This
+    isolates the three-axis grid from confounding range changes.
+
+    Validates that each parameter stays inside SPEC §8.1; raises
+    ``ValueError`` otherwise so a typo like ``fear_max=5.0`` fails loudly.
+    """
+    # Bounds checks against SPEC §8.1 master ranges.
+    spec = TraitConfig()
+    if not (spec.fear_sensitivity.min <= fear_max <= spec.fear_sensitivity.max):
+        msg = (
+            f"fear_max={fear_max} outside SPEC fear_sensitivity range "
+            f"[{spec.fear_sensitivity.min}, {spec.fear_sensitivity.max}]"
+        )
+        raise ValueError(msg)
+    if not (spec.hunger_pain_sensitivity.min <= hunger_min <= spec.hunger_pain_sensitivity.max):
+        msg = (
+            f"hunger_min={hunger_min} outside SPEC hunger_pain_sensitivity range "
+            f"[{spec.hunger_pain_sensitivity.min}, {spec.hunger_pain_sensitivity.max}]"
+        )
+        raise ValueError(msg)
+    if not (spec.risk_tolerance.min <= risk_min <= spec.risk_tolerance.max):
+        msg = (
+            f"risk_min={risk_min} outside SPEC risk_tolerance range "
+            f"[{spec.risk_tolerance.min}, {spec.risk_tolerance.max}]"
+        )
+        raise ValueError(msg)
+
+    return TraitConfig(
+        hunger_pain_sensitivity=TraitRange(min=hunger_min, max=2.5),
+        injury_pain_sensitivity=TraitRange(min=0.25, max=1.5),
+        fear_sensitivity=TraitRange(min=0.0, max=fear_max),
+        pleasure_sensitivity=TraitRange(min=1.0, max=2.5),
+        pain_tolerance=TraitRange(min=0.4, max=1.0),
+        risk_tolerance=TraitRange(min=risk_min, max=1.0),
+        # SPEC-default axes (kept explicit so a SPEC change raises a visible diff).
+        reproduction_drive=TraitRange(min=0.0, max=3.0),
+        novelty_drive=TraitRange(min=0.0, max=2.0),
+        uncertainty_aversion=TraitRange(min=0.0, max=2.0),
+        memory_strength=TraitRange(min=0.0, max=1.0),
+        memory_decay_rate=TraitRange(min=0.0, max=0.1),
+        sensor_radius=TraitRange(min=1, max=6),
+        metabolic_rate=TraitRange(min=0.5, max=2.0),
+    )
+
+
+def cell_id(*, fear_max: float, hunger_min: float, risk_min: float) -> str:
+    """Human-readable filesystem-safe id for a grid cell.
+
+    Format: ``f{fear_max}-h{hunger_min}-r{risk_min}``. Examples:
+    ``f1.5-h1.0-r0.4`` is the v0.5 permissive cell.
+    """
+    return f"f{fear_max:g}-h{hunger_min:g}-r{risk_min:g}"
