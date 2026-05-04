@@ -337,11 +337,39 @@ def run_chamber(
 
 
 def _spread_y(n: int, height: int) -> list[int]:
-    """Evenly distribute ``n`` y-coordinates across the chamber height."""
-    if n <= 1:
+    """Evenly distribute ``n`` y-coordinates across the chamber height.
+
+    Raises ``ValueError`` when ``n > height`` — the Mesa grid is
+    capacity=1 (SPEC §27.4), so two founders at the same cell would
+    silently violate placement invariants. Earlier behavior clamped
+    overflow indices to ``height - 1``, producing duplicates.
+
+    For ``n <= height`` the algorithm is the historical step-wise
+    distribution: ``step = max(1, height // n)``, positions
+    ``[min(height - 1, i * step) for i in range(n)]``. This is
+    uniqueness-safe under the precondition ``n <= height`` and is
+    preserved bit-identically so existing experiment results
+    (v0.1..v0.8) remain reproducible.
+    """
+    if n <= 0:
+        return []
+    if n > height:
+        msg = (
+            f"cannot spread {n} founders across height={height}: the Mesa grid "
+            "is capacity=1, so founders must occupy distinct cells"
+        )
+        raise ValueError(msg)
+    if n == 1:
         return [height // 2]
     step = max(1, height // n)
-    return [min(height - 1, i * step) for i in range(n)]
+    spread = [min(height - 1, i * step) for i in range(n)]
+    # Defensive uniqueness check — the precondition above makes this
+    # impossible, but assert it explicitly so any future change to the
+    # algorithm fails loudly instead of silently colliding founders.
+    if len(set(spread)) != len(spread):
+        msg = f"_spread_y produced duplicate y-coordinates for n={n}, height={height}: {spread}"
+        raise AssertionError(msg)
+    return spread
 
 
 def _any_alive(model: HHModel) -> bool:

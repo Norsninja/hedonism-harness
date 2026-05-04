@@ -240,6 +240,17 @@ class HHModel(mesa.Model):
     def queue_birth(self, parent: HHAgent) -> None:
         self._birth_queue.append(parent)
 
+    def cell_at(self, x: int, y: int) -> object:
+        """Return the Mesa cell at ``(x, y)``.
+
+        Public seam over Mesa's per-version private cell-lookup API
+        (currently ``OrthogonalVonNeumannGrid._cells``). Call sites in
+        ``mesa_agents.py`` use this wrapper so a Mesa upgrade that
+        renames the private mapping changes one method here instead of
+        every caller.
+        """
+        return self.grid._cells[(x, y)]
+
     def record_event(self, event: AnyEvent) -> None:
         """Append a tick-stamped envelope AND emit on the event's named signal.
 

@@ -237,6 +237,29 @@ foraging. The original ``tight_gradient`` chamber remains the
 "hard problem"; ``food_ladder`` is the "easy problem" that proves the
 harness pipeline works end-to-end through reproduction.
 
+## Deferred work
+
+A short hygiene slice was folded in alongside v0.8 (capacity=1
+spawn safety, a public ``HHModel.cell_at`` seam over Mesa's private
+``_cells`` mapping, and a regression test pinning the current
+effort double-channel valence behavior). These are no-behavior
+changes — only structure and test coverage.
+
+**Effort accounting ablation is deferred.** ``valence.evaluate``
+currently routes ``action_energy_cost`` through two channels:
+``energy_cost_pain`` (trait-filtered, inside ``pain``) and
+``effort`` (raw, subtracted at top). The net subtraction from
+``total`` for an action of cost ``c`` is ``c * (1 +
+hunger_pain_sensitivity)``. The valence module's docstring marks
+this as intentional, but it is easy to read past. The new regression
+test in ``tests/test_valence.py``
+(``test_action_energy_cost_is_double_channelled_via_pain_and_effort``)
+pins the current behavior so any future ablation of the
+double-counting (consolidating to one channel) fails loudly instead
+of silently shifting every experiment's net total. The ablation
+itself is not done in v0.8; it would be its own scientifically-scoped
+slice.
+
 ## What v0.8 leaves open
 
 1. **The v0.7-baseline ``tight_gradient`` still produces only 1 birth.**
