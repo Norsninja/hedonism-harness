@@ -76,3 +76,52 @@ def test_newborn_steps_on_the_following_tick() -> None:
     model.step()  # tick 1: child should now step
     child_after = next(a for a in _hh_agents(model) if a.body.id == child_before.id).body
     assert child_after.age == 1, "child age must advance to 1 after its first metabolism tick (T+1)"
+
+
+def test_reproduction_request_is_observable_through_signal_and_birth_follows() -> None:
+    """Pinning regression: ``ReproductionRequested`` must flow through the
+    signal bus so ``EpisodeAggregator`` can tally it; the birth queue must
+    still produce an ``AgentBorn`` event when placement succeeds; and
+    ``births <= reproduction_requests`` must hold as a tally invariant
+    (intent is logged before, or simultaneously with, acceptance).
+
+    Pre-fix bug: ``mesa_agents`` queued the birth without emitting through
+    ``record_event``, so ``tally.reproduction_requests`` silently stayed 0
+    while ``tally.births`` advanced.
+    """
+    from hedonism_harness.metrics.aggregators import EpisodeAggregator
+
+    model = _build_repro_ready_model()
+    aggregator = EpisodeAggregator(model=model)
+    aggregator.connect()
+    try:
+        model.step()  # tick 0: parent emits REPRODUCE; child born
+    finally:
+        aggregator.disconnect()
+
+    assert aggregator.tally.reproduction_requests == 1, (
+        "ReproductionRequested must reach the EpisodeAggregator handler"
+    )
+    assert aggregator.tally.births == 1, "AgentBorn must still fire from the birth queue"
+    assert aggregator.tally.births <= aggregator.tally.reproduction_requests, (
+        "tally invariant: births cannot exceed requests"
+    )
+
+
+def test_reproduction_request_is_persisted_to_event_log() -> None:
+    """Pinning: the request event must also be recorded in ``model.event_log``
+    so JSONL writers and per-tick analyses can see request-vs-birth ordering.
+    """
+    from hedonism_harness.core.events import AgentBorn, ReproductionRequested
+
+    model = _build_repro_ready_model()
+    model.step()
+
+    request_entries = [e for e in model.event_log if isinstance(e.event, ReproductionRequested)]
+    birth_entries = [e for e in model.event_log if isinstance(e.event, AgentBorn)]
+    assert len(request_entries) == 1
+    assert len(birth_entries) == 1
+    # Both occur on tick 0 (request from parent action, birth from queue
+    # processing later in the same tick).
+    assert request_entries[0].tick == 0
+    assert birth_entries[0].tick == 0

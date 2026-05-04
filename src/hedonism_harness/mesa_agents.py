@@ -137,10 +137,15 @@ class HHAgent(CellAgent):
 
         # Emit collected events to the model for tally / persistence.
         events: list[AnyEvent] = list(result.events)
-        # Reproduction requests go to the birth queue; everything else to the
-        # generic event log.
+        # Reproduction requests go BOTH to the birth queue (so the model
+        # processes them in step 7) AND through record_event so the metrics
+        # layer's ReproductionRequested handler observes the intent. Per
+        # SPEC §14 the request (intent) is distinct from the birth
+        # (acceptance); the EpisodeAggregator counts them as separate
+        # channels and ``births <= reproduction_requests`` is invariant.
         for event in events:
             if isinstance(event, ReproductionRequested):
+                model.record_event(event)
                 model.queue_birth(self)
             else:
                 model.record_event(event)
