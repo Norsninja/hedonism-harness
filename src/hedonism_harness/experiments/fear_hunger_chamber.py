@@ -65,6 +65,11 @@ class ChamberLayout:
 
     ``world.width`` is computed from ``food_x_max + 1`` so the layout fits
     exactly. Each row is identical — the hazard band is a full vertical wall.
+
+    ``spawn_x`` (optional): the column founders are placed in. ``None`` keeps
+    the v0.1/v0.2 default of ``safe_x_min + 1``. Set explicitly to test
+    spawn-position variants without changing the chamber proportions
+    (see v0.3 ``near_hazard_layout``).
     """
 
     safe_x_min: int = 0
@@ -74,10 +79,16 @@ class ChamberLayout:
     food_x_min: int = 14
     food_x_max: int = 19
     height: int = 6
+    spawn_x: int | None = None
 
     @property
     def width(self) -> int:
         return self.food_x_max + 1
+
+    @property
+    def resolved_spawn_x(self) -> int:
+        """Effective spawn column — falls back to ``safe_x_min + 1``."""
+        return self.safe_x_min + 1 if self.spawn_x is None else self.spawn_x
 
 
 def build_chamber_layout(layout: ChamberLayout, hazard_damage: float = 8.0) -> WorldConfig:
@@ -175,8 +186,8 @@ def run_chamber(
     repro_cfg = ReproductionConfig()
     trait_cfg = TraitConfig()
 
-    # Founders spaced along the safe zone's left column.
-    spawn_x = layout.safe_x_min + 1
+    # Founders spaced along the chamber's spawn column.
+    spawn_x = layout.resolved_spawn_x
     spawn_ys = _spread_y(n_founders, layout.height)
     founders = [
         FounderSpec(

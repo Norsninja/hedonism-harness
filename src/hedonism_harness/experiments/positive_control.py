@@ -128,7 +128,7 @@ def _capture_snapshot(
         food_value_default=20.0,
         safe_value_default=1.0,
     )
-    spawn_x = layout.safe_x_min + 1
+    spawn_x = layout.resolved_spawn_x
     step = max(1, layout.height // n_founders) if n_founders > 1 else 1
     spawn_ys = (
         [layout.height // 2]
