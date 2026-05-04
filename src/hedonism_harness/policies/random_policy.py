@@ -13,6 +13,6 @@ class RandomPolicy:
     """
 
     def decide(self, ctx: DecisionContext) -> PolicyDecision:
-        valid = get_valid_actions(ctx.world, ctx.body)
+        valid = get_valid_actions(ctx.world, ctx.body, ctx.reproduction_config, ctx.occupied)
         idx = int(ctx.rng.integers(0, len(valid)))
         return PolicyDecision(action=valid[idx], breakdown=None)

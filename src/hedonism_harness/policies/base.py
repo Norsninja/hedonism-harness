@@ -22,7 +22,7 @@ import numpy as np
 
 from hedonism_harness.core.actions import Action
 from hedonism_harness.core.body import AgentBody
-from hedonism_harness.core.config import ActionConfig, BodyConfig
+from hedonism_harness.core.config import ActionConfig, BodyConfig, ReproductionConfig
 from hedonism_harness.core.sensors import Observation
 from hedonism_harness.core.valence import ValenceBreakdown
 from hedonism_harness.core.world import World
@@ -43,6 +43,8 @@ class DecisionContext:
     body_config: BodyConfig
     action_config: ActionConfig
     memory: object | None = None  # ValenceMemory when wired in step 12.
+    reproduction_config: ReproductionConfig | None = None
+    occupied: frozenset[tuple[int, int]] | None = None
 
 
 @dataclass(frozen=True)

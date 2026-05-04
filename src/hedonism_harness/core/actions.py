@@ -20,7 +20,7 @@ from enum import IntEnum
 import numpy as np
 
 from hedonism_harness.core.body import AgentBody, apply_energy_delta
-from hedonism_harness.core.config import ActionConfig, BodyConfig
+from hedonism_harness.core.config import ActionConfig, BodyConfig, ReproductionConfig
 from hedonism_harness.core.events import (
     AgentMoved,
     AgentStayed,
@@ -29,6 +29,7 @@ from hedonism_harness.core.events import (
     HazardEntered,
     ReproductionRequested,
 )
+from hedonism_harness.core.reproduction import can_reproduce
 from hedonism_harness.core.world import CellKind, World, in_bounds
 
 
@@ -87,14 +88,23 @@ class ActionResult:
     events: tuple[AnyEvent, ...]
 
 
-def get_valid_actions(world: World, body: AgentBody) -> tuple[Action, ...]:
+def get_valid_actions(
+    world: World,
+    body: AgentBody,
+    reproduction_config: ReproductionConfig | None = None,
+    occupied: frozenset[tuple[int, int]] | None = None,
+) -> tuple[Action, ...]:
     """Return the actions ``body`` may legally take from its current state.
 
     - ``STAY`` is always valid.
     - Movement is invalid when destination is out of bounds or a WALL cell.
     - ``EAT`` is valid only when the current cell is FOOD.
-    - ``REPRODUCE`` is filtered out at this layer in v0.1 step 6; reproduction
-      validity (energy threshold, age, adjacent space) lands with step 9.
+    - ``REPRODUCE`` is included only when ``reproduction_config`` is provided
+      and ``reproduction.can_reproduce(...)`` returns True.
+
+    ``occupied`` is the set of currently occupied cells (for adjacency checks
+    when placing offspring). Passed through by the Mesa wrapper; ``None`` here
+    means "no occupancy info" — adjacency check still verifies bounds + WALL.
     """
     valid: list[Action] = [Action.STAY]
 
@@ -108,6 +118,11 @@ def get_valid_actions(world: World, body: AgentBody) -> tuple[Action, ...]:
 
     if CellKind(int(world.kind_layer[body.x, body.y])) == CellKind.FOOD:
         valid.append(Action.EAT)
+
+    if reproduction_config is not None and can_reproduce(
+        world, body, reproduction_config, occupied
+    ):
+        valid.append(Action.REPRODUCE)
 
     return tuple(valid)
 

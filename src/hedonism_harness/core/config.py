@@ -100,3 +100,38 @@ class ActionConfig(BaseModel):
         ge=0.0,
         description="Energy cost of the EAT action (food gain is separate).",
     )
+
+
+class ReproductionConfig(BaseModel):
+    """Validity thresholds + costs for asexual reproduction (SPEC §7, §14)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    energy_threshold: float = Field(
+        default=70.0,
+        ge=0.0,
+        description="Parent must have at least this much energy to reproduce.",
+    )
+    energy_cost: float = Field(
+        default=35.0,
+        ge=0.0,
+        description="Energy debited from parent on successful reproduction.",
+    )
+    offspring_start_energy: float = Field(
+        default=30.0,
+        ge=0.0,
+        description="Starting energy of the newborn child.",
+    )
+    min_age: int = Field(
+        default=10,
+        ge=0,
+        description="Minimum parent age (in ticks) required to reproduce.",
+    )
+    hazard_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        description=(
+            "Maximum local hazard signal under which reproduction is allowed. "
+            "Hazard signal here is the same axial sum used by sensors."
+        ),
+    )

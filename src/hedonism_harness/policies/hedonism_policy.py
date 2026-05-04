@@ -39,7 +39,7 @@ class HedonismPolicy:
         self.exploration_noise = exploration_noise
 
     def decide(self, ctx: DecisionContext) -> PolicyDecision:
-        valid = get_valid_actions(ctx.world, ctx.body)
+        valid = get_valid_actions(ctx.world, ctx.body, ctx.reproduction_config, ctx.occupied)
 
         # Exploration: skip scoring entirely.
         if self.exploration_noise > 0.0 and ctx.rng.random() < self.exploration_noise:

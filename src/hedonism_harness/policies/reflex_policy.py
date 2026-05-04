@@ -37,7 +37,7 @@ class ReflexPolicy:
 
     def decide(self, ctx: DecisionContext) -> PolicyDecision:
         obs = ctx.observation
-        valid = get_valid_actions(ctx.world, ctx.body)
+        valid = get_valid_actions(ctx.world, ctx.body, ctx.reproduction_config, ctx.occupied)
 
         # 1. Eat if standing on food and at all hungry.
         if obs.on_food and obs.hunger_level > self.hunger_threshold and Action.EAT in valid:
