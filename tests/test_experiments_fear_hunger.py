@@ -326,11 +326,7 @@ def test_run_chamber_use_memory_true_children_get_fresh_memory() -> None:
     repro_cfg = ReproductionConfig(min_age=0, hazard_threshold=10.0, energy_cost=20.0)
     model = HHModel(
         world_cfg,
-        founders=[
-            FounderSpec(
-                x=4, y=4, policy_factory=_AlwaysReproducePolicy, use_memory=True
-            )
-        ],
+        founders=[FounderSpec(x=4, y=4, policy_factory=_AlwaysReproducePolicy, use_memory=True)],
         body_config=body_cfg,
         reproduction_config=repro_cfg,
     )

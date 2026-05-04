@@ -19,6 +19,7 @@ import pytest
 
 from hedonism_harness.core.config import BodyConfig, ReproductionConfig, WorldConfig
 from hedonism_harness.core.traits import TRAIT_NAMES, TraitConfig, random_traits, validate_traits
+from hedonism_harness.experiments.fear_hunger_chamber import ChamberRunResult
 from hedonism_harness.experiments.memory_grid import (
     BASELINE_CELL_ID,
     MEMORY_DECAY_RATE_MAX_LEVELS,
@@ -39,7 +40,6 @@ from hedonism_harness.experiments.memory_telemetry import (
     MemoryTelemetryCollector,
     empty_telemetry,
 )
-from hedonism_harness.experiments.fear_hunger_chamber import ChamberRunResult
 from hedonism_harness.experiments.trait_configs import (
     memory_cell_id,
     memory_trait_config,
@@ -482,9 +482,7 @@ def test_select_winning_cell_tiebreaks_by_distance_to_permissive() -> None:
     near = _agg(
         "near", memory_strength_min=0.0, memory_decay_rate_max=0.1, **common
     )  # at the reference
-    far = _agg(
-        "far", memory_strength_min=1.0, memory_decay_rate_max=0.02, **common
-    )  # far corner
+    far = _agg("far", memory_strength_min=1.0, memory_decay_rate_max=0.02, **common)  # far corner
     winner = select_winning_cell([near, far], baseline)
     assert winner is not None
     assert winner.cell_id == "near"

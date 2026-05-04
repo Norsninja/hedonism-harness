@@ -30,6 +30,7 @@ from hedonism_harness.core.body import (
     mark_dead,
 )
 from hedonism_harness.core.events import HazardDamageApplied, ReproductionRequested
+from hedonism_harness.core.memory import decay_all as _decay_memory_all
 from hedonism_harness.core.memory import update_at
 from hedonism_harness.core.sensors import observe
 from hedonism_harness.core.world import CellKind
@@ -178,6 +179,19 @@ class HHAgent(CellAgent):
         if not self.body.alive:
             return
         self.body = apply_metabolism(self.body, self.model.body_config)
+
+    def apply_memory_decay(self) -> None:
+        """Apply per-tick exponential decay to the agent's valence memory.
+
+        Per SPEC §13.3 the per-cell ``pleasure_ema`` and ``pain_ema`` arrays
+        decay by a factor of ``(1 - traits.memory_decay_rate)`` each tick so
+        stale associations fade as the world changes (food consumed, hazards
+        re-located). No-op when the agent has no memory (``use_memory=False``)
+        or is dead. ``decay_all`` itself is a no-op when ``decay_rate <= 0``.
+        """
+        if not self.body.alive or self.memory is None:
+            return
+        _decay_memory_all(self.memory, float(self.body.traits.memory_decay_rate))
 
     def death_sweep(self) -> bool:
         """Mark the body dead (and remove from the grid + AgentSet) if vitals zeroed.

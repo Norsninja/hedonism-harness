@@ -81,7 +81,7 @@ class HHModel(mesa.Model):
         2. shuffle deterministically via ``RngStreams.agent_order``
         3. each agent steps once (observe / decide / apply_action / commit /
            memory update / grid sync)
-        4. baseline metabolism
+        4. baseline metabolism + per-agent memory decay (SPEC §13.3)
         5. hazard residency damage
         6. death sweep
         7. process queued births (newborns DO NOT act this tick)
@@ -283,10 +283,11 @@ class HHModel(mesa.Model):
         for agent in ordered:
             agent.step()
 
-        # 4. Baseline metabolism.
+        # 4. Baseline metabolism + per-agent memory decay (SPEC §13.3).
         for agent in self.agents:
             if isinstance(agent, HHAgent):
                 agent.apply_metabolism_step()
+                agent.apply_memory_decay()
 
         # 5. Hazard residency damage.
         for agent in self.agents:

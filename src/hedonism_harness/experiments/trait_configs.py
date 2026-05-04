@@ -261,9 +261,7 @@ def memory_trait_config(
     base = tuned_trait_config(fear_max=1.5, hunger_min=1.0, risk_min=0.55)
     return base.model_copy(
         update={
-            "memory_strength": TraitRange(
-                min=memory_strength_min, max=spec.memory_strength.max
-            ),
+            "memory_strength": TraitRange(min=memory_strength_min, max=spec.memory_strength.max),
             "memory_decay_rate": TraitRange(
                 min=spec.memory_decay_rate.min, max=memory_decay_rate_max
             ),
