@@ -26,7 +26,7 @@ from hedonism_harness.core.config import (
     ReproductionConfig,
     WorldConfig,
 )
-from hedonism_harness.core.events import AgentBorn, AgentDied
+from hedonism_harness.core.events import AgentBorn, AgentDied, emit
 from hedonism_harness.core.memory import make_memory
 from hedonism_harness.core.reproduction import process_reproduction
 from hedonism_harness.core.rng import RngStreams, make_streams, spawn_agent_rng
@@ -225,12 +225,20 @@ class HHModel(mesa.Model):
         self._birth_queue.append(parent)
 
     def record_event(self, event: AnyEvent) -> None:
+        """Append to the in-memory log AND emit on the event's named signal.
+
+        Subscribers (``metrics/aggregators.py``) connect to the signals; the
+        log persists everything for IO writers and tests.
+        """
         self.event_log.append(event)
+        emit(self, event)
 
     def record_death(self, agent: HHAgent) -> None:
         cause = agent.body.death_cause
         assert cause is not None  # death_sweep only records after mark_dead.
-        self.event_log.append(AgentDied(agent_id=agent.body.id, cause=cause, tick=self.tick_count))
+        died = AgentDied(agent_id=agent.body.id, cause=cause, tick=self.tick_count)
+        self.event_log.append(died)
+        emit(self, died)
 
     # ------------------------------------------------------------------
     # Tick loop (SPEC §27.4)
@@ -315,15 +323,15 @@ class HHModel(mesa.Model):
                 policy_factory=policy_factory,
             )
             assert child_body.parent_id is not None  # children always have a parent_id.
-            self.event_log.append(
-                AgentBorn(
-                    agent_id=child_body.id,
-                    parent_id=child_body.parent_id,
-                    lineage_id=child_body.lineage_id,
-                    x=child_body.x,
-                    y=child_body.y,
-                    tick=self.tick_count,
-                )
+            born = AgentBorn(
+                agent_id=child_body.id,
+                parent_id=child_body.parent_id,
+                lineage_id=child_body.lineage_id,
+                x=child_body.x,
+                y=child_body.y,
+                tick=self.tick_count,
             )
+            self.event_log.append(born)
+            emit(self, born)
             # ``child_agent`` is intentionally referenced via model.agents only.
             del child_agent

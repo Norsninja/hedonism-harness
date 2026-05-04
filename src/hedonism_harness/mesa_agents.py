@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 from mesa.discrete_space import CellAgent
 
-from hedonism_harness.core.actions import apply_action, commit_delta
+from hedonism_harness.core.actions import apply_action, commit_delta, get_valid_actions
 from hedonism_harness.core.body import (
     AgentBody,
     apply_damage,
@@ -29,7 +29,7 @@ from hedonism_harness.core.body import (
     is_dead,
     mark_dead,
 )
-from hedonism_harness.core.events import ReproductionRequested
+from hedonism_harness.core.events import HazardDamageApplied, ReproductionRequested
 from hedonism_harness.core.memory import update_at
 from hedonism_harness.core.sensors import observe
 from hedonism_harness.core.world import CellKind
@@ -93,6 +93,20 @@ class HHAgent(CellAgent):
         )
         decision = self.policy.decide(ctx)
 
+        # Defensive: every policy must select from get_valid_actions(...).
+        # A bug in a custom policy that returns an out-of-set action would
+        # otherwise silently pass through apply_action with broken semantics
+        # (e.g. picking REPRODUCE when not eligible would emit a request that
+        # the birth queue can't satisfy). The same `occupied` view is used
+        # here as in policy.decide so the two cannot disagree.
+        valid = get_valid_actions(model.world, self.body, model.reproduction_config, occupied)
+        if decision.action not in valid:
+            msg = (
+                f"Policy {type(self.policy).__name__} returned {decision.action.name}, "
+                f"which is not in get_valid_actions(...) = {[a.name for a in valid]}"
+            )
+            raise AssertionError(msg)
+
         result = apply_action(
             model.world,
             self.body,
@@ -132,7 +146,12 @@ class HHAgent(CellAgent):
                 model.record_event(event)
 
     def apply_residency_damage(self) -> None:
-        """Apply hazard residency damage if the body is on a HAZARD cell."""
+        """Apply hazard residency damage if the body is on a HAZARD cell.
+
+        Emits a ``HazardDamageApplied`` event to the model's event log so
+        injury metrics (in ``metrics/aggregators.py``) can tally per-agent
+        and per-tick damage taken.
+        """
         if not self.body.alive:
             return
         kind = CellKind(int(self.model.world.kind_layer[self.body.x, self.body.y]))
@@ -140,6 +159,14 @@ class HHAgent(CellAgent):
             damage = float(self.model.world.hazard_damage[self.body.x, self.body.y])
             if damage > 0.0:
                 self.body = apply_damage(self.body, damage)
+                self.model.record_event(
+                    HazardDamageApplied(
+                        agent_id=self.body.id,
+                        x=self.body.x,
+                        y=self.body.y,
+                        damage=damage,
+                    )
+                )
 
     def apply_metabolism_step(self) -> None:
         """Apply baseline metabolism for the tick."""

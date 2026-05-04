@@ -1,19 +1,25 @@
-"""Typed event dataclasses (SPEC §27.8).
+"""Typed event dataclasses + named blinker signals (SPEC §27.8).
 
-Core/ emits events. Metrics/ interprets them. Io/ persists them.
+Core/ emits events. Metrics/ subscribes to interpret. Io/ persists what
+metrics produces.
 
-Blinker signal wiring lives in ``metrics/`` so this module stays a pure data
-layer with no subscriber knowledge — modules that *emit* events depend only
-on the dataclasses defined here.
+The signal table at the bottom of this module gives every event type a
+process-wide ``blinker.NamedSignal``. Emitters do not subscribe; subscribers
+live in ``metrics/aggregators.py``. Tests can connect ad-hoc via
+``signal_for(EventType).connect(callback)``. Per SPEC §27.11, ``core/`` may
+import blinker — it is the one cross-cutting communication primitive allowed
+in the scientific layer.
 
 All events carry the simulation tick implicitly via the emission site or the
-subscriber's clock; we only attach a ``tick`` field where the event is decoupled
-from per-tick emission (births, deaths, lineage events).
+subscriber's clock; we only attach a ``tick`` field where the event is
+decoupled from per-tick emission (births, deaths, lineage events).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+import blinker
 
 from hedonism_harness.core.body import DeathCause
 
@@ -100,3 +106,41 @@ AnyEvent = (
     | AgentBorn
     | AgentDied
 )
+
+
+# ---------------------------------------------------------------------------
+# Named blinker signals — one per event type
+# ---------------------------------------------------------------------------
+#
+# Subscribers connect via ``signal_for(EventType).connect(handler)``. Senders
+# call ``signal_for(type(event)).send(model, event=event)``. The ``model``
+# sender lets subscribers filter by simulation instance during batch runs.
+#
+# Signals are NamedSignals (process-wide singletons keyed by name); creating a
+# second signal with the same name returns the same object. Tests can
+# disconnect handlers in teardown via ``.disconnect(handler)``.
+
+_SIGNAL_NAMES: dict[type, str] = {
+    AgentMoved: "hh.agent_moved",
+    AgentStayed: "hh.agent_stayed",
+    AteFood: "hh.ate_food",
+    HazardEntered: "hh.hazard_entered",
+    HazardDamageApplied: "hh.hazard_damage_applied",
+    ReproductionRequested: "hh.reproduction_requested",
+    AgentBorn: "hh.agent_born",
+    AgentDied: "hh.agent_died",
+}
+
+
+def signal_for(event_type: type) -> blinker.NamedSignal:
+    """Return the blinker signal corresponding to an event class."""
+    name = _SIGNAL_NAMES.get(event_type)
+    if name is None:
+        msg = f"No signal registered for event type {event_type!r}"
+        raise KeyError(msg)
+    return blinker.signal(name)
+
+
+def emit(sender: object, event: AnyEvent) -> None:
+    """Send ``event`` on its named signal. ``sender`` is conventionally the model."""
+    signal_for(type(event)).send(sender, event=event)
