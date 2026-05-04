@@ -397,6 +397,60 @@ def test_anticipated_food_pleasure_uses_sum_across_directions(traits, body_confi
     assert bd.details["anticipated_food_pleasure"] == pytest.approx(expected)
 
 
+# ---------------------------------------------------------------------------
+# Effort double-channel pin (v0.8 hygiene)
+# ---------------------------------------------------------------------------
+#
+# ``valence.evaluate`` currently routes ``action_energy_cost`` through TWO
+# channels:
+#
+#   1. ``energy_cost_pain = action_energy_cost * traits.hunger_pain_sensitivity``
+#      — folded into ``pain``, trait-filtered by hunger sensitivity.
+#   2. ``effort = action_energy_cost`` — subtracted at the top level as a
+#      raw quantity.
+#
+# Net subtraction from ``total`` for an action of cost ``c`` and an agent
+# with ``hunger_pain_sensitivity = s``: ``c * (1 + s)``.
+#
+# The valence module's docstring explicitly notes this is intentional ("the
+# spec's '- effort_cost' subtraction at the top level is the identical
+# quantity weighted differently"), but the double-channel structure is
+# easy to miss when reading the breakdown's separate ``effort`` and
+# ``pain`` fields. v0.8 pins this behavior so any future
+# effort-accounting ablation (consolidating to one channel) fails this
+# test loudly instead of silently changing every experiment's net total.
+# Effort-accounting ablation itself is deferred — see
+# ``docs/experiments/fear_hunger_v0.8.md`` (Deferred work).
+
+
+def test_action_energy_cost_is_double_channelled_via_pain_and_effort(traits, body_config) -> None:
+    """Pin the current double-channel behavior: a unit increase in
+    ``action_energy_cost`` reduces ``total`` by ``1 + hunger_pain_sensitivity``,
+    not just by 1 (effort alone) or just by ``hunger_pain_sensitivity``
+    (energy_cost_pain alone).
+    """
+    body = _body(5, 5, traits, body_config)
+    obs = _zero_obs()
+    s = traits.hunger_pain_sensitivity
+
+    # Two evaluations identical except for action_energy_cost.
+    bd_zero = evaluate(obs, obs, body, body, Action.STAY, 0.0, traits)
+    bd_one = evaluate(obs, obs, body, body, Action.STAY, 1.0, traits)
+
+    # Channel 1: energy_cost_pain (trait-filtered, in `pain`).
+    assert bd_zero.details["energy_cost_pain"] == pytest.approx(0.0)
+    assert bd_one.details["energy_cost_pain"] == pytest.approx(s)
+
+    # Channel 2: effort (raw, top-level subtraction).
+    assert bd_zero.effort == pytest.approx(0.0)
+    assert bd_one.effort == pytest.approx(1.0)
+
+    # Combined: total drops by (1 + s) for one unit of cost.
+    expected_drop = 1.0 + s
+    actual_drop = bd_zero.total - bd_one.total
+    assert actual_drop == pytest.approx(expected_drop)
+
+
 def test_existing_fear_still_pushes_west_when_hazard_visible_east(body_config) -> None:
     """Regression guard: the v0.3 fix must NOT change avoidance behavior.
 

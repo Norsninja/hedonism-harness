@@ -70,6 +70,11 @@ class ChamberLayout:
     the v0.1/v0.2 default of ``safe_x_min + 1``. Set explicitly to test
     spawn-position variants without changing the chamber proportions
     (see v0.3 ``near_hazard_layout``).
+
+    ``pre_food_x_min`` / ``pre_food_x_max`` (optional, v0.8): an additional
+    FOOD band stamped *before* the hazard zone. Used by the v0.8
+    ``food_ladder_layout`` so founders can refill in the corridor before
+    facing the hazard wall. Both must be set together (or both ``None``).
     """
 
     safe_x_min: int = 0
@@ -80,6 +85,8 @@ class ChamberLayout:
     food_x_max: int = 19
     height: int = 6
     spawn_x: int | None = None
+    pre_food_x_min: int | None = None
+    pre_food_x_max: int | None = None
 
     @property
     def width(self) -> int:
@@ -89,6 +96,76 @@ class ChamberLayout:
     def resolved_spawn_x(self) -> int:
         """Effective spawn column — falls back to ``safe_x_min + 1``."""
         return self.safe_x_min + 1 if self.spawn_x is None else self.spawn_x
+
+    @property
+    def has_pre_food(self) -> bool:
+        return self.pre_food_x_min is not None and self.pre_food_x_max is not None
+
+    def __post_init__(self) -> None:
+        """Validate the pre-food contract.
+
+        Three invariants pinned (v0.8 hygiene-2 follow-up):
+
+          1. Both ``pre_food_x_min`` and ``pre_food_x_max`` are set
+             together, or both are ``None``. A half-set pair is a typo
+             that would silently disable the band.
+          2. ``pre_food_x_min <= pre_food_x_max``. Inverted ranges
+             paint zero columns silently.
+          3. The pre-food band must not overlap any of the safe,
+             hazard, or terminal-food bands. Overlapping columns get
+             stamped twice with conflicting ``CellKind`` values; the
+             last write wins, which is order-of-statement in
+             ``paint_chamber`` — a fragile and silent failure mode.
+
+        Validation only fires when the pre-food fields are set (the
+        v0.8 ``food_ladder`` is the only stock layout that uses them).
+        Other layout invariants (band ordering, non-overlap among
+        safe/hazard/food, in-bounds-ness) are deliberately out of
+        scope for this slice — broader layout validation is its own
+        follow-up.
+        """
+        # Invariant 1: both-or-neither.
+        min_set = self.pre_food_x_min is not None
+        max_set = self.pre_food_x_max is not None
+        if min_set != max_set:
+            msg = (
+                "ChamberLayout.pre_food_x_min and pre_food_x_max must be "
+                f"set together (or both None); got min={self.pre_food_x_min!r} "
+                f"max={self.pre_food_x_max!r}"
+            )
+            raise ValueError(msg)
+        if not min_set:
+            return  # No pre-food band; remaining invariants are vacuous.
+
+        # Type narrowing for the checks below — both are non-None here.
+        pf_min = self.pre_food_x_min
+        pf_max = self.pre_food_x_max
+        assert pf_min is not None
+        assert pf_max is not None
+
+        # Invariant 2: ordering.
+        if pf_min > pf_max:
+            msg = (
+                f"ChamberLayout.pre_food_x_min ({pf_min}) must be "
+                f"<= pre_food_x_max ({pf_max}); inverted ranges paint zero columns"
+            )
+            raise ValueError(msg)
+
+        # Invariant 3: no overlap with safe / hazard / terminal-food bands.
+        bands = (
+            ("safe", self.safe_x_min, self.safe_x_max),
+            ("hazard", self.hazard_x_min, self.hazard_x_max),
+            ("food", self.food_x_min, self.food_x_max),
+        )
+        for name, lo, hi in bands:
+            # Inclusive-range overlap: max(starts) <= min(ends).
+            if max(pf_min, lo) <= min(pf_max, hi):
+                msg = (
+                    f"ChamberLayout.pre_food band [{pf_min}, {pf_max}] overlaps "
+                    f"{name} band [{lo}, {hi}]; paint_chamber would stamp these "
+                    "columns with conflicting CellKind values"
+                )
+                raise ValueError(msg)
 
 
 def build_chamber_layout(layout: ChamberLayout, hazard_damage: float = 8.0) -> WorldConfig:
@@ -114,12 +191,21 @@ def paint_chamber(model: HHModel, layout: ChamberLayout) -> None:
     Writes go through ``model.world`` (which shares storage with the four
     PropertyLayers built in ``HHModel.__init__``) so the chamber terrain is
     visible to Mesa-side consumers as well.
+
+    When ``layout.has_pre_food`` is True, an additional FOOD band is
+    stamped at the pre-food columns (used by the v0.8 food_ladder layout).
     """
     cfg = model.world_config
     for y in range(cfg.height):
         for x in range(layout.safe_x_min, layout.safe_x_max + 1):
             model.world.kind_layer[x, y] = CellKind.SAFE
             model.world.safe_value[x, y] = cfg.safe_value_default
+        if layout.has_pre_food:
+            assert layout.pre_food_x_min is not None
+            assert layout.pre_food_x_max is not None
+            for x in range(layout.pre_food_x_min, layout.pre_food_x_max + 1):
+                model.world.kind_layer[x, y] = CellKind.FOOD
+                model.world.food_value[x, y] = cfg.food_value_default
         for x in range(layout.hazard_x_min, layout.hazard_x_max + 1):
             model.world.kind_layer[x, y] = CellKind.HAZARD
             model.world.hazard_damage[x, y] = cfg.hazard_damage_default
@@ -173,6 +259,9 @@ def run_chamber(
     traits_override: Traits | None = None,
     condition: str | None = None,
     trait_config: TraitConfig | None = None,
+    reproduction_config: ReproductionConfig | None = None,
+    setup_observer: Callable[[HHModel], None] | None = None,
+    tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
     """Run one Fear-Hunger Chamber episode and (optionally) persist its outputs.
 
@@ -184,17 +273,31 @@ def run_chamber(
     ``trait_config``: when provided, founders sample from this config's
     ranges (the v0.5 default-tuning seam). When ``None`` the SPEC §8.1
     default ``TraitConfig`` is used.
+
+    ``reproduction_config``: when provided, replaces the SPEC §7/§14 default
+    ``ReproductionConfig`` (the v0.7 reproduction-emergence seam). When
+    ``None`` the SPEC defaults hold.
+
+    ``setup_observer``: optional callable invoked with the model **after**
+    ``paint_chamber`` and aggregator ``connect()``, **before** the first
+    ``model.step()``. The v0.8 eligibility-telemetry seam uses this hook
+    to install per-event signal subscribers eagerly so events emitted
+    during tick 0 are not missed. ``None`` keeps the existing behavior.
+
+    ``tick_observer``: optional callable invoked with the model after each
+    ``model.step()`` (the v0.8 eligibility-telemetry seam). Runs even on
+    the final tick. ``None`` keeps the existing behavior.
     """
     layout = layout or ChamberLayout()
     world_cfg = build_chamber_layout(layout).model_copy(update={"seed": seed})
     body_cfg = BodyConfig()
     action_cfg = ActionConfig()
-    repro_cfg = ReproductionConfig()
+    repro_cfg = reproduction_config if reproduction_config is not None else ReproductionConfig()
     trait_cfg = trait_config if trait_config is not None else TraitConfig()
 
     # Founders spaced along the chamber's spawn column.
     spawn_x = layout.resolved_spawn_x
-    spawn_ys = _spread_y(n_founders, layout.height)
+    spawn_ys = spread_y(n_founders, layout.height)
     founders = [
         FounderSpec(
             x=spawn_x,
@@ -221,10 +324,17 @@ def run_chamber(
     episode.connect()
     lifetime.connect()
 
+    # External setup hook fires AFTER aggregator connects but BEFORE the
+    # first step so subscribers see every tick-0 event.
+    if setup_observer is not None:
+        setup_observer(model)
+
     started_at = now_unix()
     try:
         for _ in range(n_ticks):
             model.step()
+            if tick_observer is not None:
+                tick_observer(model)
             if not _any_alive(model):
                 break
     finally:
@@ -304,12 +414,40 @@ def run_chamber(
 # ---------------------------------------------------------------------------
 
 
-def _spread_y(n: int, height: int) -> list[int]:
-    """Evenly distribute ``n`` y-coordinates across the chamber height."""
-    if n <= 1:
+def spread_y(n: int, height: int) -> list[int]:
+    """Evenly distribute ``n`` y-coordinates across the chamber height.
+
+    Raises ``ValueError`` when ``n > height`` — the Mesa grid is
+    capacity=1 (SPEC §27.4), so two founders at the same cell would
+    silently violate placement invariants. Earlier behavior clamped
+    overflow indices to ``height - 1``, producing duplicates.
+
+    For ``n <= height`` the algorithm is the historical step-wise
+    distribution: ``step = max(1, height // n)``, positions
+    ``[min(height - 1, i * step) for i in range(n)]``. This is
+    uniqueness-safe under the precondition ``n <= height`` and is
+    preserved bit-identically so existing experiment results
+    (v0.1..v0.8) remain reproducible.
+    """
+    if n <= 0:
+        return []
+    if n > height:
+        msg = (
+            f"cannot spread {n} founders across height={height}: the Mesa grid "
+            "is capacity=1, so founders must occupy distinct cells"
+        )
+        raise ValueError(msg)
+    if n == 1:
         return [height // 2]
     step = max(1, height // n)
-    return [min(height - 1, i * step) for i in range(n)]
+    spread = [min(height - 1, i * step) for i in range(n)]
+    # Defensive uniqueness check — the precondition above makes this
+    # impossible, but assert it explicitly so any future change to the
+    # algorithm fails loudly instead of silently colliding founders.
+    if len(set(spread)) != len(spread):
+        msg = f"spread_y produced duplicate y-coordinates for n={n}, height={height}: {spread}"
+        raise AssertionError(msg)
+    return spread
 
 
 def _any_alive(model: HHModel) -> bool:

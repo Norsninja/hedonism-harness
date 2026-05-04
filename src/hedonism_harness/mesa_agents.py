@@ -67,7 +67,7 @@ class HHAgent(CellAgent):
         # configured policy (e.g. HedonismPolicy(exploration_noise=...)) rather
         # than getting a default-constructed clone.
         self.policy_factory = policy_factory
-        self.cell = model.grid._cells[(body.x, body.y)]
+        self.cell = model.cell_at(body.x, body.y)
 
     def step(self) -> None:
         """One tick of decision + action. See SPEC §27.4 for tick order."""
@@ -133,14 +133,19 @@ class HHAgent(CellAgent):
         self.body = result.body
         # Sync Mesa cell position with body position.
         if (self.cell.coordinate[0], self.cell.coordinate[1]) != (self.body.x, self.body.y):
-            self.cell = model.grid._cells[(self.body.x, self.body.y)]
+            self.cell = model.cell_at(self.body.x, self.body.y)
 
         # Emit collected events to the model for tally / persistence.
         events: list[AnyEvent] = list(result.events)
-        # Reproduction requests go to the birth queue; everything else to the
-        # generic event log.
+        # Reproduction requests go BOTH to the birth queue (so the model
+        # processes them in step 7) AND through record_event so the metrics
+        # layer's ReproductionRequested handler observes the intent. Per
+        # SPEC §14 the request (intent) is distinct from the birth
+        # (acceptance); the EpisodeAggregator counts them as separate
+        # channels and ``births <= reproduction_requests`` is invariant.
         for event in events:
             if isinstance(event, ReproductionRequested):
+                model.record_event(event)
                 model.queue_birth(self)
             else:
                 model.record_event(event)

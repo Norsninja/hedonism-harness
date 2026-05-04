@@ -154,3 +154,66 @@ def cell_id(*, fear_max: float, hunger_min: float, risk_min: float) -> str:
     ``f1.5-h1.0-r0.4`` is the v0.5 permissive cell.
     """
     return f"f{fear_max:g}-h{hunger_min:g}-r{risk_min:g}"
+
+
+# ---------------------------------------------------------------------------
+# v0.7b motivation-sweep helper
+# ---------------------------------------------------------------------------
+
+
+def motivation_trait_config(*, drive_min: float) -> TraitConfig:
+    """v0.7b factory: v0.6 winner trait ranges with a raised
+    ``reproduction_drive`` floor.
+
+    Holds the v0.6 winner ``tuned_trait_config(fear_max=1.5,
+    hunger_min=1.0, risk_min=0.55)`` fixed and overrides only the
+    ``reproduction_drive`` range floor. Used to study whether higher
+    reproductive intent converts threshold eligibility into multiple
+    births across seeds — separately from the energy-economics axis
+    swept in v0.7.
+
+    The ceiling stays at SPEC §8.1 (``3.0``) so a higher floor narrows
+    the range upward; ``drive_min=0.0`` is the v0.6 winner identity.
+    """
+    spec = TraitConfig()
+    if not (spec.reproduction_drive.min <= drive_min <= spec.reproduction_drive.max):
+        msg = (
+            f"drive_min={drive_min} outside SPEC reproduction_drive range "
+            f"[{spec.reproduction_drive.min}, {spec.reproduction_drive.max}]"
+        )
+        raise ValueError(msg)
+    base = tuned_trait_config(fear_max=1.5, hunger_min=1.0, risk_min=0.55)
+    return base.model_copy(
+        update={"reproduction_drive": TraitRange(min=drive_min, max=spec.reproduction_drive.max)}
+    )
+
+
+# ---------------------------------------------------------------------------
+# v0.8 eligibility-rescue helper
+# ---------------------------------------------------------------------------
+
+
+def eligibility_trait_config(*, sensor_radius_min: int) -> TraitConfig:
+    """v0.8 factory: v0.6 winner trait ranges with a raised
+    ``sensor_radius`` floor.
+
+    Holds every other axis at the v0.6 winner setting and overrides only
+    the ``sensor_radius`` range floor. Used to study whether wider
+    perception (and the higher per-tick metabolic cost it carries via
+    ``BodyConfig.sensor_radius_metabolic_cost``) raises eligibility
+    supply enough to produce reproduction across multiple seeds.
+
+    The ceiling stays at SPEC §8.1 (``6``) so a higher floor narrows the
+    range upward; ``sensor_radius_min=1`` is the v0.6 winner identity.
+    """
+    spec = TraitConfig()
+    if not (spec.sensor_radius.min <= sensor_radius_min <= spec.sensor_radius.max):
+        msg = (
+            f"sensor_radius_min={sensor_radius_min} outside SPEC sensor_radius range "
+            f"[{spec.sensor_radius.min}, {spec.sensor_radius.max}]"
+        )
+        raise ValueError(msg)
+    base = tuned_trait_config(fear_max=1.5, hunger_min=1.0, risk_min=0.55)
+    return base.model_copy(
+        update={"sensor_radius": TraitRange(min=sensor_radius_min, max=spec.sensor_radius.max)}
+    )

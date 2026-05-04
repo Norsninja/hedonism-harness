@@ -6,6 +6,8 @@ import csv
 import json
 from pathlib import Path
 
+import pytest
+
 from hedonism_harness.core.world import CellKind
 from hedonism_harness.experiments.batch import run_chamber_batch
 from hedonism_harness.experiments.fear_hunger_chamber import (
@@ -13,6 +15,7 @@ from hedonism_harness.experiments.fear_hunger_chamber import (
     build_chamber_layout,
     paint_chamber,
     run_chamber,
+    spread_y,
 )
 from hedonism_harness.model import HHModel
 
@@ -157,3 +160,62 @@ def test_batch_runner_writes_summary_csv(tmp_path: Path) -> None:
         run_dir = tmp_path / "batch-A" / f"seed-{seed}"
         assert run_dir.is_dir()
         assert (run_dir / "summary.md").is_file()
+
+
+# ---------------------------------------------------------------------------
+# Spawn safety (capacity=1 grid invariant)
+# ---------------------------------------------------------------------------
+
+
+def test_spread_y_returns_unique_coordinates_for_n_le_height() -> None:
+    """Every supported (n, height) pair must produce unique y-coordinates;
+    Mesa's capacity=1 grid silently fails if two founders land on the same
+    cell at init."""
+    for height in (3, 4, 6, 8, 10):
+        for n in range(1, height + 1):
+            ys = spread_y(n, height)
+            assert len(ys) == n
+            assert len(set(ys)) == n, f"duplicates at n={n}, height={height}: {ys}"
+            assert all(0 <= y < height for y in ys), (
+                f"out-of-bounds y at n={n}, height={height}: {ys}"
+            )
+
+
+def test_spread_y_preserves_v01_to_v08_distribution() -> None:
+    """Pin the historical step-wise distribution so existing experiment
+    artifacts (v0.1..v0.8) remain bit-reproducible."""
+    # Default chamber: n=5, height=6.
+    assert spread_y(5, 6) == [0, 1, 2, 3, 4]
+    # tight_gradient + n=2 founders.
+    assert spread_y(2, 6) == [0, 3]
+    # Single founder lands at midpoint.
+    assert spread_y(1, 6) == [3]
+    # Empty population (defensive).
+    assert spread_y(0, 6) == []
+
+
+def test_spread_y_raises_when_n_exceeds_height() -> None:
+    """Capacity=1 grid + n > height would force duplicates. The function
+    must reject the request loudly instead of silently colliding founders.
+    """
+    with pytest.raises(ValueError, match="capacity=1"):
+        spread_y(7, 6)
+    with pytest.raises(ValueError, match="capacity=1"):
+        spread_y(11, 10)
+
+
+def test_run_chamber_rejects_overflow_founders() -> None:
+    """End-to-end: passing n_founders > layout.height must surface as a
+    ValueError from run_chamber via spread_y, not as a Mesa placement
+    crash deep in the step loop."""
+    layout = ChamberLayout(height=4)  # height=4
+    with pytest.raises(ValueError, match="capacity=1"):
+        run_chamber(
+            seed=1,
+            runs_root=Path("/tmp"),
+            run_id="overflow",
+            n_founders=10,
+            n_ticks=1,
+            layout=layout,
+            write_outputs=False,
+        )
