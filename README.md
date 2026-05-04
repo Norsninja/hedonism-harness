@@ -46,6 +46,15 @@ just fix                # ruff check --fix && ruff format
 just precommit-install  # install git hooks
 ```
 
+### Cloud workflow
+
+This project is set up to run entirely from the cloud:
+
+- **GitHub Codespaces** — open the repo on GitHub → `Code` → `Codespaces` → `Create codespace on <branch>`. The devcontainer (`.devcontainer/devcontainer.json`) installs uv, syncs dependencies, and configures VS Code with Ruff + pytest. After ~90 seconds you can run `just test` in the integrated terminal.
+- **GitHub Actions** — every push triggers `.github/workflows/ci.yml`, which runs lint, format check, and the full test suite under the thorough Hypothesis profile (`HYPOTHESIS_PROFILE=ci`). Once the simulation produces `runs/{run_id}/` outputs (post-Mesa), they upload as workflow artifacts retrievable from the PR Checks tab.
+
+You do not need a local Python environment to develop or test this project.
+
 ## Determinism Promise
 
 > Given the same seed, the same model config produces the same world, the same first N events, and the same final metrics.
