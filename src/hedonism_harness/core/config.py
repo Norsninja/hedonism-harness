@@ -64,6 +64,44 @@ class WorldConfig(BaseModel):
             "K=None preserves v0.7..v0.17 bit-identity by construction."
         ),
     )
+    energy_pool_initial: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "v0.19: initial size of the ambient energy pool that funds food "
+            "respawn refills and child startup energy under strict mass-"
+            "energy conservation. None disables the pool entirely — the "
+            "v0.7..v0.18 default; respawn and child startup are unfunded "
+            "and the death-residual recycle is not registered. Finite "
+            "values enable closed-pool / open-ecology arms; respawn "
+            "fails-soft and births are denied atomically when the pool "
+            "cannot fund the required draw. See "
+            "docs/experiments/fear_hunger_v0.19.md."
+        ),
+    )
+    ambient_influx_rate: float = Field(
+        default=0.0,
+        ge=0.0,
+        description=(
+            "v0.19: deterministic per-tick energy credited to the ambient "
+            "pool at phase 0 of each step (open-ecology arms). 0.0 (the "
+            "default) preserves v0.7..v0.18 bit-identity and the closed-"
+            "pool semantics. Only consulted when energy_pool_initial is "
+            "not None; setting a positive rate without a pool raises "
+            "during config construction."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_influx_requires_pool(self) -> WorldConfig:
+        if self.ambient_influx_rate > 0.0 and self.energy_pool_initial is None:
+            msg = (
+                f"ambient_influx_rate ({self.ambient_influx_rate}) > 0 requires "
+                "energy_pool_initial to be set; influx with no pool would create "
+                "energy from nowhere outside the v0.19 conservation framing."
+            )
+            raise ValueError(msg)
+        return self
 
 
 class BodyConfig(BaseModel):

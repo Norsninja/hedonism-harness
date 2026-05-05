@@ -26,12 +26,15 @@ from hedonism_harness.core.config import (
     ReproductionConfig,
     WorldConfig,
 )
+from hedonism_harness.core.energy_pool import EnergyPool
 from hedonism_harness.core.events import (
     AgentBorn,
     AgentDied,
     AteFood,
     FoodRespawned,
     LoggedEvent,
+    PoolBirthDenied,
+    PoolRespawnDenied,
     emit,
     signal_for,
 )
@@ -43,7 +46,7 @@ from hedonism_harness.core.memory import (
     make_memory,
     make_scalar_memory,
 )
-from hedonism_harness.core.reproduction import process_reproduction
+from hedonism_harness.core.reproduction import find_adjacent_empty_cell, process_reproduction
 from hedonism_harness.core.rng import RngStreams, make_streams, spawn_agent_rng
 from hedonism_harness.core.traits import TraitConfig, Traits, random_traits
 from hedonism_harness.core.world import CellKind, World, build_world
@@ -242,6 +245,17 @@ class HHModel(mesa.Model):
 
             self._ate_food_handler = _on_ate_food
             signal_for(AteFood).connect(_on_ate_food, sender=self)
+
+        # ---- v0.19 ambient energy pool ----------------------------------
+        # Constructed only when ``energy_pool_initial`` is finite. Under
+        # ``None`` (the v0.7..v0.18 default) the pool path is fully
+        # bypassed: respawn refills are not gated, child startup is not
+        # debited, the death-residual recycle is not applied, and ambient
+        # influx is not credited. This preserves bit-identity for every
+        # arm prior to v0.19 by construction.
+        self.energy_pool: EnergyPool | None = None
+        if world_config.energy_pool_initial is not None:
+            self.energy_pool = EnergyPool(current=float(world_config.energy_pool_initial))
 
         # ---- Place founders --------------------------------------------
         for spec in founders:
@@ -457,6 +471,13 @@ class HHModel(mesa.Model):
     def record_death(self, agent: HHAgent) -> None:
         cause = agent.body.death_cause
         assert cause is not None  # death_sweep only records after mark_dead.
+        # v0.19 strict-conservation: credit residual body energy to the
+        # ambient pool synchronously. Starvation deaths credit 0 by
+        # construction (energy <= 0 was the death trigger); injury /
+        # hazard deaths credit whatever the body still held. No-op when
+        # no pool is configured (preserves v0.7..v0.18 bit-identity).
+        if self.energy_pool is not None:
+            self.energy_pool.credit_death_residual(float(agent.body.energy))
         died = AgentDied(agent_id=agent.body.id, cause=cause, tick=self.tick_count)
         self.event_log.append(LoggedEvent(tick=self.tick_count, event=died))
         emit(self, died)
@@ -464,6 +485,20 @@ class HHModel(mesa.Model):
     # ------------------------------------------------------------------
     # Tick loop (SPEC §27.4)
     # ------------------------------------------------------------------
+
+    def _apply_ambient_influx(self) -> None:
+        """v0.19 phase-0a: credit the deterministic per-tick influx to pool.
+
+        No-op when no pool is configured or rate is 0.0. Sub-phase of
+        phase 0 — runs before respawn so a sufficiently large influx
+        can fund refills scheduled for this tick.
+        """
+        if self.energy_pool is None:
+            return
+        rate = float(self.world_config.ambient_influx_rate)
+        if rate <= 0.0:
+            return
+        self.energy_pool.credit_ambient_influx(rate)
 
     def _apply_food_respawn(self) -> None:
         """Phase 0 of ``step()``: refill scheduled FOOD cells (v0.18).
@@ -481,6 +516,14 @@ class HHModel(mesa.Model):
         and (under the v0.14 reflex) eats it. This preserves symmetry
         between occupied and unoccupied cells and avoids the
         stationary-agent-blocks-respawn fairness asymmetry.
+
+        v0.19 strict-conservation: when an energy pool is configured,
+        each refill must be funded by a successful pool debit of
+        ``food_value_default``. On debit failure, the cell's schedule
+        is cleared (sentinel reset to 0; cell stays EMPTY) and a
+        ``PoolRespawnDenied`` event is emitted in place of
+        ``FoodRespawned``. Pre-reg §"Respawn failure semantics" pins
+        this as option (i) — clear-the-schedule rather than defer.
         """
         if self._ate_food_handler is None:
             return  # No cooldown configured; nothing scheduled, ever.
@@ -498,17 +541,31 @@ class HHModel(mesa.Model):
         # preserved without extra sorting.
         for x, y in np.argwhere(ready):
             x_i, y_i = int(x), int(y)
+            if self.energy_pool is not None and not self.energy_pool.try_debit_respawn(
+                food_value_default
+            ):
+                # Pool can't fund the refill. Cell stays EMPTY; clear schedule
+                # so the cooldown does not loop on this empty pool every tick.
+                self.world.respawn_at_tick[x_i, y_i] = 0
+                self.record_event(PoolRespawnDenied(x=x_i, y=y_i, tick=self.tick_count))
+                continue
             self.world.kind_layer[x_i, y_i] = CellKind.FOOD
             self.world.food_value[x_i, y_i] = food_value_default
             self.world.respawn_at_tick[x_i, y_i] = 0
             self.record_event(FoodRespawned(x=x_i, y=y_i, tick=self.tick_count))
 
     def step(self) -> None:
-        # 0. v0.18 food respawn (phase 0). No-op when cooldown is not
-        #    configured (subscription never fired, all schedules are 0).
-        #    Refilled cells are visible to the foraging policy this tick —
-        #    placement before the snapshot avoids the off-by-one that
-        #    would arise if respawn ran after agent decisions.
+        # 0a. v0.19 ambient influx (phase 0a). No-op when no pool is
+        #     configured or influx_rate == 0. Runs before respawn so an
+        #     influx-rich open-ecology arm can fund this tick's refills.
+        self._apply_ambient_influx()
+
+        # 0b. v0.18 food respawn (phase 0). No-op when cooldown is not
+        #     configured (subscription never fired, all schedules are 0).
+        #     Refilled cells are visible to the foraging policy this tick —
+        #     placement before the snapshot avoids the off-by-one that
+        #     would arise if respawn ran after agent decisions. Under
+        #     v0.19 with a finite pool, each refill must be pool-funded.
         self._apply_food_respawn()
 
         # 1. Snapshot active agents.
@@ -564,6 +621,31 @@ class HHModel(mesa.Model):
             if not parent.body.alive:
                 continue
             occupied = self.occupied_cells_excluding(parent)
+            # v0.19 strict-conservation: when an ambient pool is configured,
+            # check placement first (cheap, pure), then attempt to fund the
+            # child's startup energy from the pool. Only on both successes
+            # do we call ``process_reproduction`` (which charges the parent).
+            # Pre-checking placement before debiting avoids a refund channel
+            # in the per-flow telemetry — the pool is only touched when the
+            # child is actually about to be constructed. On pool failure the
+            # birth is denied atomically: parent's ``energy_cost`` is not
+            # debited, parent stays alive and re-eligible next tick.
+            if self.energy_pool is not None:
+                if find_adjacent_empty_cell(self.world, parent.body, occupied) is None:
+                    # No placement available — same outcome as v0.7..v0.18
+                    # (no energy lost). Skip without touching the pool.
+                    continue
+                offspring_start_energy = float(self.reproduction_config.offspring_start_energy)
+                if not self.energy_pool.try_debit_child_startup(offspring_start_energy):
+                    self.record_event(
+                        PoolBirthDenied(
+                            parent_id=parent.body.id,
+                            x=parent.body.x,
+                            y=parent.body.y,
+                            tick=self.tick_count,
+                        )
+                    )
+                    continue
             outcome = process_reproduction(
                 self.world,
                 parent.body,
@@ -575,6 +657,10 @@ class HHModel(mesa.Model):
                 occupied=occupied,
             )
             if outcome is None:
+                # Defensive: under v0.19 we pre-checked placement so this
+                # branch should not fire when a pool is configured. Under
+                # v0.7..v0.18 (no pool) this is the existing
+                # placement-rejected path.
                 continue
             updated_parent_body, child_body = outcome
             parent.body = updated_parent_body

@@ -87,6 +87,14 @@ class Arm:
     integer ``K >= 1`` enables respawn: a consumed FOOD cell refills
     after K ticks. Used by ``V0_18_ARMS`` to sweep K under
     reflex-baseline + cost-15 + offspring=30.
+
+    ``energy_pool_initial`` / ``ambient_influx_rate`` (v0.19) configure
+    the strict mass-energy conservation substrate. ``None`` (default)
+    on the pool field disables the conservation path — preserves
+    v0.7..v0.18 bit-identity. A finite ``energy_pool_initial`` enables
+    closed-pool / open-ecology arms; ``ambient_influx_rate`` may be
+    set with the pool to add per-tick deterministic influx (open
+    ecology). Used by ``V0_19_ARMS`` to sweep the conservation axis.
     """
 
     label: str
@@ -97,6 +105,8 @@ class Arm:
     energy_threshold: float | None = None
     offspring_start_energy: float | None = None
     food_respawn_cooldown: int | None = None
+    energy_pool_initial: float | None = None
+    ambient_influx_rate: float | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -282,6 +292,118 @@ V0_18_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.19 arms — strict mass-energy conservation. Builds on v0.18's K=50
+# productive cooldown and adds a finite ambient energy pool (respawn +
+# child-startup pool-funded; metabolism + parent repro = heat loss;
+# death residual recycles).
+#
+# Brackets are anchored on the per-RUN demand observed empirically
+# under v0.18 K-50: ~11 energy/tick total drain (7.2 respawn + 3.8
+# child startup) on tight_gradient, ~9/tick on food_ladder, with
+# near-zero death recycling on tight (starvation dominates) and
+# ~80 energy/seed recycling on food_ladder (hazard injuries). The
+# initial v0.19 sweep (commit b6a43c5) ran with brackets
+# {5K, 15K, 30K} that were 8x too generous — every closed-pool arm
+# trivially had budget for the full 200-tick run, so no arm
+# stressed the conservation question. The corrected brackets below
+# bracket the 200-tick demand from below (500 starves early),
+# at-target (1500 sits near 200-tick demand of ~2200), and above
+# (3000 has comfortable margin).
+#
+# Seven arms: 4 closed-pool sizes at K=50 (A inf-pool reference,
+# B/C/D 500/1500/3000), 1 K=100 cooldown hedge at 1500, 2 open-
+# ecology arms at influx 2/7 per tick (low-influx and v0.18-
+# equivalent flux). The ``inf-pool`` arm reproduces v0.18 K-50
+# bit-identically (energy_pool_initial=None disables the pool path).
+# See [[docs/experiments/fear_hunger_v0.19.md]].
+V0_19_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="inf-pool",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=None,
+        ambient_influx_rate=None,
+    ),
+    Arm(
+        label="closed-500",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=500.0,
+        ambient_influx_rate=0.0,
+    ),
+    Arm(
+        label="closed-1500",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.0,
+    ),
+    Arm(
+        label="closed-3000",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=3_000.0,
+        ambient_influx_rate=0.0,
+    ),
+    Arm(
+        label="closed-1500-K100",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=100,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.0,
+    ),
+    Arm(
+        label="open-low",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=2.0,
+    ),
+    Arm(
+        label="open-equiv",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=7.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -309,6 +431,14 @@ class RunDiagnostics:
     v0.18 adds the respawn telemetry:
       - ``total_food_respawn_events`` — count of FoodRespawned
         emissions. Always 0 when no cooldown is configured.
+
+    v0.19 adds the pool-block telemetry:
+      - ``total_pool_respawn_denied`` — count of PoolRespawnDenied
+        emissions (respawn attempts blocked by empty pool). Always
+        0 when no pool is configured.
+      - ``total_pool_birth_denied`` — count of PoolBirthDenied
+        emissions (birth attempts blocked by empty pool). Always
+        0 when no pool is configured.
     """
 
     births_after_tick_50: int
@@ -320,6 +450,8 @@ class RunDiagnostics:
     total_post_birth_lifespan_ticks: int
     total_grandchildren_count: int
     total_food_respawn_events: int
+    total_pool_respawn_denied: int
+    total_pool_birth_denied: int
 
     @property
     def total_action_ticks(self) -> int:
@@ -348,6 +480,8 @@ def _read_run_diagnostics(  # noqa: PLR0912, PLR0915 — single-pass dispatch is
     born_agent_ids: set[int] = set()
     grandchildren_count = 0
     food_respawn_count = 0
+    pool_respawn_denied_count = 0
+    pool_birth_denied_count = 0
     max_event_tick = 0
     with events_jsonl.open() as f:
         for line in f:
@@ -396,6 +530,14 @@ def _read_run_diagnostics(  # noqa: PLR0912, PLR0915 — single-pass dispatch is
             elif kind == "FoodRespawned":
                 # Environmental event (v0.18). Counted; not an action emission.
                 food_respawn_count += 1
+            elif kind == "PoolRespawnDenied":
+                # v0.19: respawn attempt blocked by empty pool. Counted;
+                # not an action emission.
+                pool_respawn_denied_count += 1
+            elif kind == "PoolBirthDenied":
+                # v0.19: birth attempt blocked by empty pool. Counted;
+                # not an action emission.
+                pool_birth_denied_count += 1
             elif kind == "ReproductionRequested":
                 # Reproduction is auto-substrate (B, C) or voluntary action
                 # (A). In A it's an action emission alongside AgentStayed
@@ -420,6 +562,8 @@ def _read_run_diagnostics(  # noqa: PLR0912, PLR0915 — single-pass dispatch is
         total_post_birth_lifespan_ticks=total_lifespan,
         total_grandchildren_count=grandchildren_count,
         total_food_respawn_events=food_respawn_count,
+        total_pool_respawn_denied=pool_respawn_denied_count,
+        total_pool_birth_denied=pool_birth_denied_count,
     )
 
 
@@ -471,6 +615,17 @@ class ArmCellAggregate:
     # v0.18: snapshot of WorldConfig.food_value_default at sweep time so
     # food_consumed_per_birth is computed without re-reading config.
     food_value_default: float
+    # v0.19 strict-conservation telemetry (all default to 0 / 0.0 when
+    # no ambient pool was configured on the arm).
+    total_pool_respawn_denied: int = 0
+    total_pool_birth_denied: int = 0
+    total_pool_out_respawn: float = 0.0
+    total_pool_out_child_startup: float = 0.0
+    total_pool_in_death_residual: float = 0.0
+    total_pool_in_ambient_influx: float = 0.0
+    pool_min_observed: float | None = None
+    pool_max_observed: float | None = None
+    mean_pool_end: float | None = None
 
     @property
     def mean_births_per_parent(self) -> float:
@@ -554,6 +709,23 @@ def _aggregate(
     diags = [d for _r, d in pairs]
     n = len(pairs)
     still_fractions = [d.still_tick_fraction for d in diags]
+    # v0.19 pool aggregation. Min/max are taken across seeds; mean_pool_end
+    # averages across seeds. None when no seed configured a pool (the
+    # v0.7..v0.18 path).
+    pool_results = [r for r in results if r.pool_initial is not None]
+    if pool_results:
+        pool_min_observed: float | None = min(
+            r.pool_min for r in pool_results if r.pool_min is not None
+        )
+        pool_max_observed: float | None = max(
+            r.pool_max for r in pool_results if r.pool_max is not None
+        )
+        ends = [r.pool_end for r in pool_results if r.pool_end is not None]
+        mean_pool_end: float | None = sum(ends) / len(ends) if ends else None
+    else:
+        pool_min_observed = None
+        pool_max_observed = None
+        mean_pool_end = None
     return ArmCellAggregate(
         arm_label=arm.label,
         layout_name=layout_name,
@@ -573,6 +745,15 @@ def _aggregate(
         total_grandchildren_count=sum(d.total_grandchildren_count for d in diags),
         total_food_respawn_events=sum(d.total_food_respawn_events for d in diags),
         food_value_default=food_value_default,
+        total_pool_respawn_denied=sum(d.total_pool_respawn_denied for d in diags),
+        total_pool_birth_denied=sum(d.total_pool_birth_denied for d in diags),
+        total_pool_out_respawn=sum(r.pool_out_respawn for r in results),
+        total_pool_out_child_startup=sum(r.pool_out_child_startup for r in results),
+        total_pool_in_death_residual=sum(r.pool_in_death_residual for r in results),
+        total_pool_in_ambient_influx=sum(r.pool_in_ambient_influx for r in results),
+        pool_min_observed=pool_min_observed,
+        pool_max_observed=pool_max_observed,
+        mean_pool_end=mean_pool_end,
     )
 
 
@@ -648,6 +829,8 @@ def _run_one_arm_seed(
         use_memory=use_memory,
         memory_type=memory_type,
         food_respawn_cooldown=arm.food_respawn_cooldown,
+        energy_pool_initial=arm.energy_pool_initial,
+        ambient_influx_rate=arm.ambient_influx_rate,
         condition=arm.label,
         setup_observer=setup,
     )

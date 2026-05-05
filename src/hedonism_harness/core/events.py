@@ -111,6 +111,41 @@ class FoodRespawned:
     tick: int
 
 
+@dataclass(frozen=True)
+class PoolRespawnDenied:
+    """v0.19: a scheduled food respawn was denied because the ambient
+    energy pool could not fund the refill (pool < food_value_default).
+
+    Emitted from ``HHModel._apply_food_respawn`` instead of a
+    ``FoodRespawned`` for the affected cell. The cell stays EMPTY and
+    its respawn schedule is cleared (sentinel reset to 0 — see v0.19
+    pre-reg §"Respawn failure semantics", option (i)).
+    """
+
+    x: int
+    y: int
+    tick: int
+
+
+@dataclass(frozen=True)
+class PoolBirthDenied:
+    """v0.19: a queued birth was denied because the ambient energy pool
+    could not fund the child's startup energy (pool < offspring_start_energy).
+
+    Emitted from ``HHModel._process_birth_queue`` instead of an
+    ``AgentBorn`` for the affected parent. The parent's reproduction
+    cost is NOT debited; the parent stays alive and re-enters the
+    eligibility pool next tick (mirrors the existing
+    ``find_adjacent_empty_cell`` rejection contract in
+    ``core/reproduction.process_reproduction``).
+    """
+
+    parent_id: int
+    x: int
+    y: int
+    tick: int
+
+
 AnyEvent = (
     AgentMoved
     | AgentStayed
@@ -121,6 +156,8 @@ AnyEvent = (
     | AgentBorn
     | AgentDied
     | FoodRespawned
+    | PoolRespawnDenied
+    | PoolBirthDenied
 )
 
 
@@ -161,6 +198,8 @@ _SIGNAL_NAMES: dict[type, str] = {
     AgentBorn: "hh.agent_born",
     AgentDied: "hh.agent_died",
     FoodRespawned: "hh.food_respawned",
+    PoolRespawnDenied: "hh.pool_respawn_denied",
+    PoolBirthDenied: "hh.pool_birth_denied",
 }
 
 
