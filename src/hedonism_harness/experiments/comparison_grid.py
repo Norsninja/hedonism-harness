@@ -106,6 +106,15 @@ class Arm:
     Used by ``V0_20_ARMS`` to test whether eliminating reproduction
     heat loss lifts compounding under v0.19's binding-conservation
     regime.
+
+    ``hazard_damage`` (v0.22) overrides the per-tile hazard damage
+    threaded into ``WorldConfig.hazard_damage_default`` via
+    ``build_chamber_layout``. ``None`` (default) preserves
+    v0.7..v0.21 bit-identity (``build_chamber_layout`` default = 8.0).
+    A finite value enables narrow hazard-damage sweeps such as
+    ``V0_22_ARMS`` (sweeps {0, 4, 8, 12} on food_ladder under transfer
+    mode at influx=1.0/tick to test whether hazard-injury death-residual
+    recycling is load-bearing for the v0.21 productivity plateau).
     """
 
     label: str
@@ -119,6 +128,7 @@ class Arm:
     energy_pool_initial: float | None = None
     ambient_influx_rate: float | None = None
     child_funding_mode: ChildFundingMode | None = None
+    hazard_damage: float | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -607,6 +617,87 @@ V0_21_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.22 arms — narrow hazard-damage sweep on food_ladder under
+# PARENT_TRANSFER_POOL_GAP at pool_initial=1500 + ambient_influx_rate=1.0
+# (the v0.21 productivity transition). Tests whether the v0.21 food_ladder
+# productivity plateau (143/92 b>50 at influx>=1.0) is fueled by hazard-
+# injury death-residual recycling or by chamber geometry.
+#
+# hazard_damage in {0, 4, 8, 12}:
+#   - 0 is the crucial control: zero injury deaths -> zero residual
+#     recycling; chamber geometry preserved. If productivity drops,
+#     recycling/injury dynamics are load-bearing under this layout.
+#   - 4 sub-default: agents survive ~25 ticks of continuous residency;
+#     reduced recycling pressure.
+#   - 8 = build_chamber_layout default. **Byte-identity anchor against
+#     v0.21 transfer-1500-influx-1.0 food_ladder** (143/92).
+#   - 12 super-default: agents survive ~8 ticks of continuous residency;
+#     elevated recycling pressure.
+#
+# Same 8 seeds (1..8) as v0.21 so per-seed comparisons are interpretable.
+# food_ladder only — tight_gradient is starvation-dominated with near-
+# zero recycling already; sweeping hazard_damage on tight tests a near-
+# null channel. See [[docs/experiments/fear_hunger_v0.22.md]].
+V0_22_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="hazard-0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    Arm(
+        label="hazard-4",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=4.0,
+    ),
+    Arm(
+        label="hazard-8",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+    ),
+    Arm(
+        label="hazard-12",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=12.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -854,6 +945,13 @@ class ArmCellAggregate:
     total_reproduction_heat_loss: float = 0.0
     total_parent_energy_transferred_to_child: float = 0.0
     total_births_blocked_by_parent_energy: int = 0
+    # v0.22 injury-death telemetry. Surfaced from
+    # ``ChamberRunResult.injury_deaths`` so v0.22's hazard_damage sweep
+    # can distinguish "no injuries because hazard=0" from "no injuries
+    # because agents avoided hazards" — both produce low
+    # pool_in_death_residual but mean different things mechanistically.
+    # Default 0 preserves bit-identity for prior aggregates.
+    total_injury_deaths: int = 0
 
     @property
     def mean_births_per_parent(self) -> float:
@@ -989,6 +1087,7 @@ def _aggregate(
         total_births_blocked_by_parent_energy=sum(
             d.total_births_blocked_by_parent_energy for d in diags
         ),
+        total_injury_deaths=sum(r.injury_deaths for r in results),
     )
 
 
@@ -1067,6 +1166,7 @@ def _run_one_arm_seed(
         energy_pool_initial=arm.energy_pool_initial,
         ambient_influx_rate=arm.ambient_influx_rate,
         child_funding_mode=arm.child_funding_mode,
+        hazard_damage=arm.hazard_damage,
         condition=arm.label,
         setup_observer=setup,
     )
