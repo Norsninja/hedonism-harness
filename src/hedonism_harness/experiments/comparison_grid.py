@@ -517,6 +517,96 @@ V0_20_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.21 arms — influx frontier under PARENT_TRANSFER_POOL_GAP at fixed
+# pool_initial=1500. Sweeps ambient_influx_rate uniformly between v0.20's
+# two endpoints (0 and 2 / tick) to map where the productivity transition
+# lies under conservation-faithful reproduction.
+#
+# Endpoints A (influx=0.0) and E (influx=2.0) are deliberate anchors:
+#   A reproduces v0.20 transfer-1500 byte-identically on both chambers
+#     (influx=0.0 is a no-op by construction).
+#   E reproduces v0.20 transfer-open-low byte-identically on food_ladder
+#     and via semantic-regression on tight_gradient (v0.20 transfer-open-
+#     low tight had 3 r_blk + 9 b_blk timing perturbation; aggregate
+#     metrics must match exactly, event stream is not required).
+#
+# Three intermediate arms B/C/D (influx 0.5 / 1.0 / 1.5) map the frontier.
+# Operational primary i* is the lowest arm whose births_after_tick_50
+# clears 90% of arm E's b>50 (= 117 tight, 83 food_ladder); secondary i*
+# uses total_births (= 184 tight, 129 food_ladder).
+#
+# K=50, energy_cost=15, energy_threshold=50, offspring_start_energy=30,
+# pool_initial=1500 throughout. Reflex-baseline policy. See
+# [[docs/experiments/fear_hunger_v0.21.md]].
+V0_21_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="transfer-1500-influx-0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+    Arm(
+        label="transfer-1500-influx-0.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+    Arm(
+        label="transfer-1500-influx-1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+    Arm(
+        label="transfer-1500-influx-1.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+    Arm(
+        label="transfer-1500-influx-2.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=2.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------

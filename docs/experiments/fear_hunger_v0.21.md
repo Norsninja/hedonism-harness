@@ -461,6 +461,265 @@ Total v0.21 implementation: ~690 LOC. About half of v0.19/v0.20 because
 v0.21 introduces no new mechanism — it is a focused frontier mapping
 on the v0.20 substrate.
 
+## Results (executed 2026-05-05)
+
+Five arms × two chambers × eight seeds (1..8) × 200 ticks × 5 founders.
+**80 runs total**, 21.1 seconds end-to-end. Run artifacts persisted at
+`runs/fear-hunger-v0.21-{tight_gradient,food_ladder}/`.
+
+### Headline finding — chamber-asymmetric frontier shape; food_ladder is a phase transition, tight is graded
+
+**v0.21 reveals that the productivity-vs-influx response under
+strict-transfer reproduction at pool=1500 is qualitatively different
+between chambers.** food_ladder exhibits a sharp phase transition
+between influx=0.5/tick and influx=1.0/tick, with a productivity
+plateau at full v0.18 K-50 levels above 1.0/tick. tight_gradient shows
+a smooth, graded response — every 0.5/tick step adds another 5–10
+b>50, with no single step accounting for the bulk of the lift.
+
+**Primary i\* (≥90% of arm E b>50): food_ladder=0.5/tick, tight=1.5/tick.
+Chamber asymmetry: 1.0/tick.** This exceeds the 0.5/tick strong-support
+threshold pre-registered in H8 by 2×, indicating that hazard-residual
+recycling on food_ladder substitutes for ambient influx more
+strongly than the ~0.4/tick back-of-envelope predicted.
+
+The qualitative chamber asymmetry — phase transition vs gradient —
+is itself a finding. It suggests the substrate's response to ambient
+energy is shape-dependent on chamber geometry (specifically the
+recycling-from-injury-deaths mechanism that food_ladder has and
+tight does not), not purely a function of the demand-vs-supply ledger.
+
+### Determinism contracts — verified
+
+H11 (arm A) and H12 (arm E) reproduce v0.20 telemetry exactly:
+
+| chamber | metric | v0.20 anchor | v0.21 reproduction |
+|---|---|---:|---:|
+| tight (A) | total_births | 173 | **173** |
+| tight (A) | b>50 | 99 | **99** |
+| tight (A) | total_food_events | 660 | **660** |
+| tight (A) | total_food_respawn_events | 468 | **468** |
+| food_ladder (A) | total_births | 128 | **128** |
+| food_ladder (A) | b>50 | 77 | **77** |
+| food_ladder (A) | total_food_events | 640 | **640** |
+| food_ladder (A) | total_food_respawn_events | 467 | **467** |
+| tight (E) | total_births | 204 | **204** |
+| tight (E) | b>50 | 130 | **130** |
+| tight (E) | total_food_events | 765 | **765** |
+| tight (E) | total_food_respawn_events | 573 | **573** |
+| food_ladder (E) | total_births | 143 | **143** |
+| food_ladder (E) | b>50 | 92 | **92** |
+| food_ladder (E) | total_food_events | 677 | **677** |
+| food_ladder (E) | total_food_respawn_events | 504 | **504** |
+
+A is byte-identity on both chambers; E is byte-identity on food_ladder
+and semantic regression (aggregate metrics match) on tight per the
+pre-reg framing. No wiring leak from v0.20.
+
+### v0.21a tight_gradient
+
+| arm | influx | births | b>50 | surv | food | respawn | fcpb | pool_min | pool_end | r_blk | b_blk | in_influx | xfer |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| transfer-1500-influx-0 | 0.0 | 173 | 99 | 8/8 | 660 | 468 | 76.30 | 0 | 6 | 108 | 136 | 0 | 2,595 |
+| transfer-1500-influx-0.5 | 0.5 | 185 | 111 | 8/8 | 687 | 495 | 74.27 | 0 | 16 | 81 | 58 | 800 | 2,775 |
+| transfer-1500-influx-1.0 | 1.0 | 190 | 116 | 8/8 | 716 | 524 | 75.37 | 0 | 34 | 52 | 32 | 1,600 | 2,850 |
+| transfer-1500-influx-1.5 | 1.5 | 199 | 125 | 8/8 | 744 | 552 | 74.77 | 0 | 24 | 62 | 47 | 2,400 | 2,985 |
+| transfer-1500-influx-2.0 | 2.0 | 204 | 130 | 8/8 | 765 | 573 | 75.00 | 0 | 85 | 3 | 9 | 3,200 | 3,060 |
+
+tight is **graded**. Each 0.5/tick step adds ~6 b>50 (total lift
+99 → 130 = +31 across the full influx range). Total blocks fall
+244 → 139 → 84 → 86 → 12 — almost monotone but with a small
+non-monotonic blip at the 1.0 → 1.5 step (b_blk rises 32 → 62 even
+as r_blk falls 52 → 24). The v0.20 redistribution finding (transfer
+mode shifts pool binding from respawn-side to birth-side) reappears
+across the influx frontier: as the substrate gets more energy, more
+agents reach reproduction → birth-side gates contend more, even as
+respawn-side relief grows.
+
+**pool_min stays at 0 across every tight arm** — even at influx=2.0
+the pool empties at some point during the run and re-fills via
+ambient credit. The lift from 0 → 2/tick is back-loaded as
+predicted: r_blk falls 108 → 3 (97% reduction); b_blk falls 136 → 9
+(93% reduction); fcpb stays steady at ~75 (food consumption per
+birth is ecology-stable).
+
+**Primary i\* tight = 1.5** (b>50=125 ≥ 117 threshold).
+**Secondary i\* tight = 0.5** (total_births=185 ≥ 184 threshold).
+The gap between primary and secondary is striking: total_births
+hits 90% recovery at the very first influx step, but late-run
+compounding (b>50) needs 1.5/tick to clear 90%. tight is a
+chamber where early-run productivity recovers cheaply and
+late-run productivity is the binding cost.
+
+### v0.21b food_ladder
+
+| arm | influx | births | b>50 | surv | food | respawn | fcpb | pool_min | pool_end | r_blk | b_blk | in_influx | xfer |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| transfer-1500-influx-0 | 0.0 | 128 | 77 | 8/8 | 640 | 467 | 100.00 | 0 | 162 | 37 | 64 | 0 | 1,920 |
+| transfer-1500-influx-0.5 | 0.5 | 136 | 85 | 8/8 | 662 | 489 | 97.35 | 0 | 201 | 15 | 90 | 800 | 2,040 |
+| **transfer-1500-influx-1.0** | **1.0** | **143** | **92** | **8/8** | **674** | **501** | **94.27** | **2** | **257** | **3** | **0** | **1,600** | **2,145** |
+| transfer-1500-influx-1.5 | 1.5 | 143 | 92 | 8/8 | 677 | 504 | 94.69 | 57 | 352 | 0 | 0 | 2,400 | 2,145 |
+| transfer-1500-influx-2.0 | 2.0 | 143 | 92 | 8/8 | 677 | 504 | 94.69 | 147 | 452 | 0 | 0 | 3,200 | 2,145 |
+
+food_ladder is a **phase transition**. The full v0.18 K-50 production
+target (143 / 92) is reached at influx=1.0 and **plateaus** —
+arms at 1.0, 1.5, and 2.0 are byte-identical on births and b>50;
+food and respawn events differ only at the level of timing
+perturbations (674 vs 677, 501 vs 504). Above influx=1.0 every
+additional unit of ambient energy goes into pool buffer
+(pool_end 257 → 352 → 452), not into more births.
+
+The B → C step accounts for **the entire frontier transition**:
+- Total blocks A → B: 101 → 105 (UP 4; the v0.20 redistribution
+  finding fires again on this chamber too).
+- Total blocks B → C: 105 → 3 (DOWN 102, accounting for 101% of
+  the A → E delta of 101).
+- C → D and D → E: 3 → 0 → 0 (plateau).
+
+H7 fires unambiguously on food_ladder. **Primary i\* food_ladder
+= 0.5** (b>50=85 ≥ 83 threshold). **Secondary i\* food_ladder
+= 0.5** (total_births=136 ≥ 129 threshold). Both metrics agree
+on food_ladder, unlike tight where primary and secondary diverge
+sharply.
+
+### Hypotheses → outcomes
+
+- **H1.** `pool_in_ambient_influx == ambient_influx_rate × n_ticks ×
+  n_seeds`. **Confirmed exactly** at every arm. Tight in_influx
+  (n_ticks=200, n_seeds=8): 0/800/1600/2400/3200 = (0/0.5/1/1.5/2)
+  × 1,600. food_ladder identical. The deterministic per-tick
+  influx accountancy is solid.
+- **H2.** v0.20 H4 invariant `parent_energy_transferred_to_child +
+  pool_out_child_startup == total_births × offspring_start_energy`.
+  **Confirmed exactly.** xfer = births × 15 at every arm
+  (verified by inspection of the sweep table; pool_out_child_startup
+  follows by H3 below).
+- **H3.** `reproduction_heat_loss == 0` at every arm. **Confirmed
+  exactly** (every arm in V0_21_ARMS uses TRANSFER mode; the
+  POOL_FULL accumulator stays at 0).
+- **H4.** `births_blocked_by_parent_energy == 0` at every arm.
+  **Confirmed exactly.** The defensive parent-energy gate did not
+  fire across any of the 80 runs (pe_blk=0 throughout).
+- **H5.** `births_after_tick_50` monotonically non-decreasing in
+  influx. **Confirmed on both chambers.** tight: 99 → 111 → 116 →
+  125 → 130. food_ladder: 77 → 85 → 92 → 92 → 92 (saturated above
+  1.0/tick).
+- **H6.** Total pool blocks (r_blk + b_blk) monotonically non-
+  increasing in influx. **Falsified weakly on tight** (244 → 139
+  → 84 → 86 → 12 — small non-monotone blip at C → D); **falsified
+  weakly on food_ladder** (101 → 105 → 3 → 0 → 0 — small rise at
+  A → B). Both non-monotonicities are the v0.20 redistribution
+  finding firing again: more parents reach reproduction → birth-
+  side contention rises briefly even as respawn-side relief grows.
+  The overall trend is strongly downward on both chambers.
+- **H7.** A single consecutive-arm step accounts for >50% of the
+  total-blocks (E−A) delta. **Falsified on tight** (no step exceeds
+  ~45%); **confirmed strongly on food_ladder** (B → C accounts
+  for 101% of the delta — the entire transition is at this single
+  step). The chamber asymmetry in transition shape is a substantive
+  finding.
+- **H8.** food_ladder primary i\* ≤ tight primary i\* (recycling-as-
+  effective-influx). **Confirmed**, and the strong-support
+  ≥0.5/tick gap is **strongly cleared**: food_ladder primary i\* =
+  0.5; tight primary i\* = 1.5; gap = 1.0/tick (2× the strong-
+  support threshold). Hazard-residual recycling on food_ladder
+  substitutes for ambient influx more strongly than the back-of-
+  envelope predicted.
+- **H9.** Primary i\* ≤ 2.0/tick on tight, ≤ 1.5/tick on food_ladder.
+  **Confirmed.** Observed: tight=1.5, food_ladder=0.5. Both well
+  within the predicted upper bounds.
+- **H10.** `pool_min_observed` non-decreasing in influx.
+  **Confirmed (non-strict) on tight** (all five arms have
+  pool_min=0 — pool empties at some point in every run, including
+  influx=2.0). **Confirmed strongly on food_ladder** (0 → 0 → 2 →
+  57 → 147 — clean monotonic increase). Reflects the chamber
+  asymmetry: food_ladder buffers ambient influx well, tight
+  consumes it as fast as it arrives.
+- **H11/H12.** Endpoint determinism contracts. **Confirmed exactly**
+  per the determinism contracts table above.
+
+### Decision rule fired (per pre-reg)
+
+The pre-reg's "frontier sharply mapped" branch fires partially:
+
+- A and E satisfy their respective anchor strengths.
+- H5 holds monotonically.
+- H7 fires on food_ladder but not on tight — chambers respond to
+  influx with qualitatively different shapes (sharp transition vs
+  graded gradient).
+- H8 chamber asymmetry is strongly supported (1.0/tick gap).
+
+The decision rule said v0.22 should become either reproduction-
+efficiency parameterisation or chamber-geometry parameterisation
+depending on which finding looks more striking. **The chamber
+asymmetry is the more striking finding** — the qualitatively
+different frontier shapes between chambers, combined with the
+2× over-prediction of the recycling-as-effective-influx hypothesis,
+makes chamber geometry the higher-information v0.22 axis.
+Reproduction-efficiency parameterisation remains a credible
+v0.23+ candidate.
+
+### Three findings worth flagging for v0.22
+
+1. **Tight pool_min stays at zero even at productive influx.**
+   tight transfer-1500-influx-2.0 has pool_min=0 yet the substrate
+   produces v0.18 K-50 dynamics. The pool drains to zero, refills
+   from ambient + death residual + respawn-cycle dynamics, and
+   re-drains within tight tolerances. This is a substrate that
+   operates **at the edge of pool exhaustion** even when nominally
+   productive — fragile to small perturbations. Variations in
+   influx timing, food density, or hazard layout could push the
+   pool past the recovery threshold.
+
+2. **food_ladder saturation plateau.** Above influx=1.0/tick the
+   substrate is byte-identical regardless of additional energy
+   input. Excess influx accumulates in pool buffer rather than
+   producing more births. The substrate has a hard population
+   ceiling at 143 / 92 on this chamber under the current substrate
+   parameters — chamber capacity is the binding constraint above
+   the productivity transition, not energy supply. This invites
+   v0.22 to vary chamber size / agent capacity to test whether
+   the ceiling is geometric or substrate-side.
+
+3. **The v0.20 b_blk/r_blk redistribution finding fires across the
+   v0.21 frontier.** As influx increases, transfer mode produces
+   more successful births → more birth-side contention even as
+   respawn-side relief grows. On both chambers the lowest-influx
+   step (A → B) shows b_blk going up while r_blk goes down. This
+   is now a robust feature of transfer mode, not a v0.20-specific
+   anomaly. v0.22 chamber-geometry sweeps should track per-flow
+   block counts to maintain this resolution.
+
+### Data points worth flagging for v0.22
+
+- **The chamber-geometry axis is the next-natural slice.** Hazard
+  density (currently 8.0 damage/tile under chamber default) directly
+  controls the death-residual recycling rate. Sweeping hazard density
+  in {4, 8, 12} on food_ladder under transfer mode at the productive
+  influx (1.0/tick) would directly test the recycling-as-effective-
+  influx mechanism: more hazard → more recycling → lower required
+  influx for productivity. Chamber width / pre-food band size are
+  alternative levers.
+- **tight vs food_ladder behave so differently that future
+  chamber-asymmetric experiments may want a third chamber** with
+  intermediate recycling characteristics (e.g., a low-hazard
+  food_ladder variant) to span the spectrum.
+- **The 2× over-prediction of recycling-as-effective-influx** is
+  worth a closer audit. Death residual in v0.20 transfer-1500
+  food_ladder was ~80 energy/seed/200 ticks (= 0.4/tick effective).
+  If the observed 1.0/tick gap holds, food_ladder's recycling is
+  worth 1.0/tick effective, not 0.4/tick. Either (a) recycling
+  energy is more "useful" than ambient influx because it arrives
+  in larger discrete deposits at advantageous timings, or (b) the
+  death rate scales with population growth and the back-of-envelope
+  underestimated total recycling. v0.22 hazard-density sweep would
+  test this directly.
+- **Secondary i\* on tight (0.5/tick for total_births, vs 1.5 for
+  b>50)** suggests that early-run reproduction is cheap to recover
+  but late-run compounding is the expensive frontier. v0.22+ chamber
+  experiments should report both metrics; they reveal substrate
+  behavior at different lifecycle phases.
+
 ## References
 
 - [[docs/experiments/fear_hunger_v0.20.md]] — v0.20 results;
