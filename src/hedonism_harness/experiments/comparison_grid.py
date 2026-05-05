@@ -698,6 +698,105 @@ V0_22_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.23 arms — hazard-zero influx frontier on both chambers. Mirrors the
+# v0.21 V0_21_ARMS structure (5 arms across ambient_influx_rate ∈
+# {0, 0.5, 1.0, 1.5, 2.0} at PARENT_TRANSFER_POOL_GAP, pool_initial=1500)
+# but pins hazard_damage=0.0 on every arm. Tests whether the v0.21
+# food_ladder vs tight_gradient 1.0/tick chamber asymmetry survives when
+# hazard injury/cull/recycling is removed.
+#
+# v0.22 falsified the recycling-as-fuel hypothesis (hazard=0 food_ladder
+# at influx=1.0 produces b>50=116, 26% above the v0.21 saturation
+# plateau) — the recycling channel was a net tax, not a fuel. v0.23 now
+# isolates the chamber-asymmetry mechanism by re-running the v0.21
+# influx frontier on both chambers under hazard=0.
+#
+# Endpoints + anchors:
+#   A (influx=0.0): closed-pool, no influx, no recycling. New regime;
+#     no prior anchor.
+#   C (influx=1.0): byte-identity anchor against v0.22 hazard-0 on
+#     food_ladder (the v0.22 sweep already ran this exact arm; same
+#     8 seeds make this a deductive identity).
+#   E (influx=2.0): high-influx endpoint. Self-referential 90%
+#     threshold for primary i*.
+#
+# K=50, energy_cost=15, energy_threshold=50, offspring_start_energy=30,
+# pool_initial=1500, hazard_damage=0 throughout. Reflex-baseline policy.
+# See [[docs/experiments/fear_hunger_v0.23.md]].
+V0_23_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="transfer-1500-hzd0-influx-0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd0-influx-0.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd0-influx-1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd0-influx-1.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd0-influx-2.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=2.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
