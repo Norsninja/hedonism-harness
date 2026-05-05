@@ -1095,6 +1095,102 @@ V0_26_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.27 arms — avoidance-weight frontier on both chambers at fixed
+# hazard=8, influx=1.0, transfer/pool=1500. Fills the v0.26 binary
+# endpoint pair (weight in {0.0, 1.0}) with three interior points
+# (weight in {0.25, 0.5, 0.75}) to discriminate the curve shape:
+# monotone, concave-monotone (diminishing returns), or interior optimum.
+#
+# Central question (per [[docs/experiments/fear_hunger_v0.27.md]]):
+# is avoidance monotonically beneficial, monotonically costly, or
+# does it have an interior optimum?
+#
+# Four byte-identity anchors against v0.26:
+#   - tight       w=0.0 = V0_26 hzd8-avd0.0 (invisible-tight, b>50=107)
+#   - tight       w=1.0 = V0_26 hzd8-avd1.0 (coupled-tight,   b>50=116)
+#   - food_ladder w=0.0 = V0_26 hzd8-avd0.0 (invisible-food,  b>50= 88)
+#   - food_ladder w=1.0 = V0_26 hzd8-avd1.0 (coupled-food,    b>50= 92)
+# 6 truly-new cells (3 interior weights x 2 chambers); the remainder
+# reproduce v0.26 aggregates exactly.
+V0_27_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="hzd8-avd0.00",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+        hazard_avoidance_weight=0.0,
+    ),
+    Arm(
+        label="hzd8-avd0.25",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+        hazard_avoidance_weight=0.25,
+    ),
+    Arm(
+        label="hzd8-avd0.50",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+        hazard_avoidance_weight=0.5,
+    ),
+    Arm(
+        label="hzd8-avd0.75",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+        hazard_avoidance_weight=0.75,
+    ),
+    Arm(
+        label="hzd8-avd1.00",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+        hazard_avoidance_weight=1.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
