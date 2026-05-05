@@ -196,6 +196,179 @@ New v0.16 instrumentation:
 
 Total v0.16 implementation: ~330 LOC. Smaller than v0.15.
 
+## Results (executed 2026-05-04)
+
+Three arms × two chambers × eight seeds × 200 ticks × 5 founders = 48
+runs. Single policy (reflex-baseline, no scalar memory). All other
+substrate parameters held at v0.14 / v0.15 values.
+
+### v0.16a tight_gradient
+
+| arm | births | birth>50 | survivors | parents | births/parent | mean_post_birth_lifespan | food | still% |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| cost-35 (A baseline) | 47 | 0 | 2/8 | 23 | 2.04 | 64.2 | 192 | 93.6 |
+| cost-25 (B) | 64 | 0 | 1/8 | 28 | 2.29 | 68.5 | 192 | 94.0 |
+| cost-15 (C) | 74 | 0 | 2/8 | 24 | 3.08 | 86.2 | 192 | 94.4 |
+
+Monotone in decreasing cost: total_births +57% (47 → 74),
+mean_births_per_parent +51% (2.04 → 3.08), mean_post_birth_lifespan
++34% (64.2 → 86.2). **`births_after_tick_50` is hard zero under every
+cost.** `food_events` identical across arms (192).
+
+### v0.16b food_ladder
+
+| arm | births | birth>50 | survivors | parents | births/parent | mean_post_birth_lifespan | food | still% |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| cost-35 (A baseline) | 39 | 3 | 4/8 | 27 | 1.44 | 48.6 | 174 | 92.8 |
+| cost-25 (B) | 46 | 4 | 4/8 | 27 | 1.70 | 62.6 | 174 | 93.2 |
+| cost-15 (C) | 55 | 4 | 4/8 | 28 | 1.96 | 81.5 | 174 | 93.9 |
+
+Monotone in decreasing cost: total_births +41% (39 → 55),
+mean_births_per_parent +36% (1.44 → 1.96), mean_post_birth_lifespan
++68% (48.6 → 81.5). **`births_after_tick_50` lifts 3 → 4 (cost-25
+and cost-15);** monotone but only +1 absolute event on n=8 — within
+seed noise. `seeds_with_survivors` flat at 4/8 across all costs.
+`food_events` identical (174).
+
+### Hypotheses → outcomes
+
+- **H1.** `births_after_tick_50` monotone-decreasing in `energy_cost`
+  on food_ladder. **Weakly confirmed.** 3 → 4 → 4 (monotone but +1
+  absolute; consistent with H1 being directionally correct but the
+  effect size small).
+- **H2.** `births_after_tick_50` lifts off zero on tight_gradient
+  under at least one of B / C. **Falsified.** All three arms remain
+  at 0.
+- **H3.** `seeds_with_survivors` rises monotone with decreasing
+  `energy_cost`. **Falsified.** food_ladder is flat at 4/8 across
+  all costs; tight_gradient bounces 2/1/2 (no monotone trend).
+- **H4.** `total_food_events` rises modestly under B / C.
+  **Falsified.** food_events is identical across all arms (192 /
+  174). The chamber's food supply is a hard ceiling.
+- **H5.** `total_births` rises monotone with decreasing `energy_cost`
+  on both chambers. **Confirmed strongly.** +57% on tight_gradient,
+  +41% on food_ladder.
+- **H6.** `still_tick_fraction` roughly invariant across arms.
+  **Confirmed within ±0.8 pp** on tight_gradient (93.6/94.0/94.4) and
+  food_ladder (92.8/93.2/93.9).
+
+### Headline finding
+
+**Reproduction economics is a real lever for compounding metrics —
+but it is not the binding constraint on the H2 ceiling.**
+
+The per-parent telemetry tells a clean substrate-economics story.
+Lower `energy_cost` raises `mean_births_per_parent` from ~2 to ~3 on
+tight_gradient and from ~1.4 to ~2 on food_ladder. Post-birth
+lifespan rises 34-68%. Total births rise 41-57%. These all confirm
+H5 cleanly and align with the "post-birth energy floor" hypothesis:
+parents that retain more energy after each birth do produce more
+births before dying.
+
+But the **headline metric (births_after_tick_50)** does **not** lift
+proportionally. tight_gradient stays at hard zero under any cost.
+food_ladder lifts only 3 → 4 — within seed noise on n=8. And critically,
+**`seeds_with_survivors` is flat across all costs** on both chambers
+(food_ladder 4/8, tight_gradient ~1-2/8). Lineages still die out at the
+same rate; parents just have more births before they do.
+
+The v0.15 observation was: "children reproduce-and-die without
+grandchildren." v0.16 confirms this pattern is **not** primarily about
+the parent's post-birth energy. It is about the children themselves
+not surviving long enough to reproduce — likely an
+`offspring_start_energy` issue (children spawn with 30 energy in a
+chamber where adult parents struggle), or a population-pressure issue
+where children compete for the same fixed food supply, or a chamber
+geometry issue specific to tight_gradient's hazard wall.
+
+### Decision rule fired (per pre-reg)
+
+The pre-reg's branches resolve as follows:
+
+> **C ≈ A across both chambers** — *partial.* total_births clearly
+> diverge (C > A by 41-57%), and per-parent compounding diverges
+> strongly. But the headline ceiling metric `births_after_tick_50` is
+> nearly flat. We treat this as **economics is load-bearing for
+> per-parent productivity but not for lineage survival**.
+
+> **H2 fires (tight_gradient lifts off zero) but H1 does not** —
+> *false in both directions.* tight_gradient does NOT lift; food_ladder
+> lifts only marginally.
+
+The v0.17 recommendation in the pre-reg ("substrate variants if
+economics doesn't lift the ceiling") gains a sharper question:
+**why are children dying before reproduction?**
+
+### Data points worth flagging for v0.17
+
+- **Children are the bottleneck, not parents.** v0.16's per-parent
+  telemetry shows parents are doing fine — they have multiple births
+  and live ~80 ticks post-birth at low cost. But survivors and
+  post-tick-50 births don't scale with this. The dying agents are
+  the children.
+- **`offspring_start_energy = 30` is a candidate axis.** Children
+  spawn with 30 energy in a chamber where the food cells deliver
+  ~20 each. A child has ~15 ticks of metabolism before starvation;
+  if no food is reachable in that window, the child dies before
+  contributing.
+- **`food_events` identical across all costs (192 / 174).** Same
+  observation as v0.15 — chamber food supply is a static ceiling that
+  no economic intervention can move. Worth verifying via the
+  food_ladder layout's total food count vs the n_ticks * food respawn
+  rate (if any).
+- **tight_gradient's hard zero on `births_after_tick_50`** is now
+  three consecutive experiments deep (v0.14, v0.15, v0.16). The
+  hazard wall geometry is the only candidate left untested. v0.17
+  should sweep `hazard_x_max - hazard_x_min` and
+  `hazard_damage_default` on tight_gradient under the cheapest arm
+  (cost-15).
+- **mean_post_birth_lifespan +68% on food_ladder, +34% on
+  tight_gradient.** The food_ladder cells reach much further into
+  post-birth lifespan with cheap reproduction (81.5 ticks). On
+  tight_gradient the gain is weaker; the hazard wall is killing
+  parents earlier even before children become an issue.
+
+### Recommendation for v0.17
+
+Two parallel axes, each cheap:
+
+1. **`offspring_start_energy` sweep** under reflex-baseline + cost-15
+   (the v0.16 best). 3 values × 2 chambers × 8 seeds = 48 runs. Tests
+   whether child survival is the binding constraint on lineage
+   compounding. Most likely to lift `births_after_tick_50` if true.
+
+2. **`tight_gradient_layout` geometry sweep** (hazard wall width,
+   hazard damage). Tests whether tight_gradient's hard zero is
+   structural. Single-chamber, narrow.
+
+Run them in series, not parallel — (1) is more likely to lift the
+ceiling per the v0.15/v0.16 pattern. If (1) lifts compounding under
+both chambers, geometry is secondary. If (1) doesn't lift, (2) is
+next.
+
+### Determinism note
+
+Arm cost-35 reproduces v0.15 reflex-baseline bit-identically on
+`total_births`, `births_after_tick_50`, `seeds_with_survivors`, and
+`total_food_events`:
+
+- tight_gradient: 47 / 0 / 2 / 192 (matches v0.15 reflex-baseline).
+- food_ladder: 39 / 3 / 4 / 174 (matches v0.15 reflex-baseline on
+  current code; the v0.14-doc-published 35 / 91.7 mismatch flagged in
+  v0.15 §Determinism note still stands).
+
+`still_tick_fraction` differs by ~1.4 pp (cost-35: 92.8% vs v0.15
+reflex-baseline 91.4% on food_ladder). This is an **instrumentation
+change in v0.16's `_read_run_diagnostics`**, not a simulation change.
+v0.14/v0.15 incidentally counted `AgentBorn` (pre-threshold) and
+`AgentDied` events as "other action ticks" via the catch-all `else`
+branch; v0.16 dispatches them explicitly to extract `parent_id` /
+`agent_id` for per-parent telemetry, removing them from the action-
+tick denominator. The change is semantically cleaner (births and
+deaths are not actions) but breaks `still_tick_fraction` parity with
+v0.15 / v0.14 published numbers. The simulation itself is unchanged;
+the bookkeeping bound to RunDiagnostics shifted.
+
 ## References
 
 - [[docs/experiments/fear_hunger_v0.15.md]] — v0.15 results;
