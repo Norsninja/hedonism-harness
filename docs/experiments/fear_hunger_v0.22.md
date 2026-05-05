@@ -581,3 +581,244 @@ test of one mechanism on one chamber.
   on.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework" —
   the substrate axis.
+
+## Results (executed 2026-05-05)
+
+Four arms × food_ladder × eight seeds (1..8) × 200 ticks × 5 founders.
+**32 runs total**, 8.8 seconds end-to-end. Run artifacts persisted at
+`runs/fear-hunger-v0.22-food_ladder/`.
+
+### Headline finding — injury deaths were a net cull above the recycling-supplemented capacity ceiling; band 4 fires
+
+**v0.22 falsifies the recycling-as-effective-influx reading of v0.21's
+food_ladder productivity plateau.** At `hazard_damage=0` (zero injury
+deaths, zero residual recycling), `births_after_tick_50 = 116` —
+substantially **above** the v0.21 saturation plateau (b>50=92) at
+hazard=8. Across the full hazard sweep, productivity is **strictly
+decreasing** in hazard_damage:
+
+| hazard | total_births | b>50 | starv | inj | residual |
+|---:|---:|---:|---:|---:|---:|
+| 0 | **249** | **116** | 206 | 0 | 0.0 |
+| 4 | 152 | 96 | 90 | 14 | 505.8 |
+| 8 | 143 | 92 | 77 | 16 | 624.8 |
+| 12 | 112 | 65 | 67 | 18 | 579.7 |
+
+Decision rule **band 4 (b>50 ≥ 95) AND H11 inverts (arm D b>50 < arm A
+b>50)** fires unambiguously. **Hazard tiles function as population
+control on food_ladder under productive influx; removing them lifts
+productivity above the recycling-supplemented v0.21 anchor by 26%
+(b>50) and 74% (total_births).** The recycling channel was active
+mechanically (residual=505.8/624.8/579.7 at hazard=4/8/12) but its
+contribution was net-negative for productivity: hazard culling
+removed more reproductive capacity than the recycled energy bought.
+
+The v0.21 finding that food_ladder "saturates at 143 / 92" was a
+**recycling-supplemented capacity ceiling**, not a pure geometric
+ceiling. Removing the cull lets the substrate press to a different
+binding regime: pool-bound under starvation pressure
+(arm A: pool_min=0, r_blk=98, starvation_deaths=206) rather than
+recycling-supplemented productivity. The geometric+nutritional
+ceiling on this chamber under transfer + influx=1.0 is at least
+b>50 ≈ 116, possibly higher under different pool/influx
+configurations.
+
+This refines but does not refute the v0.21 chamber-asymmetry framing:
+food_ladder still has lower primary i\* than tight_gradient. v0.22
+shows the *mechanism* of that asymmetry is **not** recycling-as-fuel;
+the asymmetry is more likely chamber geometry interacting with
+starvation/cull dynamics in a way that v0.22 has now opened up for
+direct study.
+
+### Determinism contracts — verified
+
+H13 (arm C, hazard=8) reproduces v0.21 transfer-1500-influx-1.0
+food_ladder **byte-identically** across all 9 anchor metrics:
+
+| metric | v0.21 anchor | v0.22 hazard-8 |
+|---|---:|---:|
+| total_births | 143 | **143** |
+| births_after_tick_50 | 92 | **92** |
+| total_food_events | 674 | **674** |
+| total_food_respawn_events | 501 | **501** |
+| total_pool_respawn_denied | 3 | **3** |
+| total_pool_birth_denied | 0 | **0** |
+| pool_min_observed | 2 | **2.00** |
+| mean_pool_end | 257 | **257.48** |
+| parent_energy_transferred_to_child | 2,145 | **2,145** |
+
+H14 verified by full pytest pass (652 tests, including all v0.19/v0.20/v0.21
+suites unchanged).
+
+### v0.22 sweep — food_ladder
+
+| arm | hazard | births | b>50 | surv | food | respawn | fcpb | pool_min | pool_end | residual | starv | inj | haz_entries | r_blk | b_blk | xfer |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| hazard-0 | 0.0 | **249** | **116** | 8/8 | 670 | 478 | 53.82 | 0 | 38 | **0.0** | **206** | **0** | 200 | 98 | 12 | 3,735 |
+| hazard-4 | 4.0 | 152 | 96 | 8/8 | 680 | 506 | 89.47 | 0 | 213 | 505.8 | 90 | 14 | 186 | 13 | 18 | 2,280 |
+| hazard-8 | 8.0 | 143 | 92 | 8/8 | 674 | 501 | 94.27 | 2 | 257 | 624.8 | 77 | 16 | 120 | 3 | 0 | 2,145 |
+| hazard-12 | 12.0 | 112 | 65 | 8/8 | 544 | 406 | 97.14 | 0 | 547 | 579.7 | 67 | 18 | 58 | 8 | 13 | 1,680 |
+
+`pool_in_ambient_influx = 1,600` per arm (= 1.0 × 200 × 8) — H1
+invariant exact at every arm. `reproduction_heat_loss = 0` per arm
+— H3 exact (transfer mode contract). `births_blocked_by_parent_energy
+= 0` per arm — H4 exact (defensive gate dormant, continuing v0.20/v0.21
+prior). `parent_energy_transferred_to_child + pool_out_child_startup =
+total_births × 30` exact at every arm — H2 (v0.20 H4 invariant) holds.
+
+`seeds_with_survivors = 8/8` across every arm: extinction never fires
+under any hazard level on this chamber + substrate. Population
+collapse is not a v0.22 outcome.
+
+### Hypotheses → outcomes
+
+- **H1.** `pool_in_ambient_influx == 1.0 × executed_ticks × n_seeds`.
+  **Confirmed exactly.** All seeds completed 200 ticks (8/8 surv);
+  in_influx=1,600 per arm.
+- **H2.** v0.20 H4 invariant. **Confirmed exactly** at every arm
+  (xfer + pool_out_child_startup = births × 30).
+- **H3.** `reproduction_heat_loss == 0`. **Confirmed exactly.**
+- **H4.** `births_blocked_by_parent_energy == 0`. **Confirmed
+  exactly.** The defensive parent-energy gate did not fire across any
+  of the 32 runs (continuing the v0.20/v0.21 finding).
+- **H5.** Residual low at hazard=0, materially non-zero at
+  hazard>0. **Confirmed.** hazard=0 → 0.0 (exact); hazard=4/8/12 →
+  505.8 / 624.8 / 579.7 (all materially non-zero). Strict monotonicity
+  is **mildly falsified** at the 8 → 12 step (residual drops
+  624.8 → 579.7) — exactly the soft-monotone case the pre-reg
+  anticipated: at hazard=12 agents avoid hazards more aggressively
+  (haz_entries drops 120 → 58), reducing total injury exposure even
+  though per-injury residual deposits are larger. The mechanism
+  reading is informative, not a hypothesis failure.
+- **H6.** `total_starvation_deaths` non-increasing in hazard_damage.
+  **Confirmed.** 206 → 90 → 77 → 67 (strictly monotone non-increasing).
+- **H7.** Arm A `pool_in_death_residual ≤ 5/seed averaged across 8
+  seeds`. **Confirmed exactly.** Arm A residual = 0.0 (= 0.0/seed).
+  STARVATION-only deaths credit zero residual by construction.
+- **H8.** Arm A b>50 in band 1 (≤ 83) — recycling load-bearing.
+  **Falsified strongly.** Arm A b>50 = 116 (band 4).
+- **H9.** Arm A b>50 in band 3 (91–94) — geometry sufficient.
+  **Falsified strongly.** Arm A b>50 = 116, well above band 3.
+- **H10.** Arm A b>50 in band 4 (≥ 95) — injury-deaths-as-cull.
+  **Confirmed strongly.** Arm A b>50 = 116; total_births = 249
+  (74% above the recycling-supplemented anchor).
+- **H11.** Productivity non-decreasing in hazard_damage if recycling
+  is a fuel. **Inverted.** b>50 strictly *decreases* with
+  hazard_damage: 116 → 96 → 92 → 65. total_births: 249 → 152 → 143
+  → 112. The inversion is the load-bearing falsification of the
+  recycling-as-fuel reading.
+- **H12.** Arm A blocks rise vs arm C if recycling is load-bearing
+  (arm A should fall back into pool-bound binding like influx=0.5).
+  **Partially confirmed but for a different reason than predicted.**
+  Arm A: r_blk=98, b_blk=12 (total=110). Arm C: r_blk=3, b_blk=0
+  (total=3). Arm A blocks DO rise dramatically — but not because
+  recycling was the fuel that prevented blocks at C. Arm A is
+  pool-bound because population pressure is much higher (249 births
+  vs 143 at C → 50% more pool draws), not because recycling is
+  missing. The directional prediction holds; the causal mechanism
+  is different (population pressure vs missing recycling).
+- **H13.** Arm C reproduces v0.21 transfer-1500-influx-1.0
+  food_ladder byte-identically. **Confirmed exactly** — see the
+  Determinism contracts table above.
+- **H14.** v0.19/v0.20/v0.21 contracts unchanged. **Confirmed**
+  by full pytest pass (652 tests).
+
+### Decision rule fired (per pre-reg)
+
+> **Arm A b>50 in band 4 (≥ 95) AND H11 inverts (D < A).** Injury
+> deaths were a net cull above the geometric capacity ceiling.
+> Headline: hazard tiles function as population control on
+> food_ladder under productive influx; removing them lifts
+> productivity above the recycling-supplemented v0.21 anchor.
+
+Both conditions fire. The v0.21 i\* anchor (b>50=85 at influx=0.5)
+is *not* what arm A returns to — arm A presses to b>50=116, far
+above the v0.21 saturation plateau at influx≥1.0 (b>50=92). The
+v0.21 plateau was not a hard chamber-capacity ceiling; it was a
+recycling-supplemented ceiling whose binding constraint was the
+recycling-induced cull.
+
+### Three findings worth flagging for v0.23
+
+1. **The chamber-asymmetry mechanism is now an open question, not a
+   recycling story.** v0.21 reported a 1.0/tick chamber asymmetry
+   (food_ladder primary i\*=0.5/tick vs tight=1.5/tick) with the
+   working hypothesis that hazard-residual recycling supplied
+   ~1.0/tick effective extra energy on food_ladder. v0.22 falsifies
+   that mechanism: at hazard=0 on food_ladder under influx=1.0,
+   productivity *exceeds* the v0.21 saturation plateau by 26%. The
+   chamber asymmetry is real; its mechanism is **not** recycling.
+   Likely candidates: (a) food_ladder's pre-food band lets agents
+   refuel before hazard exposure where tight does not; (b) chamber
+   width / agent-density / spatial distribution effects; (c) the
+   gradient policy's hazard-avoidance behavior interacts with
+   chamber geometry in ways tight_gradient cannot replicate. v0.23
+   could test (a) directly by re-running the v0.21 influx frontier
+   at hazard=0 on both chambers — the asymmetry magnitude under no
+   recycling is the cleanest read.
+
+2. **The hazard=0 substrate is in a new binding regime — pool-bound
+   under starvation pressure.** Arm A: 249 births, 206 starvations,
+   r_blk=98, b_blk=12, pool_min=0, pool_end=38, fcpb=53.82 (well
+   below the v0.18 self-sustaining floor of 45 because births are
+   cheap under transfer mode + recycling-tax-lifted, but food
+   throughput per birth is dropping toward unsustainable). The
+   substrate is reproducing fast, the pool drains fast, and
+   starvation is the dominant cull. **This is a regime v0.18..v0.21
+   never observed.** v0.23 candidates: sweep pool_initial at
+   hazard=0, influx=1.0 to characterise the new cliff; sweep
+   ambient_influx_rate at hazard=0 to find the new productivity
+   transition (likely lower than v0.21's 0.5/tick because no
+   recycling tax to overcome).
+
+3. **Behavioral hazard-avoidance is a non-trivial confound in the
+   recycling channel.** total_hazard_entries: 200 → 186 → 120 → 58
+   across hazard {0, 4, 8, 12}. As damage rises, the gradient
+   policy's avoidance gets more aggressive (the hazard-damage signal
+   is what the policy senses). At hazard=12, agents enter hazards
+   only 58 times across 32 runs — the channel is mechanically
+   thin. The non-monotone residual at hazard=8→12 (624.8 → 579.7)
+   is a direct consequence: fewer entries × deeper bodies = roughly
+   constant total residual. **The recycling channel's effective
+   energy supply saturates at ~600/seed in this layout regardless
+   of damage rate above some threshold.** v0.23+ explorations of
+   hazard parameterisation should track avoidance behavior
+   alongside the channel observables.
+
+### Data points worth flagging for v0.23
+
+- **Reverse the v0.21 chamber-asymmetry hypothesis test under
+  hazard=0.** A focused v0.23 sweep of `ambient_influx_rate ∈
+  {0, 0.5, 1.0, 1.5, 2.0}` at hazard=0 on **both chambers** would
+  isolate the geometry contribution to the asymmetry from the
+  recycling-tax contribution. If food_ladder still has lower
+  primary i\* than tight at hazard=0, geometry is load-bearing on
+  the asymmetry. If the asymmetry collapses (both chambers
+  similar), the v0.21 asymmetry was entirely a recycling-tax
+  artifact.
+- **The fcpb interpretation has a new floor under the recycling-tax-
+  lifted regime.** Arm A fcpb=53.82 (vs 94.27 at hazard=8). Under
+  transfer mode the system-energy per birth is 30 (gap-only); the
+  fcpb floor that's biologically sustainable is roughly 30/0.5 = 60
+  if half the food becomes children's body energy and the rest
+  metabolises. Arm A's 53.82 is right at that boundary — population
+  reproduces faster than food consumption can fund without
+  recycling subsidy. **A long-window (n_ticks > 200) extension at
+  hazard=0 would test whether arm A's substrate is genuinely
+  productive long-run or only over the v0.22 200-tick window.**
+- **Arm A starvation_deaths = 206 vs total_births=249.** ~83% of
+  agents starve over the run; the substrate is cycling agents
+  faster than v0.21 recorded under any condition. v0.23 lineage
+  analysis (grandchildren count, post-birth lifespan) on arm A
+  vs arm C runs would characterise whether the increased
+  productivity is "deeper" (more compounding generations) or
+  "wider" (more shallow first-generation births under hazard
+  removal). Both readings are consistent with b>50 lift; the
+  per-lineage telemetry separates them.
+- **The 92 plateau is no longer a "chamber capacity" ceiling.**
+  v0.21 framed it as such. v0.22 falsifies. v0.23+ should reframe
+  the chamber-capacity question — what *is* the geometric
+  ceiling on food_ladder under transfer mode? Likely much higher
+  than 116 b>50 if the v0.22 substrate is also pool-bound. A
+  pool_initial sweep at hazard=0, influx=1.0 would map the new
+  geometric ceiling once pool is non-binding.
