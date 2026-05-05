@@ -797,6 +797,205 @@ V0_23_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.25 arms — hazard x influx timing-regulation sweep on both chambers.
+# Tests the pool-exhaustion-timing mechanism candidate that emerged from
+# v0.24's diagnostic. Cross-product of hazard ∈ {0, 4, 8, 12} x influx ∈
+# {0.5, 1.0, 1.5} = 12 arms, run on both food_ladder and tight_gradient
+# under PARENT_TRANSFER_POOL_GAP at pool_initial=1500. Same 8 seeds as
+# v0.21/v0.22/v0.23.
+#
+# Pre-committed predictions (see [[docs/experiments/fear_hunger_v0.25.md]]):
+#   - H6: tick-of-peak monotonically decreases as hazard decreases on
+#     both chambers (direct mechanism observable).
+#   - H7: food_ladder b>50 monotone non-increasing in hazard at every
+#     influx (cull-tax dominates throughout).
+#   - H8: tight b>50 non-monotonic in hazard at some influx (cull-tax +
+#     timing penalty net out with an interior optimum).
+#
+# 14 byte-identity anchors built into the grid:
+#   - hazard=0, influx ∈ {0.5, 1.0, 1.5}, both chambers (= V0_23_ARMS B/C/D).
+#   - hazard=8, influx ∈ {0.5, 1.0, 1.5}, both chambers (= V0_21_ARMS B/C/D).
+#   - hazard ∈ {4, 12}, influx=1.0, food_ladder (= V0_22_ARMS hazard-4,
+#     hazard-12).
+# 10 truly-new cells; the remainder reproduce prior aggregates exactly.
+V0_25_ARMS: tuple[Arm, ...] = (
+    # Hazard 0 row (= V0_23_ARMS B/C/D): byte-identity anchors on both chambers.
+    Arm(
+        label="transfer-1500-hzd0-influx-0.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd0-influx-1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd0-influx-1.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+    ),
+    # Hazard 4 row: 1 anchor (food_ladder influx=1.0 = V0_22 hazard-4),
+    # 5 new cells (tight x all 3 influxes; food_ladder x influx ∈ {0.5, 1.5}).
+    Arm(
+        label="transfer-1500-hzd4-influx-0.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=4.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd4-influx-1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=4.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd4-influx-1.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=4.0,
+    ),
+    # Hazard 8 row (= V0_21_ARMS B/C/D): byte-identity anchors on both chambers.
+    Arm(
+        label="transfer-1500-hzd8-influx-0.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd8-influx-1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd8-influx-1.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+    ),
+    # Hazard 12 row: 1 anchor (food_ladder influx=1.0 = V0_22 hazard-12),
+    # 5 new cells.
+    Arm(
+        label="transfer-1500-hzd12-influx-0.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=12.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd12-influx-1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=12.0,
+    ),
+    Arm(
+        label="transfer-1500-hzd12-influx-1.5",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.5,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=12.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
