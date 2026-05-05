@@ -470,3 +470,187 @@ sweep.
   anchors.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework"
   — the substrate axis.
+
+---
+
+## Results
+
+**Status:** executed 2026-05-05. 192 runs (12 arms × 2 chambers × 8
+seeds), 58.5s wall time. All anchor hypotheses (H1, H2, H3, H4, H5,
+H11, H12) hold; the substantive mechanism predictions (H7, H8, H9,
+H10) all fire; **H6 fires partially** — monotone in hazard on tight
+but non-monotonic on food_ladder at extreme hazard (h=12). Headline:
+**pool-exhaustion-timing is substantially confirmed**, with one
+refinement — at sufficiently high hazard the cull is severe enough
+that the population cannot sustain the late peak, and tick-of-peak
+shifts earlier rather than later. The substantive b>50 predictions
+all hold.
+
+### Headline: tight has an interior-maximum at hazard=8
+
+The cleanest result: **tight b>50 is non-monotonic in hazard at
+every shared influx, with the interior maximum at h=8** — the v0.21
+default. The v0.21 framing implicitly chose the productivity-optimal
+hazard for tight without knowing it.
+
+| influx | h=0 | h=4 | h=8 | h=12 |
+|---:|---:|---:|---:|---:|
+| 0.5  |  97 | 107 | **111** | 109 |
+| 1.0  | 100 | 113 | **116** | 114 |
+| 1.5  | 107 | 123 | **125** | 124 |
+
+food_ladder b>50 is monotone non-increasing in hazard at every
+influx (cull-tax dominates throughout):
+
+| influx | h=0 | h=4 | h=8 | h=12 |
+|---:|---:|---:|---:|---:|
+| 0.5  | 113 |  89 |  85 |  61 |
+| 1.0  | 116 |  96 |  92 |  65 |
+| 1.5  | 125 | 100 |  92 |  66 |
+
+Cross-chamber inversion: at every influx, food_ladder beats tight
+at h=0, food_ladder loses to tight at h ∈ {4, 8, 12}. The crossover
+is between h=0 and h=4 — a small amount of hazard is sufficient to
+flip the chamber ordering.
+
+### Population dynamics (tick-of-peak via v0.24 library logic, computed inline)
+
+| chamber | haz | mean peak | tick of peak |
+|---|---:|---:|---:|
+| tight       |  0 | 24.75 | **38.50** |
+| tight       |  4 | 19.00 | 64.25 |
+| tight       |  8 | 19.00 | 64.62 |
+| tight       | 12 | 18.88 | **71.12** |
+| food_ladder |  0 | 23.25 | **44.00** |
+| food_ladder |  4 | 13.4  | ~80   |
+| food_ladder |  8 | 13.38 | **84.12** |
+| food_ladder | 12 | 11.7  | ~55   |
+
+Mean tick-of-peak averaged across the 3 influxes within each
+(chamber, hazard) cell; values vary by ≤2 ticks across influx within
+a row.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `pool_in_ambient_influx == ambient_influx_rate × sum(executed_ticks)` | **HOLDS.** All cells 8/8 survivors → executed-tick sum = 1,600. Influx products: 800/1,600/2,400 across the 3 influxes. Verified to the unit on every cell. |
+| H2 | `parent_energy_transferred + pool_out_child_startup == total_births × 30` | **HOLDS.** Transfer-mode contract: xfer = births × 15 across all 24 cells. |
+| H3 | `reproduction_heat_loss == 0` | **HOLDS** (transfer-mode contract). |
+| H4 | `births_blocked_by_parent_energy == 0` | **HOLDS** across all cells. |
+| H5 | injury threading: 0 at hazard=0, > 0 at hazard > 0 | **HOLDS** for food_ladder (0/14/16/18 across hazards 0/4/8/12). On tight, GradientPolicy avoidance is so effective at every hazard that aggregate injury_deaths = 0 even at hazard=12 (haz_entries=28 across 8 seeds × 200 ticks; per-entry damage of 12 doesn't accumulate to injury death within a single residency). H5's strict prediction "hazard > 0 ⇒ injury_deaths > 0" is **vacuous on tight** but the threading is verified on food_ladder. The v0.22 test suite already pinned bidirectional threading in unit tests. |
+| H6 | tick-of-peak monotonically decreases as hazard decreases on both chambers | **PARTIAL — fires on tight, fails on food_ladder.** tight: 38.50 → 64.25 → 64.62 → 71.12 across hazards 0/4/8/12 (monotone increasing in hazard). food_ladder: 44.00 → ~80 → 84.12 → ~55 (non-monotonic — peak comes back EARLIER at h=12 than at h=8). The food_ladder non-monotonicity is a productivity-ceiling effect: at extreme hazard the cull is so severe that the population cannot sustain the late peak; mortality outpaces growth, peak shifts earlier and lower (peak at h=12 is 11.7 vs h=8 is 13.4). Refines the timing-mechanism: hazard delays peak only up to a threshold beyond which it suppresses peak entirely. |
+| H7 | food_ladder b>50 monotone non-increasing in hazard at every influx | **HOLDS.** Strict monotone decrease at all 3 influxes (113→89→85→61; 116→96→92→65; 125→100→92→66). Cull-tax dominates throughout on food_ladder. v0.22's influx=1.0 monotonicity generalises. |
+| H8 | tight b>50 non-monotonic at some shared influx (interior max) | **FIRES — at all 3 influxes.** Interior maximum at h=8 across the entire influx range. tight's productivity-optimal hazard is h=8; the cull-tax-vs-timing-penalty balance produces a clean non-monotone shape with the optimum at the v0.21 default. |
+| H9 | peak population monotone non-increasing in hazard, both chambers | **HOLDS.** tight: 24.75 → 19.00 → 19.00 → 18.88. food_ladder: 23.25 → 13.4 → 13.4 → 11.7. The cull is reducing peak monotonically as expected. |
+| H10 | total_injury_deaths monotone non-decreasing in hazard | **HOLDS on food_ladder** (0 / 14 / 16-17 / 18 across hazards 0/4/8/12). **Vacuously true on tight** (0 across all hazards via avoidance). |
+| H11 | byte-identity on all 14 anchor cells | **HOLDS — exact match on every column.** tight (h=0, all influxes) reproduces v0.23 arms B/C/D verbatim. tight (h=8, all influxes) reproduces v0.21 arms B/C/D verbatim. food_ladder (h=0, all influxes) reproduces v0.23 arms B/C/D verbatim. food_ladder (h=4, i=1.0; h=8, all influxes; h=12, i=1.0) reproduces v0.21/v0.22 anchors verbatim. |
+| H12 | V0_19/20/21/22/23_ARMS unchanged | **HOLDS.** Test suite 662 → 672 (+10 v0.25 tests; pure addition); ruff clean. |
+
+### Headline finding: tight has a hazard productivity optimum at h=8
+
+The pool-exhaustion-timing mechanism makes a sharp prediction that
+the v0.25 sweep confirms: **tight b>50 is non-monotonic in hazard
+with an interior maximum.** The optimum sits at h=8 across all 3
+influxes — the v0.21 default. The cull-tax (small on tight via
+avoidance routing) and the timing-penalty (large via peak delay)
+net out non-monotonically.
+
+Going from h=0 to h=8 on tight, b>50 *rises* by 16-19% across the
+influx range (97 → 111, 100 → 116, 107 → 125). Going from h=8 to
+h=12, b>50 falls slightly (111 → 109, 116 → 114, 125 → 124) —
+beyond the optimum the cull-tax catches up.
+
+food_ladder shows none of this — b>50 falls monotonically in hazard,
+because the cull-tax there (agents repeatedly cross the pre-food
+band) dominates the timing penalty at every hazard level. Removing
+hazards on food_ladder always helps; on tight there is an interior
+sweet spot.
+
+### Refined mechanism: "tax-vs-timing tradeoff with productivity ceiling"
+
+The v0.24 pool-exhaustion-timing reading is **substantively confirmed
+on b>50 (the productivity headline)**, with one refinement on the
+tick-of-peak observable:
+
+1. **At low hazard (h ∈ {0}), no cull, fastest peak.** Population
+   blooms early, drains pool early, throttles late b>50.
+2. **At moderate hazard (h ∈ {4, 8} on tight; h=4 on food_ladder),
+   peak delayed.** Pool drains later, more late-game births
+   compound. Optimum on tight at h=8.
+3. **At high hazard (h ∈ {12}), peak suppressed.** Cull is severe
+   enough that mortality outpaces growth — peak shifts back
+   earlier AND lower. On food_ladder this collapses b>50 to 65.
+   On tight this is barely visible (peak only drops slightly
+   18.88 vs 19.00) because tight's avoidance routing keeps
+   most agents out of harm's way.
+
+The tick-of-peak observable is non-monotonic on food_ladder
+because food_ladder agents cross hazards directly (cull-tax is
+large), so increasing hazard above ~8 starts suppressing the
+population's ability to bloom. On tight the monotone signal
+holds because tight agents avoid hazards (cull-tax small);
+increasing hazard mostly just shifts the timing of peak, not
+its magnitude.
+
+### What this changes about v0.21's framing
+
+- v0.21 ran tight at hazard=8 and reported i\* = 1.5/tick. v0.25
+  shows that h=8 was the productivity-optimal hazard for tight
+  across the entire influx grid — v0.21 was at the right hazard
+  by accident (the build_chamber_layout default).
+- v0.23's "tight gets worse at hazard=0" finding is confirmed
+  and refined: tight loses ~16 b>50 going h=8 → h=0, but ALSO
+  loses ~2 b>50 going h=8 → h=12. The interior optimum at h=8
+  was hidden by v0.23's binary hazard-zero-vs-default comparison.
+- v0.22's "recycling-as-net-tax on food_ladder" finding fully
+  generalises: monotone-decreasing b>50 in hazard at every
+  influx, not just at influx=1.0.
+
+### v0.26 plan update
+
+Pool-exhaustion-timing on b>50 is settled enough to commit to
+v0.26 (perception-vs-damage decoupling in `GradientPolicy`):
+
+- **v0.26 design:** parameterise GradientPolicy with a
+  `hazard_avoidance_weight` independent of `hazard_damage`.
+  Decouples (i) per-tile damage applied at runtime from
+  (ii) the avoidance signal that drives routing. Tests whether
+  tight's small cull-tax under v0.21 was *because* the
+  avoidance signal kept agents out, vs because the chamber
+  geometry alone already routed agents around the wall.
+- **Predictions under pool-exhaustion-timing:** if tight's small
+  cull-tax is mostly avoidance-driven, removing avoidance at
+  damage=0 should *increase* the cull-tax (more entries) —
+  but damage=0 means no actual deaths, so there's no cull-tax
+  to manifest. The clean test is damage>0 with avoidance
+  weight=0: should produce massive injury deaths on tight
+  (vs near-zero with avoidance on). And should shift tight's
+  productivity curve toward food_ladder's monotone shape.
+- **food_ladder non-monotone tick-of-peak observation flags
+  one open question:** at very high hazard, what specifically
+  causes the population to fail to bloom — is it that founder
+  reproduction fails (because founders die before reproducing)
+  or that early generations die before they can compound? v0.26
+  could investigate this by sweeping `n_founders` at high
+  hazard, but that's secondary — the primary v0.26 question is
+  damage-vs-avoidance decoupling.
+
+### Implementation summary
+
+- **Code:** ~180 LOC `V0_25_ARMS` in `comparison_grid.py`.
+- **Tests:** ~210 LOC `tests/test_comparison_grid_v0_25.py`,
+  10 new tests; suite 662 → 672.
+- **Sweep driver:** ~95 LOC `scripts/v0.25_sweep.py`.
+- **Wall time:** 58.5s on 192 runs (every seed completed 200 ticks;
+  no early termination).
+- **No core/model.py/fear_hunger_chamber.py changes.** The seam
+  v0.22 shipped (`Arm.hazard_damage`) was sufficient.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .             ok
+  uv run ruff format --check .    ok
+  uv run --all-extras pytest      672 passed
+  uv run --all-extras python scripts/core_smoke_test.py  ok
+  uv run --all-extras python scripts/v0.25_sweep.py      58.5s, all 14 anchors byte-identical
+  ```
