@@ -295,10 +295,25 @@ V0_18_ARMS: tuple[Arm, ...] = (
 # v0.19 arms — strict mass-energy conservation. Builds on v0.18's K=50
 # productive cooldown and adds a finite ambient energy pool (respawn +
 # child-startup pool-funded; metabolism + parent repro = heat loss;
-# death residual recycles). Seven arms: 4 closed-pool sizes at K=50
-# (A inf-pool reference, B/C/D 5K/15K/30K), 1 K=100 cooldown hedge at
-# 15K, 2 open-ecology arms at influx 20/60 per tick (low-influx and
-# v0.18-equivalent flux). The ``inf-pool`` arm reproduces v0.18 K-50
+# death residual recycles).
+#
+# Brackets are anchored on the per-RUN demand observed empirically
+# under v0.18 K-50: ~11 energy/tick total drain (7.2 respawn + 3.8
+# child startup) on tight_gradient, ~9/tick on food_ladder, with
+# near-zero death recycling on tight (starvation dominates) and
+# ~80 energy/seed recycling on food_ladder (hazard injuries). The
+# initial v0.19 sweep (commit b6a43c5) ran with brackets
+# {5K, 15K, 30K} that were 8x too generous — every closed-pool arm
+# trivially had budget for the full 200-tick run, so no arm
+# stressed the conservation question. The corrected brackets below
+# bracket the 200-tick demand from below (500 starves early),
+# at-target (1500 sits near 200-tick demand of ~2200), and above
+# (3000 has comfortable margin).
+#
+# Seven arms: 4 closed-pool sizes at K=50 (A inf-pool reference,
+# B/C/D 500/1500/3000), 1 K=100 cooldown hedge at 1500, 2 open-
+# ecology arms at influx 2/7 per tick (low-influx and v0.18-
+# equivalent flux). The ``inf-pool`` arm reproduces v0.18 K-50
 # bit-identically (energy_pool_initial=None disables the pool path).
 # See [[docs/experiments/fear_hunger_v0.19.md]].
 V0_19_ARMS: tuple[Arm, ...] = (
@@ -315,7 +330,7 @@ V0_19_ARMS: tuple[Arm, ...] = (
         ambient_influx_rate=None,
     ),
     Arm(
-        label="closed-5K",
+        label="closed-500",
         policy_factory=_gradient_policy_factory,
         auto_reproduction=True,
         memory_type=None,
@@ -323,11 +338,11 @@ V0_19_ARMS: tuple[Arm, ...] = (
         energy_threshold=50.0,
         offspring_start_energy=30.0,
         food_respawn_cooldown=50,
-        energy_pool_initial=5_000.0,
+        energy_pool_initial=500.0,
         ambient_influx_rate=0.0,
     ),
     Arm(
-        label="closed-15K",
+        label="closed-1500",
         policy_factory=_gradient_policy_factory,
         auto_reproduction=True,
         memory_type=None,
@@ -335,11 +350,11 @@ V0_19_ARMS: tuple[Arm, ...] = (
         energy_threshold=50.0,
         offspring_start_energy=30.0,
         food_respawn_cooldown=50,
-        energy_pool_initial=15_000.0,
+        energy_pool_initial=1_500.0,
         ambient_influx_rate=0.0,
     ),
     Arm(
-        label="closed-30K",
+        label="closed-3000",
         policy_factory=_gradient_policy_factory,
         auto_reproduction=True,
         memory_type=None,
@@ -347,11 +362,11 @@ V0_19_ARMS: tuple[Arm, ...] = (
         energy_threshold=50.0,
         offspring_start_energy=30.0,
         food_respawn_cooldown=50,
-        energy_pool_initial=30_000.0,
+        energy_pool_initial=3_000.0,
         ambient_influx_rate=0.0,
     ),
     Arm(
-        label="closed-15K-K100",
+        label="closed-1500-K100",
         policy_factory=_gradient_policy_factory,
         auto_reproduction=True,
         memory_type=None,
@@ -359,7 +374,7 @@ V0_19_ARMS: tuple[Arm, ...] = (
         energy_threshold=50.0,
         offspring_start_energy=30.0,
         food_respawn_cooldown=100,
-        energy_pool_initial=15_000.0,
+        energy_pool_initial=1_500.0,
         ambient_influx_rate=0.0,
     ),
     Arm(
@@ -371,8 +386,8 @@ V0_19_ARMS: tuple[Arm, ...] = (
         energy_threshold=50.0,
         offspring_start_energy=30.0,
         food_respawn_cooldown=50,
-        energy_pool_initial=15_000.0,
-        ambient_influx_rate=20.0,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=2.0,
     ),
     Arm(
         label="open-equiv",
@@ -383,8 +398,8 @@ V0_19_ARMS: tuple[Arm, ...] = (
         energy_threshold=50.0,
         offspring_start_energy=30.0,
         food_respawn_cooldown=50,
-        energy_pool_initial=15_000.0,
-        ambient_influx_rate=60.0,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=7.0,
     ),
 )
 

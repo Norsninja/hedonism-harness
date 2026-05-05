@@ -1,7 +1,7 @@
 """v0.19 strict-conservation sweep driver.
 
-Runs ``V0_19_ARMS`` (7 arms) × 2 chambers (tight_gradient, food_ladder)
-× 8 seeds = 112 runs, persisting per-arm comparison.csv into
+Runs ``V0_19_ARMS`` (7 arms) x 2 chambers (tight_gradient, food_ladder)
+x 8 seeds = 112 runs, persisting per-arm comparison.csv into
 ``runs/fear-hunger-v0.19-{chamber}/``. Pre-reg:
 ``docs/experiments/fear_hunger_v0.19.md``.
 

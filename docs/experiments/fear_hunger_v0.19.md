@@ -251,53 +251,87 @@ budget), and two open-ecology comparison arms.
 | arm | tier | K | pool_initial | influx | label |
 |---|---|---:|---:|---:|---|
 | A | reference | 50 | ∞ (None) | 0 | inf-pool (v0.18 K-50 bit-identity) |
-| B | closed | 50 | 5,000 | 0 | closed-5K (decay-fast probe) |
-| C | closed | 50 | 15,000 | 0 | closed-15K (productive guess) |
-| D | closed | 50 | 30,000 | 0 | closed-30K (comfortable margin) |
-| E | closed | 100 | 15,000 | 0 | closed-15K-K100 (cooldown hedge) |
-| F | open | 50 | 15,000 | 20 | open-low (low-influx rescue probe) |
-| G | open | 50 | 15,000 | 60 | open-equiv (v0.18-equivalent flux) |
+| B | closed | 50 | 500 | 0 | closed-500 (decay-fast probe) |
+| C | closed | 50 | 1,500 | 0 | closed-1500 (productive guess; near 200-tick demand) |
+| D | closed | 50 | 3,000 | 0 | closed-3000 (comfortable margin) |
+| E | closed | 100 | 1,500 | 0 | closed-1500-K100 (cooldown hedge) |
+| F | open | 50 | 1,500 | 2 | open-low (low-influx rescue probe) |
+| G | open | 50 | 1,500 | 7 | open-equiv (v0.18-equivalent flux) |
 
 `offspring_start_energy=30`, `energy_cost=15`, `energy_threshold=50`,
 `unbounded_mutation=True`, reflex-baseline policy, `n_ticks=200`,
 `n_founders=5`, chamber layouts unchanged from v0.18.
 
-### Demand math (sanity check on the pool brackets)
+### Demand math (corrected against v0.19 first-sweep telemetry)
 
-Under v0.18 K-50 tight_gradient (the productive arm v0.19 will most
-directly translate), four flows determine pool demand over 200 ticks:
+The original demand math in this pre-reg (initial commit `5a37e64`)
+multiplied the per-arm aggregate flows from v0.18 by treating them
+as per-run flows, leading to brackets {5K, 15K, 30K} that were ~8x
+too generous. The first v0.19 sweep (commit `b6a43c5`) confirmed
+this directly: at the original 5K bracket, no closed-pool arm fired
+a single block, and `pool_end` averaged ~2,795 — meaning the system
+drained only 2,205 energy per run, not the 17,140 the pre-reg cited.
+The brackets above are the corrected values.
 
-| flow | magnitude (tight K-50) |
+The v0.18 results table reports per-arm aggregates (8 seeds summed).
+Pool is per-run, so demand math must divide by `n_seeds`:
+
+| flow | per-RUN magnitude (tight K-50) |
 |---:|---:|
-| respawn out (576 events × 20) | 11,520 |
-| child startup out (204 births × 30) | 6,120 |
-| parent repro cost (heat loss; not pool draw) | 3,060 |
-| metabolism (heat loss; not pool draw) | ~600 |
-| death residual in (~50 non-starv × ~10) | ~−500 (credits in, reducing net demand) |
-| **net pool demand** | **~17,140** |
+| respawn out (576 / 8 = 72 events × 20) | 1,440 |
+| child startup out (204 / 8 = 25.5 births × 30) | 765 |
+| parent repro cost (heat loss; not pool draw) | ~380 |
+| metabolism (heat loss; not pool draw) | ~75 |
+| death residual in (per-RUN) | ~0 on tight (starvation dominates); ~80 on food_ladder |
+| **net per-run pool demand (tight K-50)** | **~2,205** |
+| **net per-run pool demand (food_ladder K-50)** | **~1,716** |
 
-5K starves quickly (decay-before-compounding probe). 15K is the
-productive guess — slightly under 200-tick demand, expected to
-sustain compounding through most of the run before pool exhaustion
-forces stagnation. 30K provides comfortable margin and may sustain
-through the full window (categorical finding). ∞ reproduces v0.18
-K-50 exactly.
+500 starves early (~200 ticks ÷ 11/tick drain rate ≈ 45-tick budget,
+well under the 200-tick observation window). 1500 sits near demand
+(~70% through the run before exhaustion under uncorrected drain
+rate); the system self-throttles as the pool depletes, so actual
+exhaustion may come later. 3000 has comfortable margin and may
+sustain the full window. ∞ reproduces v0.18 K-50 exactly (verified
+in first sweep: 204 births / 130 b>50 / fcpb=75.29 on tight,
+matching v0.18 K-50 to the digit).
 
-### Influx rate derivation (open arms)
+### Influx rate derivation (open arms; corrected)
 
-v0.18 K-50 productive-arm respawn flux:
+v0.18 K-50 productive-arm respawn flux **per run** (not per arm):
 
-- tight_gradient: 576 events × 20 / 200 ticks = **57.6 energy/tick**
-- food_ladder: 504 events × 20 / 200 ticks = **50.4 energy/tick**
+- tight_gradient: 1,440 / 200 ticks = **7.2 energy/tick** per run
+- food_ladder: 1,260 / 200 ticks = **6.3 energy/tick** per run
 
-Average ~54/tick across productive K-50 arms. Open-equiv arm uses
-**60/tick** (rounded up; bracket the v0.18-productive flux from
-above). Open-low uses **20/tick** (well below v0.18 productive
-flux, tests whether *any* influx rescues a closed pool).
+Average ~6.75/tick. Open-equiv arm uses **7/tick** (matches v0.18
+productive per-run flux). Open-low uses **2/tick** (well below
+productive demand of ~11/tick total drain, tests whether *any*
+influx rescues a closed pool).
 
-Both open arms share `pool_initial=15K` to isolate influx
-contribution from initial budget — the comparison "C closed-15K vs
+Both open arms share `pool_initial=1500` to isolate influx
+contribution from initial budget — the comparison "C closed-1500 vs
 F open-low vs G open-equiv" cleanly separates the influx variable.
+
+### v0.19 first-sweep finding: bit-identity holds; pool brackets needed rescaling
+
+The first v0.19 sweep (commit `b6a43c5`) confirmed every bit-
+identity contract pre-committed in the spec:
+
+- inf-pool tight_gradient reproduced v0.18 K-50 tight exactly
+  (204 / 130 / 8/8 surv / 768 food / 576 respawn / fcpb=75.29).
+- inf-pool food_ladder reproduced v0.18 K-50 food_ladder exactly
+  (143 / 92 / 8/8 / 677 / 504 / fcpb=94.69).
+- closed-1500-K100 (now closed-1500-K100) reproduced v0.18 K-100
+  exactly (150 / 76 tight; 88 / 37 food_ladder).
+
+Every pool flow accumulator behaved as designed. The only defect was
+the bracket scaling. This sweep is the corrected re-run.
+
+A secondary first-sweep finding worth flagging: **death residual is
+near-zero on tight_gradient because starvation dominates** (every
+death is `energy <= 0` → credit 0). On food_ladder, hazard-injury
+deaths credit ~80 energy/seed back to the pool. Conservation
+recycling is therefore chamber-asymmetric, which v0.19's results
+will quantify.
 
 ## Pre-registered hypotheses
 
@@ -314,10 +348,10 @@ Two-tier structure consistent with v0.15 / v0.16 / v0.17 / v0.18:
   out-flow); smaller pools decay faster. If H1 fails the pool path is
   broken.
 - **H2.** Open-ecology arms (F, G) show smaller `pool_initial −
-  pool_end` than closed-pool arm C (same pool_initial=15K). Influx
+  pool_end` than closed-pool arm C (same pool_initial=1500). Influx
   partially or fully balances heat loss.
 - **H3.** `pool_births_blocked > 0` under at least the smallest
-  closed-pool arm (B, closed-5K). Direct telemetry of pool
+  closed-pool arm (B, closed-500). Direct telemetry of pool
   exhaustion blocking respawns. **Cautious in absolute magnitude.**
 - **H4.** `births_blocked_by_empty_pool > 0` under at least one
   closed-pool arm (B or C). Direct telemetry of pool exhaustion
@@ -325,21 +359,21 @@ Two-tier structure consistent with v0.15 / v0.16 / v0.17 / v0.18:
 
 ### Cautious form (the ceiling lifts under conservation)
 
-- **H5.** `births_after_tick_50` lifts at closed-30K (D) vs closed-5K
-  (B) on at least one chamber. **Cautious.** The decay-fast 5K arm
-  may produce nearly zero compounding; the 30K arm should clear v0.14-
+- **H5.** `births_after_tick_50` lifts at closed-3000 (D) vs closed-500
+  (B) on at least one chamber. **Cautious.** The decay-fast 500 arm
+  may produce nearly zero compounding; the 3000 arm should clear v0.14-
   v0.16 baseline ceilings if the substrate compounds at all under
   conservation.
 - **H6.** `food_consumed_per_birth` clears the 45-energy
-  self-sustaining floor at closed-30K (D) on at least one chamber.
+  self-sustaining floor at closed-3000 (D) on at least one chamber.
   **Cautious.** This is the strictest test of "the substrate is
   paying for births with food under conservation." If H6 fails the
   substrate is generating phantom births or pool exhaustion is
   artificially capping fcpb interpretation.
-- **H7.** `mean_grandchildren_per_seed` rises at closed-30K (D) vs
-  closed-5K (B) on both chambers. The direct compounding metric.
-- **H8.** `seeds_with_survivors` rises at closed-30K (D) vs
-  closed-5K (B) on at least one chamber.
+- **H7.** `mean_grandchildren_per_seed` rises at closed-3000 (D) vs
+  closed-500 (B) on both chambers. The direct compounding metric.
+- **H8.** `seeds_with_survivors` rises at closed-3000 (D) vs
+  closed-500 (B) on at least one chamber.
 - **H9.** Open-equiv (G, influx=60/tick) reaches v0.18 K-50
   `births_after_tick_50` levels (within ~25%). **Bridge hypothesis.**
   If G reproduces v0.18 K-50, the conservation framing has a
@@ -428,7 +462,7 @@ high-value as the next slice; if not, (c) is incremental.
 
 ## Decision rules
 
-- **Closed-30K (D) clears H5/H6/H7 on both chambers AND open-equiv
+- **Closed-3000 (D) clears H5/H6/H7 on both chambers AND open-equiv
   (G) reproduces v0.18 K-50 (H9).** The substrate compounds under
   conservation; the bridge to v0.18 holds. **Headline finding: the
   substrate compounds under strict mass-energy conservation given
@@ -443,7 +477,7 @@ high-value as the next slice; if not, (c) is incremental.
   required steady state; influx mechanism interacts badly with
   population dynamics. v0.20 sweeps influx rate densely.
 
-- **D fails H5/H6 even with 30K initial budget.** The substrate
+- **D fails H5/H6 even with 3000 initial budget.** The substrate
   does not compound under heat-loss conservation in the 200-tick
   window. Two sub-cases:
   - `pool_births_blocked` and `births_blocked_by_empty_pool` are
@@ -453,12 +487,12 @@ high-value as the next slice; if not, (c) is incremental.
     fails; the bug is elsewhere (metabolism, hazard interaction,
     population dynamics under decay). v0.20 reframes.
 
-- **B (closed-5K) sustains compounding through the window with
+- **B (closed-500) sustains compounding through the window with
   `pool_end > 0`.** The demand math is wrong — the substrate is
   cheaper than v0.18 K-50 implied. Worth investigating but not
   blocking; recompute demand from v0.19 actual flows.
 
-- **D (closed-30K) shows lower compounding than C (closed-15K).**
+- **D (closed-3000) shows lower compounding than C (closed-1500).**
   Non-monotonic shape on the pool-size axis (parallel to v0.18
   K-20 over-saturation). Interpretation: large pool floods refills,
   metabolic overhead dominates, late-run reproduction concentrates

@@ -49,10 +49,10 @@ def test_v0_19_arms_have_expected_labels() -> None:
     labels = [arm.label for arm in V0_19_ARMS]
     assert labels == [
         "inf-pool",
-        "closed-5K",
-        "closed-15K",
-        "closed-30K",
-        "closed-15K-K100",
+        "closed-500",
+        "closed-1500",
+        "closed-3000",
+        "closed-1500-K100",
         "open-low",
         "open-equiv",
     ]
@@ -68,31 +68,38 @@ def test_v0_19_inf_pool_arm_is_no_pool_arm() -> None:
 
 
 def test_v0_19_closed_arms_have_finite_pool_no_influx() -> None:
-    closed_5k = next(arm for arm in V0_19_ARMS if arm.label == "closed-5K")
-    closed_15k = next(arm for arm in V0_19_ARMS if arm.label == "closed-15K")
-    closed_30k = next(arm for arm in V0_19_ARMS if arm.label == "closed-30K")
-    assert closed_5k.energy_pool_initial == 5_000.0
-    assert closed_15k.energy_pool_initial == 15_000.0
-    assert closed_30k.energy_pool_initial == 30_000.0
-    for arm in (closed_5k, closed_15k, closed_30k):
+    """Brackets anchor on the empirically-observed per-RUN drain of
+    ~2,200 energy at v0.18 K-50 tight_gradient: 500 starves early,
+    1500 sits near demand, 3000 has comfortable margin."""
+    closed_500 = next(arm for arm in V0_19_ARMS if arm.label == "closed-500")
+    closed_1500 = next(arm for arm in V0_19_ARMS if arm.label == "closed-1500")
+    closed_3000 = next(arm for arm in V0_19_ARMS if arm.label == "closed-3000")
+    assert closed_500.energy_pool_initial == 500.0
+    assert closed_1500.energy_pool_initial == 1_500.0
+    assert closed_3000.energy_pool_initial == 3_000.0
+    for arm in (closed_500, closed_1500, closed_3000):
         assert arm.ambient_influx_rate == 0.0
         assert arm.food_respawn_cooldown == 50
 
 
 def test_v0_19_k100_hedge_arm_has_higher_cooldown() -> None:
-    hedge = next(arm for arm in V0_19_ARMS if arm.label == "closed-15K-K100")
+    hedge = next(arm for arm in V0_19_ARMS if arm.label == "closed-1500-K100")
     assert hedge.food_respawn_cooldown == 100
-    assert hedge.energy_pool_initial == 15_000.0
+    assert hedge.energy_pool_initial == 1_500.0
     assert hedge.ambient_influx_rate == 0.0
 
 
 def test_v0_19_open_arms_have_influx() -> None:
+    """Influx rates anchored on v0.18 K-50 productive per-RUN flux
+    (~7 energy/tick): open-low at 2/tick (well below productive
+    demand of ~11/tick), open-equiv at 7/tick (matches v0.18
+    productive flux per run)."""
     low = next(arm for arm in V0_19_ARMS if arm.label == "open-low")
     eq = next(arm for arm in V0_19_ARMS if arm.label == "open-equiv")
-    assert low.ambient_influx_rate == 20.0
-    assert eq.ambient_influx_rate == 60.0
+    assert low.ambient_influx_rate == 2.0
+    assert eq.ambient_influx_rate == 7.0
     for arm in (low, eq):
-        assert arm.energy_pool_initial == 15_000.0
+        assert arm.energy_pool_initial == 1_500.0
         assert arm.food_respawn_cooldown == 50
 
 
