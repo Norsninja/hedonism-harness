@@ -154,21 +154,36 @@ event-block counters (`total_pool_respawn_denied`,
 
 ### Determinism — endpoints anchor against v0.20
 
-Two arms in V0_21_ARMS are deliberate byte-identical reproductions of
-v0.20 sweep arms:
+Two arms in V0_21_ARMS reproduce v0.20 sweep arms. The anchor strength
+differs between them and across chambers — we distinguish **byte-
+identity** (event-stream + aggregate metrics match exactly) from
+**semantic regression** (aggregate metrics match exactly; event-stream
+match is not required because v0.20 itself has a known timing
+perturbation on the arm/chamber pair):
 
-- **A (transfer-1500-influx-0)** must reproduce v0.20 transfer-1500
-  byte-identically on per-tick agent state and per-flow pool telemetry
-  on both chambers (the v0.20 sweep already verified that
-  `ambient_influx_rate=0` is bit-identical to `ambient_influx_rate=0.0`
-  by construction; this serves as a regression detector for any
-  v0.21-introduced wiring error).
-- **E (transfer-1500-influx-2)** must reproduce v0.20 transfer-open-low
-  byte-identically on per-tick agent state and per-flow pool
-  telemetry on both chambers.
+- **A (transfer-1500-influx-0): byte-identity anchor on both chambers.**
+  `ambient_influx_rate=0` is bit-identical to v0.20 transfer-1500's
+  `ambient_influx_rate=0.0` by construction — the influx phase is a
+  no-op when the rate is zero. Per-tick agent state, per-flow pool
+  telemetry, and the full event stream must match.
+- **E (transfer-1500-influx-2): byte-identity anchor on food_ladder;
+  semantic-regression anchor on tight_gradient.** v0.20 transfer-open-
+  low food_ladder produced no pool blocks anywhere (full byte-
+  identity); v0.20 transfer-open-low tight produced 3 r_blk + 9 b_blk
+  during the run, perturbing birth/respawn timing while still yielding
+  identical final population metrics. Arm E's tight chamber must match
+  v0.20 transfer-open-low tight on **aggregate metrics only**:
+  `total_births`, `births_after_tick_50`, `seeds_with_survivors`,
+  `total_food_events`, `total_food_respawn_events`,
+  `total_pool_respawn_denied`, `total_pool_birth_denied`,
+  `pool_out_respawn`, `pool_out_child_startup`,
+  `pool_in_death_residual`, `pool_min`, `pool_end`,
+  `parent_energy_transferred_to_child`, `reproduction_heat_loss`.
+  Event-stream byte identity is **not** required on tight (v0.20 did
+  not establish it).
 
-Failure of either anchor indicates an unintended wiring change between
-v0.20 and v0.21.
+Failure of either anchor at the appropriate strength indicates an
+unintended wiring change between v0.20 and v0.21.
 
 ## Arms
 
@@ -232,6 +247,39 @@ at influx ≈ 1.0–1.5/tick (i.e. lower than tight's predicted ~1.5–2.0).
 - `parent_energy_transferred_to_child` — must equal
   `births × reproduction_cost` per arm (the v0.20 H4 invariant).
 
+### Operational definitions — pre-committed
+
+The frontier hypotheses below all reference a numerical
+"productivity transition" that requires a hard pre-committed metric
+to interpret cleanly. Two are pinned:
+
+- **Primary i\***: per chamber, the **lowest `ambient_influx_rate` at
+  which `births_after_tick_50` reaches ≥ 90% of arm E's
+  `births_after_tick_50` on that chamber**. Anchored on v0.20:
+  - tight i_E_b50 = 130 → primary i* threshold = 117.
+  - food_ladder i_E_b50 = 92 → primary i* threshold = 83.
+  i* is defined to be the smallest influx in {0, 0.5, 1.0, 1.5, 2.0}
+  whose b>50 clears the threshold; if no arm clears it, i* is
+  recorded as `> 2.0` (the v0.20 endpoint already cleared 100%, so
+  this fallback should not fire).
+- **Secondary i\***: per chamber, the **lowest `ambient_influx_rate`
+  at which `total_births` reaches ≥ 90% of arm E's `total_births`
+  on that chamber**. Anchored on v0.20:
+  - tight i_E_total = 204 → secondary i* threshold = 184.
+  - food_ladder i_E_total = 143 → secondary i* threshold = 129.
+
+`births_after_tick_50` is the primary because it captures
+late-run compounding (the v0.18 K-50 ceiling test) more directly than
+total births. Secondary i* gives a check on the total-population
+metric in case b>50 is dominated by a single late-run cluster of
+births that doesn't reflect overall productivity.
+
+These metrics are **mode-agnostic**: they apply identically to any
+v0.22+ arm that re-uses this v0.21 framework. The 90% threshold is
+chosen to be lenient on integer-rounded counts (one extra birth
+per seed already moves a chamber by ~5%) while still being a
+meaningful productivity bar.
+
 ## Pre-registered hypotheses
 
 Two-tier structure consistent with v0.15..v0.20: **strong-form** for
@@ -266,19 +314,28 @@ shape, plus **determinism** for bit-identity contracts.
   total monotonically falls.**
 - **H7.** There exists at least one arm B/C/D where
   `total_pool_birth_denied + total_pool_respawn_denied` falls
-  abruptly relative to its predecessor — the productivity transition.
-  **Cautious; the transition may instead be smoothly graded across
-  the entire range.**
-- **H8.** The productivity-transition influx rate i* is at least
-  0.5/tick lower on food_ladder than on tight_gradient.
-  **Cautious. Predicted asymmetry magnitude is roughly the
-  death-residual recycling rate (~0.4/tick on food_ladder); H8
-  rounds up to 0.5/tick to stay testable on the 0.5-grid.**
-- **H9.** `births` at the v0.18 K-50 production target (204 tight,
-  143 food_ladder) is reached at `ambient_influx_rate ≤ 1.5/tick` on
-  food_ladder and `ambient_influx_rate ≤ 2.0/tick` on tight.
-  **Cautious in influx threshold; lower thresholds would imply a
-  steeper transition than v0.20 endpoints suggest.**
+  abruptly relative to its predecessor — a sharp productivity
+  transition. Operationally: at least one of the four
+  consecutive-arm differences (B−A, C−B, D−C, E−D) accounts for
+  more than 50% of the (E−A) total-blocks delta on the same
+  chamber. **Cautious; the transition may instead be smoothly
+  graded across the entire range, in which case no single
+  step accounts for >50%.**
+- **H8.** **food_ladder reaches the productivity transition (primary
+  i\*) at the same or lower `ambient_influx_rate` than tight_gradient,
+  because hazard-residual recycling on food_ladder supplies
+  additional effective energy that tight (starvation-dominated)
+  lacks.** A one-grid-step advantage (food_ladder primary i\* at
+  least 0.5/tick lower than tight primary i\*) is **strong support**
+  for the recycling-as-effective-influx hypothesis but is not
+  required to hold the hypothesis. Failure to clear that gap does
+  not falsify H8; only food_ladder primary i\* > tight primary
+  i\* would falsify it. **Cautious.**
+- **H9.** Primary i\* is at most 2.0/tick on tight and at most
+  1.5/tick on food_ladder. **Cautious; i\* could be higher than
+  these bounds if the transition is steeper than v0.20 endpoints
+  suggest, or if our 90%-threshold operational definition fails
+  to clear at the expected influx rates.**
 - **H10.** `pool_min_observed` per arm is monotonically non-decreasing
   in influx across A → E on both chambers. The pool buffer at its
   worst-case point grows with influx; this is the substrate-level
@@ -286,40 +343,58 @@ shape, plus **determinism** for bit-identity contracts.
 
 ### Determinism
 
-- **H11.** Arm A reproduces v0.20 transfer-1500 byte-identically on
-  per-seed `(total_births, births_after_tick_50, seeds_with_survivors,
-  total_food_events, total_food_respawn_events,
-  total_pool_respawn_denied, total_pool_birth_denied,
-  pool_out_respawn, pool_out_child_startup, pool_in_death_residual,
-  pool_min, pool_end, parent_energy_transferred_to_child,
-  reproduction_heat_loss)` AND emits identical `AgentBorn` /
-  `AgentDied` / `AteFood` / `FoodRespawned` events on both chambers.
-- **H12.** Arm E reproduces v0.20 transfer-open-low byte-identically
-  (same metric set as H11) on both chambers. Same caveat as v0.20:
-  food_ladder is byte-identical; tight has a small event-timing
-  perturbation (3 r_blk + 9 b_blk) but identical final population
-  metrics.
+- **H11.** Arm A reproduces v0.20 transfer-1500 **byte-identically on
+  both chambers**: aggregate metrics `(total_births,
+  births_after_tick_50, seeds_with_survivors, total_food_events,
+  total_food_respawn_events, total_pool_respawn_denied,
+  total_pool_birth_denied, pool_out_respawn, pool_out_child_startup,
+  pool_in_death_residual, pool_min, pool_end,
+  parent_energy_transferred_to_child, reproduction_heat_loss)` match
+  exactly AND the full event stream (`AgentBorn`, `AgentDied`,
+  `AteFood`, `FoodRespawned`) matches order- and content-identically.
+  `ambient_influx_rate=0.0` is a no-op by construction; this anchor
+  detects any v0.21-introduced wiring leak.
+- **H12.** Arm E reproduces v0.20 transfer-open-low at two anchor
+  strengths:
+  - **food_ladder: byte-identity** (same fields as H11; full event
+    stream matches). v0.20 transfer-open-low food_ladder produced
+    zero pool blocks anywhere; the run is fully deterministic.
+  - **tight_gradient: semantic regression** (aggregate metrics match
+    exactly, event stream is **not** required to match). v0.20
+    transfer-open-low tight produced 3 r_blk + 9 b_blk that
+    perturbed birth/respawn timing without changing final counts;
+    the same perturbation must reappear (or the same final counts
+    via a different perturbation path is acceptable).
+  Failure of food_ladder byte-identity is a halt condition; failure
+  of tight aggregate-metric match is also a halt condition.
 
 ## Decision rules
 
-- **A and E reproduce v0.20 byte-identically (H11/H12) AND H5 holds
-  monotonically AND a clear transition arm exists (H7).** Frontier
-  is mapped; v0.22 candidate becomes either reproduction-efficiency
+- **A satisfies its byte-identity anchor; E satisfies its byte-identity
+  anchor on food_ladder + semantic-regression anchor on tight; H5 holds
+  monotonically; H7 fires (sharp transition).** Frontier is sharply
+  mapped. v0.22 candidate becomes either reproduction-efficiency
   parameterisation (if the frontier looks "clean" and adding a free
-  parameter is now warranted) or chamber-geometry parameterisation
-  (if the chamber asymmetry from H8 is striking and worth
-  characterising).
+  parameter is warranted) or chamber-geometry parameterisation (if
+  the H8 chamber asymmetry — primary i\* food_ladder ≤ primary i\*
+  tight — is observed and worth characterising further, especially
+  with strong-support magnitude ≥0.5/tick).
 
-- **H5 holds but H7 fails (transition is smooth, no clear single-step
-  phase change).** Frontier is graded; the substrate has a
-  continuous response to influx. v0.22 may sweep more densely
-  around the steepest 0.5-step or move on to the next axis
-  (reproduction efficiency).
+- **H5 holds but H7 fails (transition is smooth, no single-step
+  phase change accounting for >50% of the total-blocks delta).**
+  Frontier is graded; the substrate has a continuous response to
+  influx. Primary i\* is still well-defined (lowest arm clearing 90%);
+  v0.22 may sweep more densely around the steepest 0.5-step or move
+  to the next axis (reproduction efficiency).
 
-- **H8 fails (chamber asymmetry not detected at the 0.5/tick
-  resolution).** Death-residual recycling is smaller in effect than
-  predicted, OR the chamber-asymmetric demand math is wrong. v0.22
-  could parameterise hazard density to vary recycling.
+- **H8 fails (food_ladder primary i\* > tight primary i\*).**
+  Recycling-as-effective-influx hypothesis is rejected; death-residual
+  recycling does not substitute for ambient influx the way the
+  back-of-envelope calculation predicts. v0.22 could parameterise
+  hazard density to test the recycling axis directly.
+  Note: H8 holding without the strong-support ≥0.5/tick gap (i.e.,
+  ties in primary i\* across chambers) is **not a falsification** —
+  same-or-lower is the threshold, not strictly-lower.
 
 - **H6 fails strongly (total blocks rise with influx).** The v0.20
   redistribution finding (b_blk up while r_blk down) inverts at
@@ -327,9 +402,9 @@ shape, plus **determinism** for bit-identity contracts.
   self-throttling. Halt and audit; the frontier curve interpretation
   needs re-framing.
 
-- **H11 or H12 fails byte-identity.** Wiring defect introduced in
-  v0.21. Halt; v0.21 results are uninterpretable until the leak is
-  closed.
+- **H11 fails or H12 fails on food_ladder byte-identity or H12 fails
+  on tight semantic regression.** Wiring defect introduced in v0.21.
+  Halt; v0.21 results are uninterpretable until the leak is closed.
 
 - **H1 invariant fails** (`pool_in_ambient_influx ≠ rate × ticks`).
   Influx accounting bug. Halt.
