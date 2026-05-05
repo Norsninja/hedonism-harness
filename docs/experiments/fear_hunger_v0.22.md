@@ -588,7 +588,7 @@ Four arms × food_ladder × eight seeds (1..8) × 200 ticks × 5 founders.
 **32 runs total**, 8.8 seconds end-to-end. Run artifacts persisted at
 `runs/fear-hunger-v0.22-food_ladder/`.
 
-### Headline finding — injury deaths were a net cull above the recycling-supplemented capacity ceiling; band 4 fires
+### Headline finding — injury deaths were a net cull on a hazard-constrained productivity plateau; band 4 fires
 
 **v0.22 falsifies the recycling-as-effective-influx reading of v0.21's
 food_ladder productivity plateau.** At `hazard_damage=0` (zero injury
@@ -614,11 +614,15 @@ contribution was net-negative for productivity: hazard culling
 removed more reproductive capacity than the recycled energy bought.
 
 The v0.21 finding that food_ladder "saturates at 143 / 92" was a
-**recycling-supplemented capacity ceiling**, not a pure geometric
-ceiling. Removing the cull lets the substrate press to a different
-binding regime: pool-bound under starvation pressure
-(arm A: pool_min=0, r_blk=98, starvation_deaths=206) rather than
-recycling-supplemented productivity. The geometric+nutritional
+**hazard-constrained productivity plateau with recycling subsidy**,
+not a pure geometric ceiling. The hazard cull was the binding force
+holding population below the geometric+nutritional ceiling; the
+recycling channel partially offset the energy cost of that cull,
+but the cull itself dominated the productivity outcome. Removing
+the cull lets the substrate press to a different binding regime:
+pool-bound under starvation pressure (arm A: pool_min=0, r_blk=98,
+starvation_deaths=206) rather than hazard-constrained productivity.
+The geometric+nutritional
 ceiling on this chamber under transfer + influx=1.0 is at least
 b>50 ≈ 116, possibly higher under different pool/influx
 configurations.
@@ -735,8 +739,9 @@ Both conditions fire. The v0.21 i\* anchor (b>50=85 at influx=0.5)
 is *not* what arm A returns to — arm A presses to b>50=116, far
 above the v0.21 saturation plateau at influx≥1.0 (b>50=92). The
 v0.21 plateau was not a hard chamber-capacity ceiling; it was a
-recycling-supplemented ceiling whose binding constraint was the
-recycling-induced cull.
+hazard-constrained productivity plateau with recycling subsidy,
+where the hazard cull was the binding force and the recycling
+channel partially offset its energy cost.
 
 ### Three findings worth flagging for v0.23
 
