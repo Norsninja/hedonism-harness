@@ -307,12 +307,28 @@ triples, one per seed. Pre-committed signatures:
   if H8 fires; v0.29 candidate is the seed-9..16 reproducibility
   test.**
 
-H5, H6, H7 are designed to be **mutually exclusive** at the operational
-level: H5 requires bimodality (large within-group variance); H7
-requires tight clustering (small within-group variance); H6 requires
-a small-tail concentration of the deficit (most seeds nearly identical
-across w). At most one fires; if more than one fires the operational
-definitions are at fault and the diagnostic must be re-evaluated.
+H5, H6, H7 are designed to be **operationally exclusive against the
+broadest contradictions** (bimodality vs tight clustering), but **H5
+and H6 can both fire on the same seed set** without contradiction:
+the same 1-2 flipped seeds may carry both a routing-band signature
+(H5) and a late-window population crash (H6) — mechanistically,
+routing flip plausibly causes tail crash. Tie-break rules:
+
+- **H5 + H6 fire (and H7 does not).** Classification:
+  **"routing-linked tail crash"** — H5 names the upstream routing
+  signature; H6 names the downstream population consequence on the
+  same flipped seeds. Single coherent reading; not a halt.
+- **H5 + H7 fire.** Halt and re-evaluate. H5 demands bimodality
+  (large within-group variance among the 8 seeds); H7 demands tight
+  clustering (small within-group variance). The two are operational
+  contradictions; if both trip the operational definitions are
+  flawed.
+- **H6 + H7 fire.** Halt and re-evaluate. H6 demands a small-tail
+  concentration (most seeds nearly identical across w); H7 demands
+  uniform per-seed degradation (most seeds shifted at w=0.75).
+  Same kind of operational contradiction as H5+H7.
+- **H5 + H6 + H7 fire.** Halt — at least one of the H5+H7 or H6+H7
+  contradictions is present.
 
 ### Anchor identity
 
@@ -357,9 +373,16 @@ definitions are at fault and the diagnostic must be re-evaluated.
 - **H9 fails** (aggregate reproduction). Halt; the events.jsonl on
   disk is not what the v0.27 chamber-result CSVs say it is, OR the
   loader has a defect — either is a halt.
-- **More than one of H5/H6/H7 fires.** Halt and re-evaluate the
-  operational definitions; the signatures should be mutually
-  exclusive by construction.
+- **H5 + H6 fire together (H7 does not).** Not a halt. Classified as
+  "routing-linked tail crash" per the tie-break rule above. Headline:
+  the dip is a per-seed routing-threshold artefact whose downstream
+  consequence is a tail-seed population crash; v0.29 candidates from
+  both H5 and H6 (finer weight grid + seeds-9..16 reproducibility) are
+  jointly motivated.
+- **H5 + H7, H6 + H7, or H5 + H6 + H7 fire.** Halt and re-evaluate the
+  operational definitions; bimodality (H5) vs tight clustering (H7)
+  and small-tail concentration (H6) vs broad uniform degradation (H7)
+  are operational contradictions.
 
 ## Out of scope (v0.28)
 

@@ -17,8 +17,14 @@ hypotheses these aggregates feed.
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeVar
+
+# Numeric type variable for ``bucket_by_window`` — preserves the
+# input element type (int sums stay int; float sums stay float).
+_N = TypeVar("_N", int, float)
 
 # Pre-committed starvation-death bucket boundaries (50-tick windows
 # across the 200-tick observation window). Defined here so the
@@ -249,4 +255,152 @@ def aggregate_cell(
         lifespan_p50=p50,
         lifespan_p90=p90,
         starvation_deaths_by_window=buckets,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v0.28 — event-band trajectory aggregation
+# ---------------------------------------------------------------------------
+#
+# Pure-function additions for the v0.28 food_ladder w=0.75 trajectory
+# diagnostic. ``PopulationTrajectory`` (v0.24) exposes population /
+# lifespans / per-tick deaths but not per-tick births / food / hazard /
+# pool-block events; ``EventBandTrajectory`` covers the gap. v0.24's
+# ``PopulationTrajectory`` and ``load_population_trajectory`` are
+# byte-identical before and after this addition (purely additive).
+#
+# See [[docs/experiments/fear_hunger_v0.28.md]] for the pre-registered
+# hypotheses these aggregates feed.
+
+
+def bucket_by_window(
+    per_tick: Sequence[_N],
+    windows: tuple[tuple[str, int, int], ...] = STARVATION_WINDOWS,
+) -> dict[str, _N]:
+    """Sum a per-tick series into half-open ``[lo, hi)`` windows.
+
+    ``per_tick[t]`` is added to the first window with ``lo <= t < hi``.
+    Ticks outside every window's range are silently dropped (same
+    semantics as v0.24's ``aggregate_cell`` internal bucketing).
+    Windows must be disjoint; the first match wins on overlap.
+
+    Returns a dict keyed by window label, with one entry per window
+    in ``windows`` (zero-initialised). Numeric type is preserved:
+    ``Sequence[int]`` -> ``dict[str, int]``; ``Sequence[float]`` ->
+    ``dict[str, float]``.
+    """
+    buckets: dict[str, _N] = {label: 0 for label, _, _ in windows}  # type: ignore[misc]
+    for t, value in enumerate(per_tick):
+        for label, lo, hi in windows:
+            if lo <= t < hi:
+                buckets[label] = buckets[label] + value
+                break
+    return buckets
+
+
+@dataclass(frozen=True)
+class EventBandTrajectory:
+    """Per-tick event aggregates from a single events.jsonl.
+
+    Each field is length ``n_ticks`` (events at tick ``>= n_ticks`` are
+    silently dropped, mirroring ``load_population_trajectory``). Index
+    ``t`` is the count (or sum, for ``hazard_damage_per_tick``) of
+    events stamped at tick ``t``.
+
+    Companion to ``PopulationTrajectory`` — does not duplicate its
+    death-cause series. v0.28 callers typically load both for a single
+    run and read across them.
+    """
+
+    births_per_tick: tuple[int, ...]
+    food_events_per_tick: tuple[int, ...]
+    hazard_entries_per_tick: tuple[int, ...]
+    hazard_damage_per_tick: tuple[float, ...]
+    pool_birth_denied_per_tick: tuple[int, ...]
+    pool_respawn_denied_per_tick: tuple[int, ...]
+
+    @property
+    def total_births(self) -> int:
+        return sum(self.births_per_tick)
+
+    @property
+    def total_food_events(self) -> int:
+        return sum(self.food_events_per_tick)
+
+    @property
+    def total_hazard_entries(self) -> int:
+        return sum(self.hazard_entries_per_tick)
+
+    @property
+    def total_pool_birth_denied(self) -> int:
+        return sum(self.pool_birth_denied_per_tick)
+
+    @property
+    def total_pool_respawn_denied(self) -> int:
+        return sum(self.pool_respawn_denied_per_tick)
+
+    def births_after_tick(self, threshold: int) -> int:
+        """Sum ``births_per_tick[t]`` for ``t > threshold`` — matches
+        v0.27's ``births_after_tick_50`` aggregation (strict ``>``)."""
+        return sum(self.births_per_tick[threshold + 1 :])
+
+    def first_pool_birth_denied_tick(self) -> int | None:
+        """Tick of the first ``PoolBirthDenied`` event, or ``None`` if
+        the event never fired in this run. Pool-pressure-onset proxy."""
+        for t, count in enumerate(self.pool_birth_denied_per_tick):
+            if count > 0:
+                return t
+        return None
+
+
+def load_event_band_trajectory(events_jsonl: Path, n_ticks: int) -> EventBandTrajectory:
+    """Walk events.jsonl once and build per-tick event aggregates.
+
+    Single forward pass, mirroring ``load_population_trajectory``'s
+    parsing discipline (silently skips malformed JSON lines; reads
+    ``tick`` from the row, ``cause``/``damage`` from the inner
+    ``event``). Events at ``tick >= n_ticks`` are dropped.
+    """
+    if n_ticks < 0:
+        msg = f"n_ticks must be non-negative; got {n_ticks}"
+        raise ValueError(msg)
+
+    births = [0] * n_ticks
+    food = [0] * n_ticks
+    haz_entries = [0] * n_ticks
+    haz_damage = [0.0] * n_ticks
+    pool_birth_blk = [0] * n_ticks
+    pool_resp_blk = [0] * n_ticks
+
+    with events_jsonl.open() as f:
+        for line in f:
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            tick = int(row.get("tick", 0))
+            if tick < 0 or tick >= n_ticks:
+                continue
+            kind = row.get("type")
+            event = row.get("event", {})
+            if kind == "AgentBorn":
+                births[tick] += 1
+            elif kind == "AteFood":
+                food[tick] += 1
+            elif kind == "HazardEntered":
+                haz_entries[tick] += 1
+            elif kind == "HazardDamageApplied":
+                haz_damage[tick] += float(event.get("damage", 0.0))
+            elif kind == "PoolBirthDenied":
+                pool_birth_blk[tick] += 1
+            elif kind == "PoolRespawnDenied":
+                pool_resp_blk[tick] += 1
+
+    return EventBandTrajectory(
+        births_per_tick=tuple(births),
+        food_events_per_tick=tuple(food),
+        hazard_entries_per_tick=tuple(haz_entries),
+        hazard_damage_per_tick=tuple(haz_damage),
+        pool_birth_denied_per_tick=tuple(pool_birth_blk),
+        pool_respawn_denied_per_tick=tuple(pool_resp_blk),
     )
