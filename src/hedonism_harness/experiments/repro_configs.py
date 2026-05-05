@@ -36,15 +36,19 @@ def tuned_reproduction_config(
     *,
     energy_threshold: float,
     energy_cost: float,
+    offspring_start_energy: float = 30.0,
 ) -> ReproductionConfig:
-    """Parametric ``ReproductionConfig`` for the v0.7 grid sweep.
+    """Parametric ``ReproductionConfig`` for the v0.7+ grid sweeps.
 
-    Holds every other axis (``min_age``, ``hazard_threshold``,
-    ``offspring_start_energy``) at SPEC defaults so the only degrees of
-    freedom are the two energy-economics knobs:
+    Holds the remaining axes (``min_age``, ``hazard_threshold``) at SPEC
+    defaults so the degrees of freedom are the three energy-economics
+    knobs:
 
-      - ``energy_threshold`` — minimum parent energy required to reproduce.
-      - ``energy_cost``      — energy debited from parent on success.
+      - ``energy_threshold``       — minimum parent energy required to reproduce.
+      - ``energy_cost``            — energy debited from parent on success.
+      - ``offspring_start_energy`` — starting energy granted to the newborn
+        child (v0.17 axis; default ``30.0`` preserves v0.7..v0.16
+        bit-identity).
 
     Validates that each parameter is non-negative and within sensible
     operational bounds; raises ``ValueError`` so a typo like
@@ -58,11 +62,17 @@ def tuned_reproduction_config(
     if not (0.0 <= energy_cost <= 100.0):
         msg = f"energy_cost={energy_cost} outside operational range [0.0, 100.0]"
         raise ValueError(msg)
+    if not (0.0 <= offspring_start_energy <= 100.0):
+        msg = (
+            f"offspring_start_energy={offspring_start_energy} outside operational "
+            "range [0.0, 100.0]"
+        )
+        raise ValueError(msg)
     return ReproductionConfig(
         energy_threshold=energy_threshold,
         energy_cost=energy_cost,
+        offspring_start_energy=offspring_start_energy,
         # SPEC defaults — kept explicit so a SPEC change raises a visible diff.
-        offspring_start_energy=30.0,
         min_age=10,
         hazard_threshold=0.5,
     )

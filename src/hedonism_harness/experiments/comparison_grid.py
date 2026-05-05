@@ -75,6 +75,11 @@ class Arm:
     ``FIXED_ENERGY_THRESHOLD=50.0``). ``None`` preserves v0.14/v0.15
     bit-identity. Used by ``V0_16_ARMS`` to sweep reproduction
     economics under a single policy arm.
+
+    ``offspring_start_energy`` (v0.17) overrides the
+    ``tuned_reproduction_config`` default (``30.0``). ``None``
+    preserves v0.14/v0.15/v0.16 bit-identity. Used by ``V0_17_ARMS``
+    to sweep newborn starting energy under reflex-baseline + cost-15.
     """
 
     label: str
@@ -83,6 +88,7 @@ class Arm:
     memory_type: str | None = None
     energy_cost: float | None = None
     energy_threshold: float | None = None
+    offspring_start_energy: float | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -180,6 +186,44 @@ V0_16_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.17 arms — offspring-start-energy substrate variants under
+# reflex-baseline + cost-15 (the v0.16 best). Sweeps
+# offspring_start_energy in {30, 60, 100} while holding the v0.16
+# cost-15 economics fixed; tests whether child survival is the
+# binding constraint on lineage compounding. The
+# offspring_start_energy=30 arm reproduces v0.16 cost-15
+# bit-identically. See [[docs/experiments/fear_hunger_v0.17.md]].
+V0_17_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="start-30",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+    ),
+    Arm(
+        label="start-60",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=60.0,
+    ),
+    Arm(
+        label="start-100",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=100.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -195,6 +239,14 @@ class RunDiagnostics:
       - ``total_post_birth_lifespan_ticks`` — sum across distinct
         parents of (death_tick - first_birth_tick); death_tick falls
         back to ``max_event_tick`` for parents alive at run end.
+
+    v0.17 adds the direct compounding metric:
+      - ``total_grandchildren_count`` — number of AgentBorn events
+        whose parent_id is itself an agent_id that appeared as the
+        new agent in some prior AgentBorn event. Founders never
+        appear as AgentBorn (they spawn via ``_spawn_founder`` with
+        no event), so first-generation births (parent = founder)
+        do not count; only second-generation-and-beyond births do.
     """
 
     births_after_tick_50: int
@@ -204,6 +256,7 @@ class RunDiagnostics:
     other_ticks: int
     total_distinct_parents: int
     total_post_birth_lifespan_ticks: int
+    total_grandchildren_count: int
 
     @property
     def total_action_ticks(self) -> int:
@@ -229,6 +282,8 @@ def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event 
     still = move = eat = other = 0
     first_birth_tick: dict[int, int] = {}
     death_tick: dict[int, int] = {}
+    born_agent_ids: set[int] = set()
+    grandchildren_count = 0
     max_event_tick = 0
     with events_jsonl.open() as f:
         for line in f:
@@ -251,6 +306,16 @@ def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event 
                     # ChamberRunResult (we do not double-count here).
                     if pid not in first_birth_tick:
                         first_birth_tick[pid] = tick
+                    # Grandchild check: a birth whose parent was itself
+                    # born during this run (i.e. not a founder). Causal
+                    # ordering guarantees the parent's AgentBorn event
+                    # is in the JSONL before any of its children's, so
+                    # a single forward pass is correct.
+                    if pid in born_agent_ids:
+                        grandchildren_count += 1
+                agent_id = event.get("agent_id")
+                if agent_id is not None:
+                    born_agent_ids.add(int(agent_id))
             elif kind == "AgentDied":
                 aid = event.get("agent_id")
                 if aid is not None:
@@ -286,6 +351,7 @@ def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event 
         other_ticks=other,
         total_distinct_parents=len(first_birth_tick),
         total_post_birth_lifespan_ticks=total_lifespan,
+        total_grandchildren_count=grandchildren_count,
     )
 
 
@@ -303,6 +369,11 @@ class ArmCellAggregate:
         produced at least one AgentBorn event.
       - ``total_post_birth_lifespan_ticks`` — sum across distinct
         parents of (death_or_run_end_tick - first_birth_tick).
+
+    v0.17 adds the direct compounding metric summed across seeds:
+      - ``total_grandchildren_count`` — total AgentBorn events whose
+        parent was itself born during the run. The seed-denominator
+        rate is exposed via ``mean_grandchildren_per_seed`` below.
     """
 
     arm_label: str
@@ -320,6 +391,7 @@ class ArmCellAggregate:
     total_reproduction_requests: int
     total_distinct_parents: int
     total_post_birth_lifespan_ticks: int
+    total_grandchildren_count: int
 
     @property
     def mean_births_per_parent(self) -> float:
@@ -338,6 +410,16 @@ class ArmCellAggregate:
             if self.total_distinct_parents > 0
             else 0.0
         )
+
+    @property
+    def mean_grandchildren_per_seed(self) -> float:
+        """Mean grandchildren per run (denominator = ``n_seeds``).
+
+        Different denominator from ``mean_births_per_parent``: this is
+        a per-run rate of second-generation-and-beyond births, useful
+        for comparing arms whose ``total_distinct_parents`` differ.
+        """
+        return (self.total_grandchildren_count / self.n_seeds) if self.n_seeds > 0 else 0.0
 
 
 def _aggregate(
@@ -362,6 +444,7 @@ def _aggregate(
             total_reproduction_requests=0,
             total_distinct_parents=0,
             total_post_birth_lifespan_ticks=0,
+            total_grandchildren_count=0,
         )
     results = [r for r, _d in pairs]
     diags = [d for _r, d in pairs]
@@ -383,6 +466,7 @@ def _aggregate(
         total_reproduction_requests=sum(r.reproduction_requests for r in results),
         total_distinct_parents=sum(d.total_distinct_parents for d in diags),
         total_post_birth_lifespan_ticks=sum(d.total_post_birth_lifespan_ticks for d in diags),
+        total_grandchildren_count=sum(d.total_grandchildren_count for d in diags),
     )
 
 
@@ -423,12 +507,17 @@ def _run_one_arm_seed(
 ) -> tuple[ChamberRunResult, RunDiagnostics]:
     """One (arm, layout, seed) execution. Persists outputs under runs_root."""
     layout = _resolve_layout(layout_name)
-    repro_cfg = tuned_reproduction_config(
-        energy_threshold=(
+    repro_kwargs: dict[str, float] = {
+        "energy_threshold": (
             arm.energy_threshold if arm.energy_threshold is not None else FIXED_ENERGY_THRESHOLD
         ),
-        energy_cost=arm.energy_cost if arm.energy_cost is not None else FIXED_ENERGY_COST,
-    )
+        "energy_cost": arm.energy_cost if arm.energy_cost is not None else FIXED_ENERGY_COST,
+    }
+    # offspring_start_energy override (v0.17). Omitted when None so the
+    # factory's default (30.0) preserves v0.14/v0.15/v0.16 bit-identity.
+    if arm.offspring_start_energy is not None:
+        repro_kwargs["offspring_start_energy"] = arm.offspring_start_energy
+    repro_cfg = tuned_reproduction_config(**repro_kwargs)
     trait_cfg = TraitConfig(unbounded_mutation=True)
 
     captured: dict[str, object] = {}
