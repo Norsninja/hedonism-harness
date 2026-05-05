@@ -135,6 +135,20 @@ loses 15, child gains 30, regardless of mode. The only difference is the pool
 ledger: 30/birth (POOL_FULL) vs 15/birth (PARENT_TRANSFER_POOL_GAP). This is the
 load-bearing observation: agent dynamics are mode-invariant; pool drains differ.
 
+### Why strict-transfer is real (not bookkeeping)
+
+The strict-transfer mechanism is implemented at the **system-ledger level**:
+the existing parent debit and child startup body deltas are unchanged between
+modes, while the pool debit is reduced to the remaining gap
+(`offspring_start_energy − reproduction_cost = 15`). This makes the **total
+parent + child + pool energy delta zero** under transfer mode (vs −15 under
+POOL_FULL). The parent's 15 is not destroyed in the accounting; it is
+represented as the difference between the child's 30-energy gain and the
+pool's reduced 15-energy contribution. A future reviewer noting "you claimed
+transfer but reproduction.py did not change" should be referred to this
+section: the transfer is realised by the pool ledger, not by re-routing
+operations on agent bodies.
+
 ### Why the negative-control arm matters
 
 Because per-agent state is mode-invariant, in any regime where the pool gates
@@ -411,16 +425,38 @@ conservation contracts.
   test of the v0.20 hypothesis: removing reproduction heat loss from a
   pool-binding regime relieves the binding constraint and lifts compounding.
 - **H6.** `total_pool_birth_denied` falls at transfer-1500 (B) vs
-  pool-full-1500 (A) on both chambers. **Strong in direction (mechanism
-  guarantees fewer pool-blocks per tick), cautious in magnitude.**
+  pool-full-1500 (A) on both chambers. **Expected in direction, but not
+  guaranteed**: transfer mode halves per-birth pool demand, but the
+  resulting reduction in pool blocks may produce more successful births
+  → more food consumption → more respawn demand → more late-run pool
+  pressure that partially offsets the smaller per-birth draw. Cautious
+  in both direction and magnitude.
 - **H7.** `births_after_tick_50` lifts at transfer-open-low (D) vs
   pool-full-open-low (C) on at least one chamber. The partial-rescue regime
   test. **Cautious.**
-- **H8.** `food_consumed_per_birth` (alongside the block-corrected ratio
-  `food_consumed / (births + pool_birth_denied)`) shows transfer-1500 (B)
-  paying for births at-or-above the 45-energy floor with smaller correction
-  needed than pool-full-1500 (A). The substrate-paying-for-births test
-  under reduced pool pressure.
+- **H8.** Transfer-mode arms (B, D, F) satisfy the mode-specific birth
+  ledger: per successful birth,
+  `pool_out_child_startup_per_birth = offspring_start_energy −
+  reproduction_cost = 15`,
+  `parent_energy_transferred_to_child_per_birth = reproduction_cost = 15`,
+  `reproduction_heat_loss_per_birth = 0`, and the H4 invariant
+  `parent_energy_transferred_to_child + pool_out_child_startup =
+  total_births × offspring_start_energy` holds. POOL_FULL arms (A, C, E)
+  satisfy the v0.19 ledger: `pool_out_child_startup_per_birth =
+  offspring_start_energy = 30`,
+  `reproduction_heat_loss_per_birth = reproduction_cost = 15`,
+  total per-birth reproduction burden = 45.
+
+  The v0.19 `food_consumed_per_birth >= 45` self-sustaining floor does
+  **not** apply to transfer-mode arms. Under PARENT_TRANSFER_POOL_GAP, the
+  per-birth reproduction burden at the system level is 30 (15 from parent
+  body energy + 15 from pool gap), not 45 — the parent's 15 is recycled
+  into offspring rather than destroyed as heat. A transfer-mode lineage
+  can be perfectly conservative at fcpb < 45, because part of child
+  startup is now recycled parent body energy. fcpb is reported as an
+  observational ecological-throughput metric in v0.20, not as a hard
+  self-sustaining floor under transfer mode. For POOL_FULL arms the v0.19
+  floor still applies and is reported as before.
 - **H9.** `seeds_with_survivors` is non-decreasing at transfer-1500 (B) vs
   pool-full-1500 (A). The transfer mechanism should not degrade survival.
   **Cautious in either direction.**
@@ -440,13 +476,17 @@ conservation contracts.
   byte-identically (same metric set as H10).
 - **H12.** Arm E (pool-full-3000) reproduces v0.19 closed-3000
   byte-identically (same metric set as H10).
-- **H13.** Arm F (transfer-3000) reproduces arm E byte-identically on every
-  per-tick agent observable (births, food events, deaths, ages, lineages,
-  pool_blocked_count_*, pool_blocked_count_respawn, total_food_respawn_events,
-  total_pool_respawn_denied). v0.20-only fields will differ
-  (`parent_energy_transferred_to_child` and `pool_out_child_startup`
-  semantics — see below). The negative-control contract: per-agent state is
-  mode-invariant when the pool is not binding.
+- **H13.** Arm F (transfer-3000) reproduces arm E byte-identically on
+  **per-agent observables only** — births, food events, deaths, ages,
+  lineages, AgentBorn/AgentDied/AteFood/HazardEntered/HazardDamageApplied
+  events, and the per-tile FoodRespawned event sequence. **Pool ledger
+  fields legitimately differ between modes** (see "v0.20-only field
+  expected non-equivalences" table below) and are excluded from the
+  byte-identity comparison. The negative-control contract: per-agent
+  state is mode-invariant when the pool is not binding; pool ledger is
+  mode-defined by construction. If H13 fails on agent observables, the
+  mechanism has an unintended leak into agent dynamics and the
+  substantive arms (B, D) cannot be interpreted.
 
 ### v0.20-only field expected non-equivalences (H13)
 
