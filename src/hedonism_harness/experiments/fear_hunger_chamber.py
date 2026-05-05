@@ -46,6 +46,7 @@ from hedonism_harness.io.run_writer import (
 from hedonism_harness.mesa_agents import HHAgent
 from hedonism_harness.metrics.aggregators import EpisodeAggregator, LifetimeAggregator
 from hedonism_harness.model import FounderSpec, HHModel
+from hedonism_harness.policies.gradient_policy import GradientPolicy
 from hedonism_harness.policies.hedonism_policy import HedonismPolicy
 
 if TYPE_CHECKING:
@@ -297,6 +298,7 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     ambient_influx_rate: float | None = None,
     child_funding_mode: ChildFundingMode | None = None,
     hazard_damage: float | None = None,
+    hazard_avoidance_weight: float | None = None,
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
@@ -334,6 +336,16 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     Used by ``V0_22_ARMS`` to test whether hazard-injury death-residual
     recycling is load-bearing for the v0.21 food_ladder productivity
     plateau under transfer mode at influx=1.0/tick.
+
+    ``hazard_avoidance_weight``: v0.26 multiplier on the GradientPolicy
+    pain-pull (perception-vs-damage decoupling). ``None`` (default)
+    preserves v0.7..v0.25 bit-identity by leaving the caller's
+    ``policy_factory`` untouched. A finite value (typically 0.0 or 1.0)
+    wraps the factory so each constructed ``GradientPolicy`` instance
+    has its ``hazard_avoidance_weight`` attribute set to the value;
+    other policy types are passed through unchanged. Used by
+    ``V0_26_ARMS`` to test whether tight's small cull-tax under v0.25
+    was driven by avoidance routing or chamber geometry alone.
 
     ``setup_observer``: optional callable invoked with the model **after**
     ``paint_chamber`` and aggregator ``connect()``, **before** the first
@@ -386,6 +398,25 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
             **{**repro_cfg.model_dump(), "child_funding_mode": child_funding_mode}
         )
     trait_cfg = trait_config if trait_config is not None else TraitConfig()
+
+    # v0.26: thread hazard_avoidance_weight by wrapping the caller's
+    # policy_factory. ``None`` (default) preserves v0.7..v0.25 bit-identity
+    # by leaving the factory untouched. When set, each constructed
+    # ``GradientPolicy`` instance gets the configured weight; other policy
+    # types are passed through unchanged. The wrapped factory propagates to
+    # children automatically (HHModel inherits the parent's policy_factory
+    # for offspring construction).
+    if hazard_avoidance_weight is not None:
+        inner_factory = policy_factory
+        weight = float(hazard_avoidance_weight)
+
+        def _avoidance_wrapped_factory() -> Policy:
+            policy = inner_factory()
+            if isinstance(policy, GradientPolicy):
+                policy.hazard_avoidance_weight = weight
+            return policy
+
+        policy_factory = _avoidance_wrapped_factory
 
     # Founders spaced along the chamber's spawn column.
     spawn_x = layout.resolved_spawn_x

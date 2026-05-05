@@ -266,6 +266,75 @@ def test_never_returns_reproduce_even_when_eligible() -> None:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# v0.26: hazard_avoidance_weight seam (perception-vs-damage decoupling)
+# ---------------------------------------------------------------------------
+
+
+def test_default_hazard_avoidance_weight_is_one() -> None:
+    """The seam default is 1.0; constructing without the kwarg matches."""
+    a = GradientPolicy()
+    b = GradientPolicy(hazard_avoidance_weight=1.0)
+    assert a.hazard_avoidance_weight == 1.0
+    assert b.hazard_avoidance_weight == 1.0
+
+
+def test_hazard_avoidance_weight_zero_disables_pain_pull() -> None:
+    """At weight=0, hazard pull contributes zero — a strong-pleasure /
+    strong-hazard cell that STAYed under default coupling now MOVEs toward
+    the hazard because pleasure pull goes unopposed."""
+    traits = dataclasses.replace(
+        _traits(),
+        pleasure_sensitivity=1.0,
+        fear_sensitivity=2.0,
+        risk_tolerance=0.0,
+    )
+    body = make_body(
+        body_id=1,
+        lineage_id=0,
+        parent_id=None,
+        x=4,
+        y=4,
+        traits=traits,
+        config=BodyConfig(),
+    )
+    obs_strong_hazard = _zero_obs(hunger_level=1.0, food_signal_east=3.0, hazard_signal_east=10.0)
+    # Default: pleasure=6, pain=20 -> net=-14 -> STAY.
+    default_decision = GradientPolicy().decide(ctx=_ctx(observation=obs_strong_hazard, body=body))
+    assert default_decision.action == Action.STAY
+    # Weight=0: pain=0 -> net=+6 -> MOVE_EAST.
+    invisible_decision = GradientPolicy(hazard_avoidance_weight=0.0).decide(
+        ctx=_ctx(observation=obs_strong_hazard, body=body)
+    )
+    assert invisible_decision.action == Action.MOVE_EAST
+
+
+def test_hazard_avoidance_weight_one_is_no_op_against_default() -> None:
+    """Explicit weight=1.0 produces identical decisions to the default
+    constructor across a basket of synthetic observations. Halt-condition
+    smoke for v0.26 H14."""
+    default_policy = GradientPolicy()
+    explicit_policy = GradientPolicy(hazard_avoidance_weight=1.0)
+    cases = [
+        _zero_obs(food_signal_east=5.0),
+        _zero_obs(hazard_signal_east=5.0),
+        _zero_obs(food_signal_east=3.0, hazard_signal_east=2.0, hunger_level=1.0),
+        _zero_obs(food_signal_north=2.0, food_signal_south=2.0),
+    ]
+    for obs in cases:
+        d1 = default_policy.decide(ctx=_ctx(observation=obs, seed=42))
+        d2 = explicit_policy.decide(ctx=_ctx(observation=obs, seed=42))
+        assert d1.action == d2.action
+
+
+def test_hazard_avoidance_weight_negative_rejected() -> None:
+    """Validator rejects negative weights at construction time."""
+    import pytest
+
+    with pytest.raises(ValueError, match="hazard_avoidance_weight"):
+        GradientPolicy(hazard_avoidance_weight=-0.1)
+
+
 def test_gradient_policy_steps_in_model_without_raising() -> None:
     """End-to-end: a model with GradientPolicy founders runs N ticks without
     error and the agents take valid actions."""
