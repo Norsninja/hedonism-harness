@@ -69,12 +69,20 @@ class Arm:
     every founder + descendant. Other values (``"cell_exact"``,
     ``"directional"``) feed the existing memory machinery and are
     available if a future comparison wants to reuse this driver.
+
+    ``energy_cost`` / ``energy_threshold`` (v0.16) override the
+    `tuned_reproduction_config` defaults (``FIXED_ENERGY_COST=35.0``,
+    ``FIXED_ENERGY_THRESHOLD=50.0``). ``None`` preserves v0.14/v0.15
+    bit-identity. Used by ``V0_16_ARMS`` to sweep reproduction
+    economics under a single policy arm.
     """
 
     label: str
     policy_factory: Callable[[], Policy]
     auto_reproduction: bool
     memory_type: str | None = None
+    energy_cost: float | None = None
+    energy_threshold: float | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -139,6 +147,39 @@ V0_15_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.16 arms — reproduction-economics substrate variants under
+# reflex-baseline (no scalar memory). Sweeps energy_cost in {35, 25, 15}
+# while holding energy_threshold at 50; tests whether the v0.14/v0.15 H2
+# compounding ceiling is imposed by the parent's post-birth energy
+# retention. See [[docs/experiments/fear_hunger_v0.16.md]].
+V0_16_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="cost-35",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=35.0,
+        energy_threshold=50.0,
+    ),
+    Arm(
+        label="cost-25",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=25.0,
+        energy_threshold=50.0,
+    ),
+    Arm(
+        label="cost-15",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -146,13 +187,23 @@ V0_15_ARMS: tuple[Arm, ...] = (
 
 @dataclass(frozen=True)
 class RunDiagnostics:
-    """Per-run derived metrics computed from events.jsonl."""
+    """Per-run derived metrics computed from events.jsonl.
+
+    v0.16 adds compounding telemetry:
+      - ``total_distinct_parents`` — count of unique parent_ids that
+        appear in any AgentBorn event.
+      - ``total_post_birth_lifespan_ticks`` — sum across distinct
+        parents of (death_tick - first_birth_tick); death_tick falls
+        back to ``max_event_tick`` for parents alive at run end.
+    """
 
     births_after_tick_50: int
     still_ticks: int
     move_ticks: int
     eat_ticks: int
     other_ticks: int
+    total_distinct_parents: int
+    total_post_birth_lifespan_ticks: int
 
     @property
     def total_action_ticks(self) -> int:
@@ -164,12 +215,21 @@ class RunDiagnostics:
         return (self.still_ticks / total) if total > 0 else 0.0
 
 
-def _read_run_diagnostics(
+def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event types is cohesive.
     events_jsonl: Path, *, threshold: int = DEFAULT_TICK_THRESHOLD
 ) -> RunDiagnostics:
-    """Walk events.jsonl once to derive birth-tick + per-action counts."""
+    """Walk events.jsonl once to derive birth-tick + per-action counts.
+
+    Single pass. Tracks distinct parent_ids and the first AgentBorn tick
+    per parent for post-birth-lifespan computation; tracks AgentDied
+    ticks per agent_id for the matching death tick. Parents alive at
+    run end use ``max_event_tick`` as the lifespan endpoint.
+    """
     births_after = 0
     still = move = eat = other = 0
+    first_birth_tick: dict[int, int] = {}
+    death_tick: dict[int, int] = {}
+    max_event_tick = 0
     with events_jsonl.open() as f:
         for line in f:
             try:
@@ -178,8 +238,23 @@ def _read_run_diagnostics(
                 continue
             kind = row.get("type")
             tick = int(row.get("tick", 0))
-            if kind == "AgentBorn" and tick > threshold:
-                births_after += 1
+            max_event_tick = max(max_event_tick, tick)
+            event = row.get("event", {})
+            if kind == "AgentBorn":
+                if tick > threshold:
+                    births_after += 1
+                parent_id = event.get("parent_id")
+                if parent_id is not None:
+                    pid = int(parent_id)
+                    # First birth tick wins; later births update the
+                    # parent's birth count via total_births in
+                    # ChamberRunResult (we do not double-count here).
+                    if pid not in first_birth_tick:
+                        first_birth_tick[pid] = tick
+            elif kind == "AgentDied":
+                aid = event.get("agent_id")
+                if aid is not None:
+                    death_tick[int(aid)] = tick
             elif kind == "AgentStayed":
                 still += 1
             elif kind == "AgentMoved":
@@ -197,12 +272,20 @@ def _read_run_diagnostics(
                 other += 1
             else:
                 other += 1
+
+    total_lifespan = 0
+    for pid, first_tick in first_birth_tick.items():
+        end_tick = death_tick.get(pid, max_event_tick)
+        total_lifespan += max(0, end_tick - first_tick)
+
     return RunDiagnostics(
         births_after_tick_50=births_after,
         still_ticks=still,
         move_ticks=move,
         eat_ticks=eat,
         other_ticks=other,
+        total_distinct_parents=len(first_birth_tick),
+        total_post_birth_lifespan_ticks=total_lifespan,
     )
 
 
@@ -213,7 +296,14 @@ def _read_run_diagnostics(
 
 @dataclass(frozen=True)
 class ArmCellAggregate:
-    """Per-(arm, chamber) aggregate across a seed sweep."""
+    """Per-(arm, chamber) aggregate across a seed sweep.
+
+    v0.16 adds compounding telemetry summed across seeds:
+      - ``total_distinct_parents`` — number of unique parent_ids that
+        produced at least one AgentBorn event.
+      - ``total_post_birth_lifespan_ticks`` — sum across distinct
+        parents of (death_or_run_end_tick - first_birth_tick).
+    """
 
     arm_label: str
     layout_name: str
@@ -228,6 +318,26 @@ class ArmCellAggregate:
     total_hazard_entries: int
     total_starvation_deaths: int
     total_reproduction_requests: int
+    total_distinct_parents: int
+    total_post_birth_lifespan_ticks: int
+
+    @property
+    def mean_births_per_parent(self) -> float:
+        """Mean births per parent. >1 indicates compounding."""
+        return (
+            (self.total_births / self.total_distinct_parents)
+            if self.total_distinct_parents > 0
+            else 0.0
+        )
+
+    @property
+    def mean_post_birth_lifespan_ticks(self) -> float:
+        """Mean ticks a parent survives after its first birth."""
+        return (
+            (self.total_post_birth_lifespan_ticks / self.total_distinct_parents)
+            if self.total_distinct_parents > 0
+            else 0.0
+        )
 
 
 def _aggregate(
@@ -250,6 +360,8 @@ def _aggregate(
             total_hazard_entries=0,
             total_starvation_deaths=0,
             total_reproduction_requests=0,
+            total_distinct_parents=0,
+            total_post_birth_lifespan_ticks=0,
         )
     results = [r for r, _d in pairs]
     diags = [d for _r, d in pairs]
@@ -269,6 +381,8 @@ def _aggregate(
         total_hazard_entries=sum(r.hazard_entries for r in results),
         total_starvation_deaths=sum(r.starvation_deaths for r in results),
         total_reproduction_requests=sum(r.reproduction_requests for r in results),
+        total_distinct_parents=sum(d.total_distinct_parents for d in diags),
+        total_post_birth_lifespan_ticks=sum(d.total_post_birth_lifespan_ticks for d in diags),
     )
 
 
@@ -310,8 +424,10 @@ def _run_one_arm_seed(
     """One (arm, layout, seed) execution. Persists outputs under runs_root."""
     layout = _resolve_layout(layout_name)
     repro_cfg = tuned_reproduction_config(
-        energy_threshold=FIXED_ENERGY_THRESHOLD,
-        energy_cost=FIXED_ENERGY_COST,
+        energy_threshold=(
+            arm.energy_threshold if arm.energy_threshold is not None else FIXED_ENERGY_THRESHOLD
+        ),
+        energy_cost=arm.energy_cost if arm.energy_cost is not None else FIXED_ENERGY_COST,
     )
     trait_cfg = TraitConfig(unbounded_mutation=True)
 
