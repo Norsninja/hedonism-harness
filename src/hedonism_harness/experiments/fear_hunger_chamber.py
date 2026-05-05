@@ -221,7 +221,14 @@ def paint_chamber(model: HHModel, layout: ChamberLayout) -> None:
 
 @dataclass(frozen=True)
 class ChamberRunResult:
-    """Compact summary of a chamber run — used to build experiment reports."""
+    """Compact summary of a chamber run — used to build experiment reports.
+
+    v0.19 adds energy-pool telemetry. All pool fields default to ``None``
+    or ``0.0`` when no ambient pool was configured (the v0.7..v0.18
+    default), so existing call sites continue to work without changes.
+    Per-flow counters are read from the model's ``EnergyPool`` after the
+    run loop terminates; the model state outlives the loop.
+    """
 
     run_id: str
     seed: int
@@ -239,6 +246,16 @@ class ChamberRunResult:
     moves: int
     stays: int
     output_dir: Path
+    pool_initial: float | None = None
+    pool_min: float | None = None
+    pool_max: float | None = None
+    pool_end: float | None = None
+    pool_out_respawn: float = 0.0
+    pool_out_child_startup: float = 0.0
+    pool_in_death_residual: float = 0.0
+    pool_in_ambient_influx: float = 0.0
+    pool_blocked_count_respawn: int = 0
+    pool_blocked_count_child_startup: int = 0
     notes: dict[str, object] = field(default_factory=dict)
 
 
@@ -246,7 +263,7 @@ def default_policy_factory() -> Policy:
     return HedonismPolicy(exploration_noise=0.05)
 
 
-def run_chamber(
+def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction would obscure the lifecycle.
     *,
     seed: int,
     runs_root: Path,
@@ -263,6 +280,8 @@ def run_chamber(
     use_memory: bool = False,
     memory_type: str = "cell_exact",
     food_respawn_cooldown: int | None = None,
+    energy_pool_initial: float | None = None,
+    ambient_influx_rate: float | None = None,
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
@@ -309,6 +328,15 @@ def run_chamber(
         # v0.18: thread cooldown into the frozen WorldConfig. Default
         # None preserves v0.7..v0.17 bit-identity (no respawn).
         world_cfg = world_cfg.model_copy(update={"food_respawn_cooldown": food_respawn_cooldown})
+    if energy_pool_initial is not None:
+        # v0.19: thread initial pool size into the frozen WorldConfig.
+        # Default None preserves v0.7..v0.18 bit-identity (no pool path).
+        world_cfg = world_cfg.model_copy(update={"energy_pool_initial": energy_pool_initial})
+    if ambient_influx_rate is not None:
+        # v0.19: thread per-tick influx rate. The WorldConfig validator
+        # rejects influx > 0 without a pool — preserves the conservation
+        # framing.
+        world_cfg = world_cfg.model_copy(update={"ambient_influx_rate": ambient_influx_rate})
     body_cfg = BodyConfig()
     action_cfg = ActionConfig()
     repro_cfg = reproduction_config if reproduction_config is not None else ReproductionConfig()
@@ -363,6 +391,25 @@ def run_chamber(
         lifetime.disconnect()
 
     population_end = sum(1 for a in model.agents if isinstance(a, HHAgent) and a.body.alive)
+    # v0.19: snapshot pool telemetry off the live model after the run loop.
+    # All fields stay None / 0 when no pool was configured.
+    pool = model.energy_pool
+    pool_kwargs: dict[str, object] = {}
+    if pool is not None:
+        pool_kwargs = {
+            "pool_initial": float(world_cfg.energy_pool_initial)
+            if world_cfg.energy_pool_initial is not None
+            else None,
+            "pool_min": float(pool.min_observed),
+            "pool_max": float(pool.max_observed),
+            "pool_end": float(pool.current),
+            "pool_out_respawn": float(pool.out_respawn),
+            "pool_out_child_startup": float(pool.out_child_startup),
+            "pool_in_death_residual": float(pool.in_death_residual),
+            "pool_in_ambient_influx": float(pool.in_ambient_influx),
+            "pool_blocked_count_respawn": int(pool.blocked_count_respawn),
+            "pool_blocked_count_child_startup": int(pool.blocked_count_child_startup),
+        }
     summary = ChamberRunResult(
         run_id=run_id,
         seed=seed,
@@ -380,6 +427,7 @@ def run_chamber(
         moves=episode.tally.moves,
         stays=episode.tally.stays,
         output_dir=runs_root / run_id,
+        **pool_kwargs,  # type: ignore[arg-type]
     )
 
     if write_outputs:
