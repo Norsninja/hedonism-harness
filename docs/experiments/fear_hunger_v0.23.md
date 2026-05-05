@@ -556,14 +556,39 @@ hazard=0 substrate.
 ## Results
 
 **Status:** executed 2026-05-05. 80 runs (5 arms × 2 chambers × 8 seeds),
-30s wall time. All hard pins hold (H1/H5/H6/H14/H15). The
-chamber-asymmetry gap survives hazard removal at the H9/H10 boundary
-(Δ_primary = +0.5/tick). Unexpected sub-finding: **tight_gradient
-gets worse at hazard=0**, not better — tight primary i\* rises from
-1.5/tick (hazard=8 v0.21) to 2.0/tick (hazard=0 v0.23). The hazard
-wall was net-supportive on tight, mirroring v0.22's "recycling was a
-net tax" finding on food_ladder but with the opposite sign relative
-to expectations.
+30s wall time. All hard pins hold (H1/H5/H6/H14/H15).
+
+**Two findings, weighted accordingly:**
+
+1. The food_ladder **i\* (speed-to-ceiling) advantage** survives
+   hazard removal at the band boundary: Δ_primary = +0.5/tick
+   (food_ladder i\*=1.5, tight i\*=2.0). H9 fires, but **at the
+   boundary and on a near-miss** — tight arm D b>50=107 misses the
+   self-referential threshold of 107.1 by 0.1 births. Read this as
+   *weak-to-moderate* support for "geometry/food-accessibility is
+   load-bearing in i\* transition speed," not overwhelming.
+
+2. **Hazard damage has chamber-dependent ecological effects.** This
+   is the cleaner, more decisive finding from v0.23. Comparing v0.21
+   (hazard=8) vs v0.23 (hazard=0) chamber-by-chamber:
+
+   | chamber | hazard | b>50 across influx 0/0.5/1.0/1.5/2.0 | mean Δ vs hazard=8 |
+   |---|---:|---|---:|
+   | tight       | 8 | 99 / 111 / 116 / 125 / 130 | — |
+   | tight       | 0 | 92 /  97 / 100 / 107 / 119 | **−13** (worse) |
+   | food_ladder | 8 | 77 /  85 /  92 /  92 /  92 | — |
+   | food_ladder | 0 | 106 / 113 / 116 / 125 / 131 | **+30** (better) |
+
+   Removing hazard damage **reverses the absolute-productivity
+   chamber ordering**: at hazard=8 tight beat food_ladder at every
+   influx (130 vs 92 at saturation); at hazard=0 food_ladder beats
+   tight at every influx (131 vs 119). The same hazard mechanism
+   (per-tile damage + induced GradientPolicy avoidance) acts as
+   **net suppressor on food_ladder** (~+30 b>50 lift when removed,
+   confirming v0.22's recycling-as-net-tax finding) and as
+   **net stabilizer on tight** (~−13 b>50 loss when removed —
+   tight gets worse without the hazard cull). Hazard is not simply
+   "bad for productivity"; its sign depends on chamber topology.
 
 ### Headline tables
 
@@ -599,7 +624,7 @@ to expectations.
 | H6 | `pool_in_death_residual == 0` | **HOLDS — hard pin.** All 10 arms reported residual=0.0. |
 | H7 | b>50 monotone non-decreasing in influx | **HOLDS — strong form.** tight: 92→97→100→107→119; food_ladder: 106→113→116→125→131. Strictly monotonic on both chambers. |
 | H8 | r_blk + b_blk monotone non-increasing in influx | **PARTIAL.** food_ladder: 227→157→110→99→86 — strictly monotonic. tight: 218→148→137→103→125 — non-monotonic at the high end (b_blk component: 61→20→42→38→90). The redistribution finding (v0.20/v0.21/v0.22) extends to v0.23 tight: as productivity rises, pool binding migrates from respawn-side to birth-side. Cautious form held. |
-| H9 | Δ_primary ≥ +0.5/tick (gap survives) | **FIRES at the boundary.** Δ_primary = 0.5/tick exactly. food_ladder primary i\* = 1.5; tight primary i\* = 2.0. Geometry/food-accessibility is load-bearing; the v0.21 1.0/tick gap was approximately half hazard-mediated, half geometric. |
+| H9 | Δ_primary ≥ +0.5/tick (gap survives) | **FIRES at the boundary — weak-to-moderate support.** Δ_primary = 0.5/tick exactly. food_ladder primary i\* = 1.5; tight primary i\* = 2.0. **Caveat:** tight arm D b>50=107 misses the 90% threshold (= 0.9 × 119 = 107.1) by 0.1 births. Under strict pre-registration tight i\* = 2.0 and H9 fires; practically tight is sitting on the boundary at 1.5. Geometry/food-accessibility in i\* transition speed is load-bearing under the cautious form — the v0.21 1.0/tick gap is roughly half hazard-mediated, half geometric, but the residual geometric component is small enough that this slice cannot rule out "geometry contribution ≈ 0" if a different seed set produced tight arm D = 108. |
 | H10 | 0 ≤ Δ_primary < +0.5/tick (gap collapses) | **DOES NOT FIRE** (boundary case resolves to H9 per pre-reg's `≥ +0.5` band). |
 | H11 | Δ_primary ≤ −0.5/tick (reverses) | **DOES NOT FIRE.** food_ladder still transitions earlier than tight. |
 | H12 | tight primary i\* ≤ 1.0/tick (tight was hazard-wall-constrained) | **DOES NOT FIRE.** tight primary i\* at hazard=0 is **2.0/tick**, *worse* than the v0.21 hazard=8 anchor (1.5/tick). Tight is not hazard-wall-constrained; removing the wall made tight harder, not easier. |
@@ -607,28 +632,41 @@ to expectations.
 | H14 | byte-identity arm C food_ladder vs v0.22 hazard-0 | **HOLDS — exact match.** births=249, b>50=116, food=670, respawn=478, r_blk=98, b_blk=12, starv=206, inj=0, residual=0.0, haz_entries=200, pool_min=0, pool_end=38, xfer=3,735. Identical to v0.22 anchor on every column. |
 | H15 | V0_19/20/21/22 unchanged | **HOLDS.** Test suite 652→662 (purely additive); ruff clean; core_smoke_test green. |
 
-### Headline finding: chamber asymmetry has both hazard and geometry components
+### Headline finding: hazard damage is chamber-dependent, not simply suppressive
 
-The v0.21 1.0/tick chamber-asymmetry gap (food_ladder 0.5 vs tight 1.5
-at hazard=8) **partially survives hazard removal**: at hazard=0 the
-gap is +0.5/tick (food_ladder 1.5 vs tight 2.0). H9 fires at the band
-boundary. Geometry/food-accessibility is **load-bearing**, and the
-hazard-mediated component is roughly half of the v0.21 gap. The
-chamber comparison axis remains a meaningful experimental dimension
-under the conservation substrate.
+The cleaner reading of v0.23 is that **hazard damage acts as a
+net suppressor on food_ladder and a net stabilizer on tight_gradient**.
+The v0.22 finding ("recycling was a net tax on food_ladder") generalises
+with the **opposite sign on tight**: removing hazards costs tight
+~13 b>50 per arm on average, while it gains food_ladder ~30 b>50.
+The chamber-by-chamber comparison (table in the Status block above)
+makes this stark: at hazard=8 tight beat food_ladder at every influx;
+at hazard=0 food_ladder beats tight at every influx. The same
+underlying mechanism flips ordering when hazards are removed.
 
-Cross-chamber productivity at every shared influx (b>50 ratio
-food_ladder/tight): 1.15, 1.16, 1.16, 1.17, 1.10. food_ladder
-out-produces tight by 10–17% at every influx point under hazard=0 —
-a clean geometric advantage independent of the hazard mechanism.
+The i\* (speed-to-ceiling) advantage of food_ladder over tight is
+preserved across both hazard regimes — food_ladder reaches 90% of
+its own ceiling at lower influx than tight in both v0.21 (0.5 vs
+1.5) and v0.23 (1.5 vs 2.0) — so the *geometric advantage in
+transition speed* is hazard-robust, even though the *absolute
+productivity ordering* between chambers is hazard-dependent. H9's
+band-boundary firing, with arm D's 0.1-birth near-miss, supports
+this reading at weak-to-moderate strength.
+
+Cross-chamber productivity at every shared influx under v0.23
+(b>50 ratio food_ladder/tight): 1.15, 1.16, 1.16, 1.17, 1.10.
+food_ladder out-produces tight by 10–17% at every influx point at
+hazard=0; the same comparison at hazard=8 (v0.21) goes the other
+way (tight/food_ladder = 1.29, 1.31, 1.26, 1.36, 1.41).
 
 ### Sub-finding: tight gets worse at hazard=0 (the v0.22 mirror, opposite sign)
 
 v0.22 found that recycling on food_ladder was a **net tax** —
 removing hazards lifted food_ladder productivity 26% above the v0.21
 plateau. v0.23 reveals the **opposite sign on tight**: tight primary
-i\* rises from 1.5/tick (hazard=8) to 2.0/tick (hazard=0). Removing
-the hazard cull made tight harder, not easier.
+i\* rises from 1.5/tick (hazard=8) to 2.0/tick (hazard=0), and
+absolute b>50 falls at every influx point. Removing the hazard
+cull/avoidance made tight harder, not easier.
 
 Mechanism candidates (deferred to v0.24+ to discriminate):
 
