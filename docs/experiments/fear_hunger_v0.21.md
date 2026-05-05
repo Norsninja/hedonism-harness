@@ -1,6 +1,6 @@
 # v0.21 — influx frontier under strict-transfer reproduction
 
-**Status:** pre-registration; not yet executed.
+**Status:** completed; results appended.
 **Date:** 2026-05-05
 **Branch:** `claude/v0.21-influx-frontier`
 **Predecessors:** v0.18 (food respawn cooldown — first compounding under
