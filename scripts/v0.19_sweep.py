@@ -44,9 +44,7 @@ def main() -> None:
         # Tight headline table.
         for agg in aggregates:
             fcpb = agg.food_consumed_per_birth
-            pool_end = (
-                f"{agg.mean_pool_end:.0f}" if agg.mean_pool_end is not None else "—"
-            )
+            pool_end = f"{agg.mean_pool_end:.0f}" if agg.mean_pool_end is not None else "—"
             print(
                 f"  {agg.arm_label:>16} | "
                 f"births={agg.total_births:4d} "
