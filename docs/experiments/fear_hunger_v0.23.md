@@ -670,12 +670,35 @@ cull/avoidance made tight harder, not easier.
 
 Mechanism candidates (deferred to v0.24+ to discriminate):
 
-1. **Hazard cull was throughput-relieving on tight.** At hazard=8,
-   tight's hazard wall culled agents that would otherwise contribute
-   to pool drain via metabolism + respawn pressure. The cull
-   functioned as a population-control mechanism specific to tight's
-   geometry; without it, more agents survive into deeper starvation
-   regimes and the pool-bound binding intensifies.
+1. **Hazard cull was acting as a population governor on tight
+   (overshoot/crash hypothesis — preferred reading).** Tight has no
+   "carrying capacity buffer" geometry analogous to food_ladder's
+   pre-food band; the hazard cull was the implicit population-control
+   mechanism. Removing it lets the population overshoot the
+   substrate's sustainable level, deepening pool-bound starvation
+   pressure and reducing late-game compounding.
+
+   Evidence in the v0.21 vs v0.23 cell at tight, transfer, pool=1500,
+   influx=1.0:
+
+   | metric | v0.21 hazard=8 | v0.23 hazard=0 | delta |
+   |---|---:|---:|---:|
+   | total births       |   190 |   246 | **+30%** |
+   | b>50               |   116 |   100 | −14% |
+   | food events        |   716 |   673 | −6% |
+   | fcpb               | 75.37 | 54.72 | **−27%** |
+   | r_blk              |    52 |    95 | **+83%** |
+   | b_blk              |    32 |    42 | +31% |
+
+   Pattern: more total births but fewer late-game births (the
+   classic overshoot-and-crash signature); fcpb falls toward the
+   transfer-mode metabolic floor (~45–60), meaning each birth
+   happens with less energy headroom; pool blocks roughly double.
+   Total food consumption barely changed (chamber food supply is
+   gated by K=50 respawn, not hazard) — what changed is the
+   number of mouths sharing it. food_ladder shows none of this
+   pattern at hazard=0 because its pre-food band serves as a
+   substitute carrying-capacity buffer.
 
 2. **Hazard avoidance on tight was load-bearing for food access.**
    At hazard=8, the GradientPolicy's avoidance signal routed tight
@@ -686,9 +709,14 @@ Mechanism candidates (deferred to v0.24+ to discriminate):
    the avoidance signal degrades tight's effective food access.
 
 3. **Combination.** Both mechanisms are plausible and not
-   mutually exclusive. v0.24+ candidate to discriminate is
-   parameterising hazard-avoidance independently of hazard-damage
-   in `GradientPolicy`.
+   mutually exclusive. The (1) population-governor reading is
+   directly testable on existing v0.23 + v0.21 events.jsonl
+   (population time-series, lifespan distributions, starvation-
+   per-tick) without any new sweep; that is the v0.24 first step.
+   The (2) avoidance-routing reading requires a new
+   `GradientPolicy` seam (decouple `hazard_avoidance_weight` from
+   `hazard_damage`) and is deferred until after the population-
+   governor question is settled.
 
 food_ladder shows the opposite pattern: haz_entries clustered at
 188–216 across influx points (vs 200 at the v0.22 hazard=0 anchor —
@@ -759,23 +787,52 @@ from removing both damage and avoidance simultaneously" — the
 discrimination between damage-only and avoidance-only effects on
 tight is the natural follow-up.
 
-### v0.24+ candidates surfaced by v0.23
+### v0.24+ candidates surfaced by v0.23 — prioritised roadmap
 
-- **Decouple hazard damage from hazard avoidance.** A
-  parameterised `GradientPolicy` (e.g.,
-  `hazard_avoidance_weight` independent of damage) would
-  discriminate "geometry-only" from "perception-only" effects on
-  tight, and test the two mechanism candidates above.
-- **Long-window stability** at hazard=0 on the high-productivity
-  food_ladder arms — does the substrate stay productive at
-  n_ticks ∈ {500, 1000} or does the pool eventually exhaust?
-- **Pool-size sweep at hazard=0** to characterise the new cliff
-  position now that the hazard cull is removed.
-- **Hazard × influx cross-product** — both v0.22 (food_ladder)
-  and v0.23 (both chambers at hazard=0) suggest the
-  hazard-vs-influx tradeoff surface is non-trivial and
-  chamber-asymmetric; mapping it fully would clarify the
-  population-control dynamics.
+The chamber-dependent finding above raises the population-governor
+hypothesis. Step ordering is set by what the existing data already
+permits (cheap diagnostics first) and by which question must be
+settled before the next:
+
+1. **v0.24 (next slice): population-dynamics diagnostic on existing
+   v0.23 + v0.21 events.jsonl.** No new sweep, no new code paths —
+   pure analysis of artifacts already on disk. Compare tight
+   hazard=8 (v0.21) vs tight hazard=0 (v0.23) on:
+   - peak population over the run window
+   - population time-series (overshoot-then-crash signature)
+   - lifespan distribution (shape + percentiles)
+   - per-tick starvation rate (monotonic vs spike-after-overshoot)
+   - food_ladder hazard=8 vs hazard=0 as the negative control
+     (the population-governor mechanism predicts food_ladder
+     should NOT show the same overshoot pattern).
+
+   Falsifies or confirms the (1) hazard-as-population-governor
+   reading without committing to a new sweep design. Cheapest
+   possible discrimination.
+
+2. **v0.25 (conditional on v0.24 confirming): tight-only
+   hazard × influx cross-product.** If the population-governor
+   reading holds, characterise the cull-vs-cost tradeoff curve on
+   tight. Predicted shape: non-monotonic — small hazard helps via
+   cull, large hazard hurts via tax; some intermediate hazard
+   value maximises tight productivity. ~96 runs (4 hazards ×
+   3 influxes × 8 seeds), ~30s wall time. Locates the optimum
+   hazard for tight and quantifies how much the cull mechanism
+   was contributing to v0.21's tight=1.5/tick anchor.
+
+3. **v0.26 (deferred): decouple hazard damage from hazard
+   avoidance** — parameterise `GradientPolicy` with a
+   `hazard_avoidance_weight` independent of damage. Tests
+   whether the (2) avoidance-routing reading is independently
+   important once the population-governor mechanism is
+   characterised. Deferred because it requires a new policy seam
+   (~150 LOC) and the cheaper (1)+(2) diagnostics may settle
+   the mechanism question without it.
+
+4. **Other candidates (further deferred):** long-window
+   stability at hazard=0 on food_ladder; pool-size sweep at
+   hazard=0; HedonismPolicy comparisons (still quarantined per
+   v0.2 spec).
 
 ### Implementation summary
 
