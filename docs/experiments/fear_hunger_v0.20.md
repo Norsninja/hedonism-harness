@@ -685,8 +685,10 @@ startup energy — eliminating reproduction heat loss — measurably improves
 lineage compounding under regimes where v0.19's pool was the binding
 constraint.** Transfer mode lifts `births_after_tick_50` by 17–29% on the
 binding-conservation arm (closed-1500) on both chambers, and **fully
-recovers v0.19 K-50 productive dynamics on the partial-rescue arm
-(open-low at influx=2/tick)** — byte-identically on both chambers.
+recovers v0.18/v0.19 productive population-level outcomes on the
+partial-rescue arm (open-low at influx=2/tick)** on both chambers —
+byte-identically on food_ladder, and on tight_gradient with a small
+event-timing perturbation but identical final population metrics.
 
 The strongest signal is in the open-ecology regime: under
 `pool_initial=1500` with `ambient_influx_rate=2/tick`, transfer mode
@@ -872,7 +874,9 @@ H5 cleared strongly on both chambers. H6 fired directionally as the
 pre-reg's explicit hedge anticipated — total blocks fall on both
 chambers, but the redistribution from respawn-side to birth-side blocks
 rejected the strict "all blocks fall" reading. H7 cleared spectacularly
-— D recovers v0.18 K-50 productivity byte-identically on both chambers.
+— D recovers v0.18 K-50 population-level productivity on both chambers
+(byte-identical event trace on food_ladder; identical final population
+metrics with a small event-timing perturbation on tight_gradient).
 
 The headline finding holds, with the qualifier that the relief is
 **strongest in the open-ecology partial-rescue regime** (open-low)
@@ -936,12 +940,14 @@ mode**, recovering v0.18 K-50 dynamics.
   pool-debit timing (e.g., split the gap into "respawn gap" + "birth
   gap" with different pool budgets) could test whether the binding
   redistributes back.
-- **transfer-open-low recovers v0.18 K-50 byte-identically; the
-  "minimum influx for productivity" frontier under transfer mode is
-  somewhere between 0/tick (closed-1500: partial recovery) and 2/tick
-  (open-low: full recovery).** v0.21 could sweep influx in
-  {0.5, 1.0, 1.5, 2.0} under transfer mode at pool=1500 to find the
-  exact transition point.
+- **transfer-open-low recovers v0.18 K-50 productive population-level
+  outcomes (byte-identical on food_ladder; identical final population
+  metrics with a small event-timing perturbation on tight_gradient).
+  The "minimum influx for productivity" frontier under transfer mode
+  is somewhere between 0/tick (closed-1500: partial recovery) and
+  2/tick (open-low: full recovery).** v0.21 should sweep influx in
+  {0, 0.5, 1.0, 1.5, 2.0} under transfer mode at pool=1500 to find
+  the exact transition point.
 - **pe_blk = 0 across every arm.** The defensive parent-energy gate
   was never exercised in 96 runs. With cost=15 and threshold=50, the
   parent always has comfortable margin. v0.21+ could remove the gate
