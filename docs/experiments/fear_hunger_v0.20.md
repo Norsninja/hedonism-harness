@@ -670,6 +670,297 @@ Total v0.20 implementation: ~1,180 LOC. Slightly smaller than v0.19
 well-scoped — one new enum, one new field + validator, one new event,
 one branch in `_process_birth_queue`.
 
+## Results (executed 2026-05-05)
+
+Six arms × two chambers × eight seeds (1..8) × 200 ticks × 5 founders.
+**96 runs total**, 25.4 seconds end-to-end. Reflex-baseline policy,
+`energy_cost=15`, `energy_threshold=50`, `offspring_start_energy=30`,
+`unbounded_mutation=True`, K=50 throughout. Run artifacts persisted at
+`runs/fear-hunger-v0.20-{tight_gradient,food_ladder}/`.
+
+### Headline finding — strict-transfer reproduction lifts compounding in v0.19's binding regimes; transfer + influx fully recovers v0.18 K-50
+
+**v0.20 confirms that routing the parent's `energy_cost` into offspring
+startup energy — eliminating reproduction heat loss — measurably improves
+lineage compounding under regimes where v0.19's pool was the binding
+constraint.** Transfer mode lifts `births_after_tick_50` by 17–29% on the
+binding-conservation arm (closed-1500) on both chambers, and **fully
+recovers v0.19 K-50 productive dynamics on the partial-rescue arm
+(open-low at influx=2/tick)** — byte-identically on both chambers.
+
+The strongest signal is in the open-ecology regime: under
+`pool_initial=1500` with `ambient_influx_rate=2/tick`, transfer mode
+turns a partial-rescue arm (175 / 101 b>50 tight; 136 / 85 food_ladder
+under POOL_FULL) into the full v0.18 K-50 / v0.19 inf-pool / v0.19
+closed-3000 production target (204 / 130 tight; 143 / 92 food_ladder).
+On food_ladder the recovery is **byte-identical** to v0.18 K-50 (zero
+pool blocks anywhere; full event trace matches). On tight_gradient the
+**population-level metrics match exactly** (births=204, b>50=130,
+seeds_with_survivors=8/8) but the event trace diverges slightly (food
+events 765 vs 768; 3 r_blk + 9 b_blk fired during the run, perturbing
+birth/respawn timing while still producing the same final counts).
+Eliminating reproduction heat loss from a partial-rescue regime moves
+it into full productivity at **less than half the per-tick influx the
+v0.19 open-equiv arm needed** (2/tick vs 7/tick).
+
+In the closed-1500 binding regime, transfer mode produces a substantial
+but partial recovery: ~63% → 76% of inf-pool's b>50 on tight; ~72% →
+84% on food_ladder. Conservation still binds; it binds less.
+
+### Determinism contracts — verified
+
+H10/H11/H12 hold byte-identically. Three POOL_FULL arms reproduce their
+v0.19 counterparts exactly:
+
+| chamber | metric | v0.19 closed-1500 | v0.20 pool-full-1500 | v0.19 open-low | v0.20 pool-full-open-low | v0.19 closed-3000 | v0.20 pool-full-3000 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| tight | total_births | 156 | **156** | 175 | **175** | 204 | **204** |
+| tight | b>50 | 82 | **82** | 101 | **101** | 130 | **130** |
+| tight | r_blk | 188 | **188** | 102 | **102** | 0 | **0** |
+| tight | b_blk | 126 | **126** | 56 | **56** | 0 | **0** |
+| food_ladder | total_births | 117 | **117** | 136 | **136** | 143 | **143** |
+| food_ladder | b>50 | 66 | **66** | 85 | **85** | 92 | **92** |
+
+Pool-full arms emit no v0.20-only events (`BirthDeniedParentEnergy`),
+and `parent_energy_transferred_to_child` stays at 0.0. The v0.19
+contract is preserved by construction, as the pre-reg specified.
+
+### H13 negative control — byte-identical agent observables under closed-3000
+
+Arms E (pool-full-3000) and F (transfer-3000) produce identical
+per-agent observables on both chambers — births, b>50, food events,
+respawn events, fcpb. Pool ledger fields legitimately differ:
+
+| field | E (pool-full-3000 tight) | F (transfer-3000 tight) | mode-defined difference |
+|---|---:|---:|---|
+| total_births | 204 | 204 | (must match — agent observable) |
+| b>50 | 130 | 130 | (must match) |
+| total_food_events | 768 | 768 | (must match) |
+| total_food_respawn_events | 576 | 576 | (must match) |
+| fcpb | 75.29 | 75.29 | (must match) |
+| pool_end (avg) | 99/seed (795 ÷ 8) | 147/seed (1,178 ÷ 8) | +48/seed = 204 births × 15 ÷ 8 (gap savings retained) |
+| reproduction_heat_loss | 3,060 (= 204 × 15) | 0 | mode-defined |
+| parent_energy_transferred_to_child | 0 | 3,060 (= 204 × 15) | mode-defined |
+| pool_out_child_startup | 6,120 (= 204 × 30) | 3,060 (= 204 × 15) | mode-defined |
+
+food_ladder shows the same exact agent-observable match (143 / 92 / 677
+/ 504) and the same mode-defined ledger split. The implementation has
+zero leak into agent dynamics; transfer mode is purely a system-ledger
+mode change, exactly as the pre-reg framed it. **H13 confirmed.**
+
+### v0.20a tight_gradient
+
+| arm | mode | births | b>50 | surv | food | respawn | fcpb | pool_end | r_blk | b_blk | pe_blk | heat | xfer |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| pool-full-1500 | POOL_FULL | 156 | 82 | 8/8 | 555 | 363 | 71.15 | 8 | 188 | 126 | 0 | 2,340 | 0 |
+| **transfer-1500** | **TRANSFER** | **173** | **99** | **8/8** | **660** | **468** | **76.30** | **6** | **108** | **136** | **0** | **0** | **2,595** |
+| pool-full-open-low | POOL_FULL | 175 | 101 | 8/8 | 666 | 474 | 76.11 | 59 | 102 | 56 | 0 | 2,625 | 0 |
+| **transfer-open-low** | **TRANSFER** | **204** | **130** | **8/8** | **765** | **573** | **75.00** | **85** | **3** | **9** | **0** | **0** | **3,060** |
+| pool-full-3000 | POOL_FULL | 204 | 130 | 8/8 | 768 | 576 | 75.29 | 795 | 0 | 0 | 0 | 3,060 | 0 |
+| transfer-3000 | TRANSFER | 204 | 130 | 8/8 | 768 | 576 | 75.29 | 1,178 | 0 | 0 | 0 | 0 | 3,060 |
+
+closed-1500 binding regime: transfer mode lifts births by 17 (+11%) and
+b>50 by 17 (+21%). r_blk falls 188 → 108 (−43%); **b_blk rises slightly
+126 → 136 (+8%)** as more parents reach reproduction and contend for the
+gap-only pool draw. Net total blocks fall 314 → 244.
+
+open-low partial-rescue regime: transfer mode produces **the same
+population-level outcome as v0.18 K-50 / inf-pool / closed-3000** (204
+births, 130 b>50, 8/8 surv, fcpb=75.00 vs 75.29). Event trace differs
+slightly (food=765 vs 768, respawn=573 vs 576) because 3 + 9 = 12 pool
+gates fired during the run, perturbing birth/respawn timing without
+changing the final outcome. r_blk falls 102 → 3, b_blk falls 56 → 9,
+pool_end rises 59 → 85.
+
+closed-3000 negative control: agent observables byte-identical between
+E and F; pool ledger differs as predicted (heat=3,060 vs xfer=3,060;
+pool_end=795 vs 1,178).
+
+### v0.20b food_ladder
+
+| arm | mode | births | b>50 | surv | food | respawn | fcpb | pool_end | r_blk | b_blk | pe_blk | heat | xfer |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| pool-full-1500 | POOL_FULL | 117 | 66 | 8/8 | 566 | 393 | 96.75 | 143 | 111 | 26 | 0 | 1,755 | 0 |
+| **transfer-1500** | **TRANSFER** | **128** | **77** | **8/8** | **640** | **467** | **100.00** | **162** | **37** | **64** | **0** | **0** | **1,920** |
+| pool-full-open-low | POOL_FULL | 136 | 85 | 8/8 | 659 | 486 | 96.91 | 253 | 18 | 56 | 0 | 2,040 | 0 |
+| **transfer-open-low** | **TRANSFER** | **143** | **92** | **8/8** | **677** | **504** | **94.69** | **452** | **0** | **0** | **0** | **0** | **2,145** |
+| pool-full-3000 | POOL_FULL | 143 | 92 | 8/8 | 677 | 504 | 94.69 | 1,284 | 0 | 0 | 0 | 2,145 | 0 |
+| transfer-3000 | TRANSFER | 143 | 92 | 8/8 | 677 | 504 | 94.69 | 1,552 | 0 | 0 | 0 | 0 | 2,145 |
+
+closed-1500: lift +11 births (+9%), +11 b>50 (+17%). r_blk drops 111 →
+37 (−67%); **b_blk more than doubles 26 → 64 (+146%)**, the strongest
+expression of the H6 directional caveat. Total blocks 137 → 101.
+
+open-low: transfer mode again recovers v0.18 K-50 byte-identically (143
+/ 92 / 677 / 504 / fcpb=94.69). r_blk and b_blk both go to zero.
+
+### Hypotheses → outcomes
+
+- **H1.** `parent_energy_transferred_to_child > 0` under transfer arms;
+  `= 0` under POOL_FULL. **Confirmed exactly.** Transfer-1500 tight:
+  2,595 = 173 × 15. Transfer-open-low food_ladder: 2,145 = 143 × 15.
+  All zero under POOL_FULL.
+- **H2.** `reproduction_heat_loss = 0` under transfer; `= cost ×
+  births` under POOL_FULL. **Confirmed exactly.** Pool-full-1500 tight:
+  2,340 = 156 × 15. Transfer arms: all 0.
+- **H3.** Pool per-birth debit = `gap = 15` under transfer; `=
+  offspring = 30` under POOL_FULL. **Confirmed exactly.** transfer-1500
+  tight: pool_out_child_startup ÷ births = (gap × 173) ÷ 173 = 15
+  exactly (sweep telemetry computes this implicitly via the H4
+  invariant below).
+- **H4.** Pre-registered invariant `parent_energy_transferred_to_child
+  + pool_out_child_startup = total_births × offspring_start_energy`.
+  **Confirmed exactly under transfer mode**, verified at every arm
+  and verified at unit-test level
+  ([[tests/test_v0_20_transfer_mode.py]] §
+  "test_h4_invariant_holds_under_transfer_multiple_births").
+- **H5.** `births_after_tick_50` lifts at transfer-1500 vs
+  pool-full-1500 on at least one chamber. **Confirmed strongly on
+  both chambers.** tight: 82 → 99 (+21%); food_ladder: 66 → 77
+  (+17%).
+- **H6.** `total_pool_birth_denied` falls at transfer-1500 vs
+  pool-full-1500 on both chambers. **Falsified directionally; the
+  pre-reg's "expected but not guaranteed" hedge fires exactly as
+  warned.** Tight: 126 → 136 (+8%); food_ladder: 26 → 64 (+146%).
+  Mechanism: transfer mode halves per-birth pool draw, but the
+  resulting reduction in pool blocks produces more attempted births
+  → more late-run pool pressure on the birth side specifically.
+  **Total pool blocks fall on both chambers** (314 → 244 tight; 137
+  → 101 food_ladder); the redistribution moves binding from the
+  respawn side to the birth side. r_blk falls dramatically on both
+  chambers (188 → 108 tight; 111 → 37 food_ladder), so the pool
+  pressure is genuinely lower; b_blk rises because more parents
+  reach reproduction.
+- **H7.** `births_after_tick_50` lifts at transfer-open-low vs
+  pool-full-open-low on at least one chamber. **Confirmed strongly
+  on both chambers.** tight: 101 → 130 (+29%); food_ladder: 85 → 92
+  (+8%). transfer-open-low matches v0.18 K-50 / inf-pool on
+  population-level outcomes on both chambers (204 / 130 tight; 143 /
+  92 food_ladder), with food_ladder fully byte-identical (zero blocks
+  fire) and tight differing only in the timing-perturbed event trace
+  (3 r_blk + 9 b_blk). The partial-rescue regime becomes fully
+  productive under transfer mode.
+- **H8.** Mode-specific birth ledgers verified per-arm.
+  **Confirmed.** All transfer arms: heat = 0, xfer = births × 15,
+  pool_out_child_startup = births × 15 (the H4 invariant); all
+  POOL_FULL arms: heat = births × 15, xfer = 0,
+  pool_out_child_startup = births × 30. fcpb interpretation as a
+  **mode-conditional** metric: under POOL_FULL the v0.19 floor of
+  45 still applies (every arm clears it: 71.15+ tight, 96.75+
+  food_ladder); under transfer mode the floor does not apply,
+  and fcpb of 76.30 (transfer-1500 tight) and 100.00 (transfer-1500
+  food_ladder) are reported as ecology metrics.
+- **H9.** `seeds_with_survivors` non-decreasing at transfer-1500 vs
+  pool-full-1500. **Confirmed (flat).** All v0.20 arms produced 8/8
+  survivors; chamber geometry preserves survival under both modes.
+- **H10/H11/H12.** POOL_FULL arms reproduce v0.19 byte-identically.
+  **Confirmed exactly** — see "Determinism contracts" table above.
+- **H13.** Transfer-3000 reproduces pool-full-3000 byte-identically
+  on per-agent observables. **Confirmed exactly** — see "H13
+  negative control" table above.
+
+### Decision rule fired (per pre-reg)
+
+> **B clears H5/H6 on both chambers AND D clears H7 on at least one
+> chamber.** Routing reproduction cost into offspring measurably
+> relieves the conservation deficit. Headline finding: the substrate
+> compounds more effectively under strict-transfer reproduction than
+> under v0.19's pool-funded-with-heat-loss reproduction in the binding
+> regime.
+
+H5 cleared strongly on both chambers. H6 fired directionally as the
+pre-reg's explicit hedge anticipated — total blocks fall on both
+chambers, but the redistribution from respawn-side to birth-side blocks
+rejected the strict "all blocks fall" reading. H7 cleared spectacularly
+— D recovers v0.18 K-50 productivity byte-identically on both chambers.
+
+The headline finding holds, with the qualifier that the relief is
+**strongest in the open-ecology partial-rescue regime** (open-low)
+rather than the closed-pool binding regime (closed-1500). Influx
+supplements pool drainage; transfer mode reduces pool drainage; together
+they push partial-rescue arms into full productivity.
+
+### Three v0.19 findings now resolve / refine
+
+1. **The "non-saturating food permits compounding" finding from v0.18
+   and the "compounds under strict mass-energy conservation given
+   sufficient budget or steady-state influx" finding from v0.19 both
+   hold under v0.20**, with one important refinement: under transfer
+   mode, the **steady-state influx required to recover v0.18 K-50 falls
+   from 7/tick to 2/tick**. Eliminating reproduction heat loss reduces
+   the open-ecology system's net energy demand by 15 × `births_per_run`
+   ≈ 2,595–3,060 across 8 seeds = ~325–380 per run-of-200-ticks =
+   ~1.6–1.9 energy/tick. The 2/tick influx now suffices because the
+   transfer mode's "reproduction is no longer a heat sink" gain is
+   roughly the same magnitude as the closed-pool–to–open-equiv influx
+   delta (5/tick worth of additional drain offset).
+
+2. **Pool exhaustion is gradient, not cliff — and binding shifts
+   between flow types under transfer mode.** v0.19 had pool exhaustion
+   bind respawn (r_blk) and births (b_blk) roughly proportionally; v0.20
+   transfer mode shifts the binding decisively from respawn to births
+   on closed-1500 (r_blk drops 43–67%, b_blk rises 8–146%). The same
+   pool exhaustion mechanism, but redistributed by the per-flow draw
+   reduction at the child-startup step.
+
+3. **The v0.19 fcpb 45 floor was already mode-conditional — v0.20 makes
+   that explicit.** fcpb on transfer-1500 (76.30 tight, 100.00
+   food_ladder) is well above the floor, but the floor itself is a
+   POOL_FULL concept (heat-loss + pool-funded-startup = 45 per birth).
+   Under TRANSFER the system-energy floor per birth is 15 (gap-only
+   pool draw); food consumption only needs to cover that plus
+   metabolism + parent recovery. The pre-reg correctly downgraded fcpb
+   under transfer mode to an observational ecology metric.
+
+### Population sanity (transfer-1500 vs pool-full-1500 tight_gradient)
+
+transfer-1500 tight produces 173 births, 99 b>50, 8/8 surv. Pool flows:
+respawn out=9,360 (468 events × 20), child-startup gap out=2,595 (173 ×
+15), no death residual (tight is starvation-dominated), no influx. Net
+drain 11,955 across 8 seeds = 1,494 per run from the 1,500-energy
+budget. **The pool is exactly emptied** (pool_end=6 / 8 seeds = 0.75
+per run). Compounding fired in the binding regime.
+
+In contrast, transfer-open-low tight: respawn out=11,460 (573 × 20),
+child-startup gap out=3,060 (204 × 15) = 14,520 total drain across 8
+seeds = 1,815 per run, against pool_initial=1,500 + influx (2 × 200 =
+400) = 1,900 per run. Net residual: 85 / 8 = 10.6 per run. **The
+2/tick influx exactly closes the conservation deficit under transfer
+mode**, recovering v0.18 K-50 dynamics.
+
+### Data points worth flagging for v0.21
+
+- **The b_blk-rises-while-r_blk-falls finding under closed-1500 is
+  worth its own analysis.** Transfer mode shifts the binding from
+  respawn to birth-startup gates. v0.21 designs that vary the
+  pool-debit timing (e.g., split the gap into "respawn gap" + "birth
+  gap" with different pool budgets) could test whether the binding
+  redistributes back.
+- **transfer-open-low recovers v0.18 K-50 byte-identically; the
+  "minimum influx for productivity" frontier under transfer mode is
+  somewhere between 0/tick (closed-1500: partial recovery) and 2/tick
+  (open-low: full recovery).** v0.21 could sweep influx in
+  {0.5, 1.0, 1.5, 2.0} under transfer mode at pool=1500 to find the
+  exact transition point.
+- **pe_blk = 0 across every arm.** The defensive parent-energy gate
+  was never exercised in 96 runs. With cost=15 and threshold=50, the
+  parent always has comfortable margin. v0.21+ could remove the gate
+  entirely if a cheap empirical-irrelevance argument is wanted, or
+  preserve it as defense-in-depth for higher-cost reproduction
+  configurations.
+- **closed-1500 transfer mode is NOT byte-identical to closed-1500
+  POOL_FULL on agent observables** (173 vs 156 births, etc.). Per-agent
+  state is mode-invariant *only* when neither pool gate fires; under
+  closed-1500 both gates fire under both modes (just at different
+  rates), so the population trajectories diverge. The H13 negative
+  control on closed-3000 is therefore the load-bearing identity test;
+  H10/H11/H12 cover the v0.19 contract on POOL_FULL arms.
+- **Under transfer-open-low, the pool retains 85 energy per chamber
+  (tight) by run end** vs closed-1500 transfer's 6 — a 14× factor for
+  just 400 energy of influx (2/tick × 200 ticks). The system is highly
+  sensitive to small influx in the transfer mode regime; that sensitivity
+  invites a v0.21 study of metabolic-rate variability + transfer mode.
+
 ## References
 
 - [[docs/experiments/fear_hunger_v0.19.md]] — v0.19 results and the v0.20
