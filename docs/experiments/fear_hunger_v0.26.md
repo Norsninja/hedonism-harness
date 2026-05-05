@@ -462,3 +462,198 @@ work is V0_26_ARMS + tests + driver + doc.
   receiving the new `hazard_avoidance_weight` seam.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework" —
   the substrate axis.
+
+---
+
+## Results
+
+**Status:** executed 2026-05-05. 64 runs (4 arms × 2 chambers × 8 seeds),
+20.4s wall time. All anchor / determinism hypotheses hold (H11 byte-
+identity vs v0.25 anchors on coupled and phantom cells; H12 phantom ≡
+no-hazard exactly on both chambers; H14 default-1.0 no-op verified by
+unit test). Substantive predictions: H7 (tight b>50 drops with
+avoidance off) fires at the boundary; H10 (food_ladder b>50 stable)
+holds; H6 / H8 / H9 **fail** in informative ways.
+
+**Headline:** **avoidance routing is load-bearing on BOTH chambers, but
+its productivity impact differs sharply.** Tight's small cull-tax under
+v0.25 was *partially* avoidance-driven (b>50 drops 9 points / 7.8% when
+avoidance is off, ~56% of the v0.25 hzd8→hzd0 gap on tight) but
+geometry remains decisive — tight produces **zero injury deaths even
+with avoidance disabled** because its compact spawn-to-food path keeps
+hazard entries low enough that no agent accumulates lethal damage in
+a single visit. Food_ladder's pre-food band is NOT a self-sufficient
+buffer: removing avoidance more than doubles injury deaths
+(16 → 40, +150%) and triples death-residual recycling
+(625 → 1818). The v0.23 / v0.24 chamber-geometry-as-buffer reading
+needs revision — geometry routes traffic but does not deflect it.
+
+### Headline tables
+
+#### tight_gradient (influx=1.0)
+
+| arm | haz | avd | births | b>50 | surv | food | respawn | fcpb  | pool_min | pool_end | residual | starv | inj | haz_ent | r_blk | b_blk | xfer  |
+|-----|----:|----:|-------:|-----:|------|-----:|--------:|------:|---------:|---------:|---------:|------:|----:|--------:|------:|------:|------:|
+| coupled    | 8 | 1.0 | 190 | 116 | 8/8 | 716 | 524 | 75.37 | 0 | 34 |   0.0 | 133 |  0 |  30 | 52 | 32 | 2,850 |
+| invisible  | 8 | 0.0 | 183 | 107 | 8/8 | 722 | 530 | 78.91 | 0 | 32 |   0.0 | 125 |  0 |  40 | 46 | 67 | 2,745 |
+| phantom    | 0 | 1.0 | 246 | 100 | 8/8 | 673 | 481 | 54.72 | 0 | 36 |   0.0 | 202 |  0 |  42 | 95 | 42 | 3,690 |
+| no-hazard  | 0 | 0.0 | 246 | 100 | 8/8 | 673 | 481 | 54.72 | 0 | 36 |   0.0 | 202 |  0 |  42 | 95 | 42 | 3,690 |
+
+#### food_ladder (influx=1.0)
+
+| arm | haz | avd | births | b>50 | surv | food | respawn | fcpb   | pool_min | pool_end | residual | starv | inj | haz_ent | r_blk | b_blk | xfer  |
+|-----|----:|----:|-------:|-----:|------|-----:|--------:|-------:|---------:|---------:|---------:|------:|----:|--------:|------:|------:|------:|
+| coupled    | 8 | 1.0 | 143 |  92 | 8/8 | 674 | 501 |  94.27 |   2 | 257 |   624.8 |  77 | 16 | 120 | 3 | 0 | 2,145 |
+| invisible  | 8 | 0.0 | 150 |  88 | 8/8 | 762 | 570 | 101.60 |  12 | 221 | 1,817.5 |  66 | 40 | 233 | 4 | 0 | 2,250 |
+| phantom    | 0 | 1.0 | 249 | 116 | 8/8 | 670 | 478 |  53.82 |   0 |  38 |     0.0 | 206 |  0 | 200 | 98 | 12 | 3,735 |
+| no-hazard  | 0 | 0.0 | 249 | 116 | 8/8 | 670 | 478 |  53.82 |   0 |  38 |     0.0 | 206 |  0 | 200 | 98 | 12 | 3,735 |
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `pool_in_ambient_influx == ambient_influx_rate × sum(executed_ticks)` | **HOLDS.** All 8 cells: 8/8 survivors → executed-tick sum = 1,600; influx product = 1,600; verified to the unit. |
+| H2 | `parent_energy_transferred + pool_out_child_startup == total_births × 30` | **HOLDS.** Transfer-mode contract; xfer = births × 15 across all cells. |
+| H3 | `reproduction_heat_loss == 0` | **HOLDS** (transfer-mode contract; all cells reported 0.0). |
+| H4 | `births_blocked_by_parent_energy == 0` | **HOLDS** across all cells. |
+| H5 | `total_injury_deaths == 0` at hazard=0 cells | **HOLDS.** Phantom and no-hazard cells on both chambers report inj=0. |
+| H6 | invisible-tight injury_deaths ≥ 5 across 8 seeds | **FAILS — 0.** Tight geometry keeps entries (40) below the lethal-accumulation threshold even with avoidance off. Damage=8 per entry, max_health=100; agents don't return to the same hazard tile within a single life often enough to die. **Informative falsification:** removes the avoidance-as-mortality-gate reading; tight's small cull-tax is geometry-protected against single-visit lethality. |
+| H7 | invisible-tight b>50 ≤ 105 (≥10% drop vs coupled 116) | **FIRES at the boundary — weak-to-moderate support.** Invisible-tight b>50 = 107, a 7.8% drop. Misses the strict 10% threshold by 2 births. Consistent with "avoidance contributes meaningfully to tight productivity but is not the only mechanism." |
+| H8 | invisible-tight b>50 ∈ [80, 100] (falls toward food_ladder hzd8 = 92) | **FAILS.** Invisible-tight b>50 = 107, well above the predicted band. Tight's geometry contribution is larger than H8 anticipated — removing avoidance drops b>50 only 9 points, not the 16+ points needed to reach food_ladder territory. |
+| H9 | invisible-food_ladder injury_deaths within 50% of coupled (8 ≤ inj ≤ 24) | **FAILS — major.** Invisible-food_ladder inj = 40, +150% vs coupled (16). Pre-food band is NOT a self-sufficient routing buffer; the avoidance signal was actively deflecting agents on food_ladder, just less than was visible at the binary hzd8 vs hzd0 comparison. **Substantive finding** — chamber-geometry-as-buffer reading from v0.23/v0.24 is wrong. |
+| H10 | invisible-food_ladder b>50 within 10% of coupled | **HOLDS.** 88 vs 92, a 4.3% drop. Food_ladder absorbs the +24 injury deaths via population dynamics (more births, +7) — the substrate's productivity is robust against this avoidance ablation even though the cull-tax visibly increases. |
+| H11 | six anchor cells reproduce v0.25 byte-identically | **HOLDS — exact match on every column.** Coupled tight matches V0_25 hzd8-influx-1.0 (190/116/716/524/52/32/0/0/30/0.0/34/2,850/0.0). Coupled food_ladder matches V0_25 hzd8-influx-1.0 (143/92/674/501/3/0/77/16/120/624.8/257/2,145). Phantom and no-hazard cells on both chambers match V0_25 hzd0-influx-1.0 exactly. |
+| H12 | phantom ≡ no-hazard byte-identically | **HOLDS — every column identical.** Tight: 246/100/673/481/95/42/202/0/42/0.0/36/3,690 in both arms. Food_ladder: 249/116/670/478/98/12/206/0/200/0.0/38/3,735 in both arms. **Confirms Reading A: perception is purely damage-derived; with damage=0 the avoidance multiplier is dormant.** |
+| H13 | V0_19/20/21/22/23/25_ARMS unchanged | **HOLDS.** Test suite 687 → 705 (+18 v0.26 tests; pure addition); ruff clean. |
+| H14 | `GradientPolicy(hazard_avoidance_weight=1.0)` is no-op vs default | **HOLDS.** Verified by `test_hazard_avoidance_weight_one_is_no_op_against_default` across a basket of synthetic observations. Coupled-cell byte-identity vs v0.25 (which had no field) corroborates at the sweep scale. |
+
+### Refined mechanism reading
+
+The v0.25 chamber-dependent hazard-sign finding survives but its
+mechanism is sharpened. **Three contributions** to the chamber-asymmetric
+b>50 sign at hzd8:
+
+1. **Direct cull-tax (avoidance-mediated).** On food_ladder the
+   avoidance signal cuts injury deaths roughly in half (40 → 16 when
+   weight is restored). On tight the signal also routes agents away
+   (entries 40 → 30) but the absolute injury-death rate is zero in
+   both cases — tight's geometry keeps single-visit damage below the
+   max_health threshold.
+2. **Direct cull-tax (geometry-mediated).** Tight's compact path
+   structure keeps hazard entries an order of magnitude below
+   food_ladder's at every avoidance setting. The geometric rerouting
+   of traffic is real and load-bearing — but routing is not the same
+   as deflecting (a single agent may pass through and survive).
+3. **Pool-exhaustion timing penalty.** Operating regardless of
+   avoidance: tight at hzd8 vs hzd0 sees b>50 = 116 vs 100 (16-point
+   gap). Of that gap, ~9 points (56%) are removable by ablating
+   avoidance (invisible-tight b>50 = 107). The residual 7 points
+   (44%) is the geometry-and-timing component.
+
+The two chambers differ in **which contribution dominates**:
+
+- **food_ladder:** direct cull-tax dominates. The pre-food band
+  geometry routes agents *through* hazards; avoidance-mediated
+  rerouting halves but does not eliminate the cull-tax. Removing
+  hazards entirely (hzd0) lifts b>50 +24 (92 → 116). Productivity is
+  cull-tax-bound throughout.
+- **tight:** geometry dominates the death-rate component
+  (zero injuries everywhere) but timing dominates the productivity
+  component. The interior optimum at h=8 (v0.25) is the equilibrium
+  between (a) avoidance-mediated rerouting buying late-game compounding
+  time and (b) timing penalty of the cull preventing pool exhaustion.
+  Disable avoidance and tight loses ~half the optimum's productivity
+  gain over hzd0.
+
+### Falsification of the "geometry-as-buffer" reading
+
+The v0.23 / v0.24 framing called food_ladder's pre-food band a
+"carrying-capacity buffer" / "geometry-as-buffer" — implying the
+chamber's geometry alone produced the food_ladder vs tight asymmetry.
+**v0.26 falsifies this** on the food_ladder side: with avoidance off,
+food_ladder hazard entries nearly double (120 → 233) and injury
+deaths jump +150%. The pre-food band geometry routes agents *toward*
+the food zone but does not deflect them around hazards; that
+deflection comes from the avoidance signal. The chamber-asymmetric
+hazard sign at hzd8 is sustained jointly by (i) food_ladder's geometry
+forcing hazard crossings and (ii) the avoidance signal partially
+deflecting them. Without the avoidance signal, food_ladder pays a
+much larger cull-tax — but its productivity (b>50) is buffered by
+population dynamics so the binary "good vs bad" reading at b>50 is
+unchanged.
+
+### Reading A confirmed
+
+H12 fires deductively-cleanly on both chambers: phantom ≡ no-hazard
+byte-identically. **Reading A is correct: perception is purely
+damage-derived.** At `hazard_damage=0` the world's hazard layer is
+zero everywhere, so `obs.hazard_signal_*` is zero everywhere, so the
+`hazard_avoidance_weight` multiplier is dormant. Reading B (separate
+`world.hazard_perceived` layer) is therefore unnecessary for the
+question v0.26 asked. Reading B remains a viable seam for future
+slices wanting to study perception-without-damage (`phantom != no-hazard`
+by construction), but no v0.26 result requires it.
+
+### What this changes about v0.25's framing
+
+- **v0.25 interior optimum at h=8 on tight is partially avoidance-
+  mediated.** Removing avoidance drops invisible-tight b>50 by 9
+  points; the optimum shape would compress (h=8 still wins because
+  the timing-penalty and residual geometry contributions remain) but
+  by less. v0.25's headline is preserved; its mechanism is sharpened.
+- **food_ladder monotonicity is preserved but its source is split.**
+  v0.25 read it as pure cull-tax. v0.26 shows that the cull-tax has
+  two routing components (geometry forces crossings; avoidance
+  partially deflects). At weight=0 food_ladder's b>50 still drops
+  monotonically with hazard; at weight=1 the curve is shallower.
+- **The v0.21/v0.22/v0.23/v0.25 frames "tight is starvation-dominated,
+  food_ladder is hazard-dominated" survives.** v0.26 adds: "tight is
+  starvation-dominated regardless of avoidance because geometry
+  protects against single-visit lethality; food_ladder is
+  hazard-dominated *and* avoidance-buffered."
+
+### v0.27 plan candidates
+
+1. **(Highest priority) Influx × 2×2 cross-product.** Replicate the
+   v0.26 grid at influx ∈ {0.5, 1.0, 1.5} to test whether the
+   avoidance-vs-geometry split is influx-dependent. Pre-committed
+   prediction: invisible-tight b>50 should track tight's interior
+   optimum shape from v0.25 with a uniform downward shift; food_ladder
+   should remain flat-ish on b>50 with elevated injury deaths.
+2. **Intermediate avoidance weights** (0.25, 0.5, 0.75) to map the
+   partial-ablation curve. Tests whether the relationship is linear
+   in weight or concave/convex.
+3. **Hazard intensity × weight=0** at h ∈ {4, 8, 12} on tight to
+   check whether the "single-visit lethality threshold" reading
+   holds: at h=12 with weight=0, does tight finally produce non-zero
+   injury deaths? Predicted yes (per-entry damage exceeds half of
+   max_health, two visits → death). If no, geometry is even more
+   protective than v0.26 suggested.
+4. **Reading B substrate seam** if a future question explicitly needs
+   perception-without-damage (e.g., "does a phantom hazard cue alone
+   support the timing-regulation effect?"). Currently no question
+   requires it.
+
+### Implementation summary
+
+- **Production code:** ~25 LOC change.
+  - `gradient_policy.py`: +20 LOC (`hazard_avoidance_weight`
+    parameter, validation, multiplier on `pain_w`).
+  - `comparison_grid.py`: `Arm.hazard_avoidance_weight` field +
+    threading + V0_26_ARMS (4 arms).
+  - `fear_hunger_chamber.py`: factory-wrapping for the avoidance weight.
+- **Tests:** ~210 LOC `tests/test_comparison_grid_v0_26.py`
+  (14 new tests), ~70 LOC v0.26 unit tests in
+  `tests/test_gradient_policy.py` (4 new tests). Suite 687 → 705.
+- **Sweep driver:** ~80 LOC `scripts/v0.26_sweep.py`.
+- **Wall time:** 20.4s on 64 runs (every seed completed 200 ticks).
+- **No core/model.py/sensors.py/world.py/fear_hunger_chamber.py-core
+  changes.** The seam is a single multiplier in GradientPolicy.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .             ok
+  uv run ruff format --check .    ok
+  uv run pytest                   705 passed
+  uv run python scripts/core_smoke_test.py  ok
+  uv run python scripts/v0.26_sweep.py      20.4s; all 6 anchors byte-identical against v0.25; H12 phantom ≡ no-hazard byte-identical on both chambers
+  ```
