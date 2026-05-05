@@ -26,6 +26,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from hedonism_harness.core.config import ChildFundingMode
 from hedonism_harness.core.traits import TraitConfig
 from hedonism_harness.experiments.fear_hunger_chamber import (
     ChamberRunResult,
@@ -95,6 +96,16 @@ class Arm:
     closed-pool / open-ecology arms; ``ambient_influx_rate`` may be
     set with the pool to add per-tick deterministic influx (open
     ecology). Used by ``V0_19_ARMS`` to sweep the conservation axis.
+
+    ``child_funding_mode`` (v0.20) selects the reproduction-funding
+    semantics. ``None`` (default) leaves the ReproductionConfig default
+    (POOL_FULL — preserves v0.7..v0.19 bit-identity).
+    ``ChildFundingMode.PARENT_TRANSFER_POOL_GAP`` routes the parent's
+    ``energy_cost`` into the child's body energy and reduces the pool's
+    per-birth debit to the gap (``offspring_start_energy - energy_cost``).
+    Used by ``V0_20_ARMS`` to test whether eliminating reproduction
+    heat loss lifts compounding under v0.19's binding-conservation
+    regime.
     """
 
     label: str
@@ -107,6 +118,7 @@ class Arm:
     food_respawn_cooldown: int | None = None
     energy_pool_initial: float | None = None
     ambient_influx_rate: float | None = None
+    child_funding_mode: ChildFundingMode | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -404,6 +416,107 @@ V0_19_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.20 arms — parent-transfer + pool-gap reproduction. Tests whether
+# routing the parent's reproduction cost into offspring startup energy
+# (with the pool funding only the remaining gap) lifts compounding in
+# regimes where v0.19's pool was the binding constraint. Six arms across
+# three regimes:
+#
+#   - closed-1500 (v0.19's binding-conservation regime, the headline
+#     comparison): A POOL_FULL reference vs B PARENT_TRANSFER_POOL_GAP test.
+#   - open-low influx=2 (v0.19's partial-rescue regime): C POOL_FULL
+#     reference vs D PARENT_TRANSFER_POOL_GAP test.
+#   - closed-3000 (v0.19's null regime, pool not binding): E POOL_FULL
+#     reference vs F PARENT_TRANSFER_POOL_GAP NEGATIVE CONTROL — F must
+#     equal E byte-for-byte on per-agent observables (per-tick agent
+#     state is mode-invariant when neither pool gate fires); pool ledger
+#     fields legitimately differ.
+#
+# K=50 throughout; offspring_start_energy=30, energy_cost=15 (gap=15).
+# Drops v0.19's K=100 hedge and open-equiv arms (settled). Reflex-baseline
+# policy. See [[docs/experiments/fear_hunger_v0.20.md]].
+V0_20_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="pool-full-1500",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.0,
+        child_funding_mode=ChildFundingMode.POOL_FULL,
+    ),
+    Arm(
+        label="transfer-1500",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=0.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+    Arm(
+        label="pool-full-open-low",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=2.0,
+        child_funding_mode=ChildFundingMode.POOL_FULL,
+    ),
+    Arm(
+        label="transfer-open-low",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=2.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+    Arm(
+        label="pool-full-3000",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=3_000.0,
+        ambient_influx_rate=0.0,
+        child_funding_mode=ChildFundingMode.POOL_FULL,
+    ),
+    Arm(
+        label="transfer-3000",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=3_000.0,
+        ambient_influx_rate=0.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -439,6 +552,13 @@ class RunDiagnostics:
       - ``total_pool_birth_denied`` — count of PoolBirthDenied
         emissions (birth attempts blocked by empty pool). Always
         0 when no pool is configured.
+
+    v0.20 adds the parent-energy block telemetry:
+      - ``total_births_blocked_by_parent_energy`` — count of
+        BirthDeniedParentEnergy emissions (queued births denied because
+        the parent's energy fell below ``energy_cost`` between queue
+        and process time). Always 0 under POOL_FULL mode (the gate
+        fires only under PARENT_TRANSFER_POOL_GAP).
     """
 
     births_after_tick_50: int
@@ -452,6 +572,7 @@ class RunDiagnostics:
     total_food_respawn_events: int
     total_pool_respawn_denied: int
     total_pool_birth_denied: int
+    total_births_blocked_by_parent_energy: int = 0
 
     @property
     def total_action_ticks(self) -> int:
@@ -482,6 +603,7 @@ def _read_run_diagnostics(  # noqa: PLR0912, PLR0915 — single-pass dispatch is
     food_respawn_count = 0
     pool_respawn_denied_count = 0
     pool_birth_denied_count = 0
+    parent_energy_denied_count = 0
     max_event_tick = 0
     with events_jsonl.open() as f:
         for line in f:
@@ -538,6 +660,12 @@ def _read_run_diagnostics(  # noqa: PLR0912, PLR0915 — single-pass dispatch is
                 # v0.19: birth attempt blocked by empty pool. Counted;
                 # not an action emission.
                 pool_birth_denied_count += 1
+            elif kind == "BirthDeniedParentEnergy":
+                # v0.20: birth attempt blocked because parent's energy
+                # dropped below energy_cost between queue and process
+                # time. Counted; not an action emission. Always 0 under
+                # POOL_FULL.
+                parent_energy_denied_count += 1
             elif kind == "ReproductionRequested":
                 # Reproduction is auto-substrate (B, C) or voluntary action
                 # (A). In A it's an action emission alongside AgentStayed
@@ -564,6 +692,7 @@ def _read_run_diagnostics(  # noqa: PLR0912, PLR0915 — single-pass dispatch is
         total_food_respawn_events=food_respawn_count,
         total_pool_respawn_denied=pool_respawn_denied_count,
         total_pool_birth_denied=pool_birth_denied_count,
+        total_births_blocked_by_parent_energy=parent_energy_denied_count,
     )
 
 
@@ -626,6 +755,15 @@ class ArmCellAggregate:
     pool_min_observed: float | None = None
     pool_max_observed: float | None = None
     mean_pool_end: float | None = None
+    # v0.20 conservation-ledger telemetry. Under POOL_FULL only
+    # ``total_reproduction_heat_loss`` is non-zero; under
+    # PARENT_TRANSFER_POOL_GAP only
+    # ``total_parent_energy_transferred_to_child`` is non-zero.
+    # ``total_births_blocked_by_parent_energy`` counts the new
+    # transfer-mode-only failure path.
+    total_reproduction_heat_loss: float = 0.0
+    total_parent_energy_transferred_to_child: float = 0.0
+    total_births_blocked_by_parent_energy: int = 0
 
     @property
     def mean_births_per_parent(self) -> float:
@@ -754,6 +892,13 @@ def _aggregate(
         pool_min_observed=pool_min_observed,
         pool_max_observed=pool_max_observed,
         mean_pool_end=mean_pool_end,
+        total_reproduction_heat_loss=sum(r.reproduction_heat_loss for r in results),
+        total_parent_energy_transferred_to_child=sum(
+            r.parent_energy_transferred_to_child for r in results
+        ),
+        total_births_blocked_by_parent_energy=sum(
+            d.total_births_blocked_by_parent_energy for d in diags
+        ),
     )
 
 
@@ -831,6 +976,7 @@ def _run_one_arm_seed(
         food_respawn_cooldown=arm.food_respawn_cooldown,
         energy_pool_initial=arm.energy_pool_initial,
         ambient_influx_rate=arm.ambient_influx_rate,
+        child_funding_mode=arm.child_funding_mode,
         condition=arm.label,
         setup_observer=setup,
     )

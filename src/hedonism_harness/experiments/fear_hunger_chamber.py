@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 from hedonism_harness.core.config import (
     ActionConfig,
     BodyConfig,
+    ChildFundingMode,
     ReproductionConfig,
     WorldConfig,
 )
@@ -256,6 +257,18 @@ class ChamberRunResult:
     pool_in_ambient_influx: float = 0.0
     pool_blocked_count_respawn: int = 0
     pool_blocked_count_child_startup: int = 0
+    # v0.20 conservation-ledger telemetry. Defaults preserve the
+    # v0.7..v0.19 ChamberRunResult shape: ``reproduction_heat_loss`` is
+    # populated under POOL_FULL (= energy_cost x successful births;
+    # captures the v0.19 heat-loss-per-birth ledger);
+    # ``parent_energy_transferred_to_child`` is populated under
+    # PARENT_TRANSFER_POOL_GAP (= energy_cost x successful births);
+    # ``births_blocked_by_parent_energy`` counts the new transfer-mode-
+    # only failure path (parent's energy dropped below energy_cost
+    # between queue and process time).
+    reproduction_heat_loss: float = 0.0
+    parent_energy_transferred_to_child: float = 0.0
+    births_blocked_by_parent_energy: int = 0
     notes: dict[str, object] = field(default_factory=dict)
 
 
@@ -282,6 +295,7 @@ def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction w
     food_respawn_cooldown: int | None = None,
     energy_pool_initial: float | None = None,
     ambient_influx_rate: float | None = None,
+    child_funding_mode: ChildFundingMode | None = None,
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
@@ -340,6 +354,20 @@ def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction w
     body_cfg = BodyConfig()
     action_cfg = ActionConfig()
     repro_cfg = reproduction_config if reproduction_config is not None else ReproductionConfig()
+    if child_funding_mode is not None:
+        # v0.20: thread the funding mode into the (frozen) ReproductionConfig.
+        # ``None`` (default) preserves whatever mode the caller's
+        # ``reproduction_config`` already carries — typically POOL_FULL,
+        # the v0.7..v0.19 default. Reconstruct (rather than ``model_copy``)
+        # so the cross-field validator (offspring_start_energy >=
+        # energy_cost under TRANSFER) re-fires; ``model_copy`` would skip
+        # it. Pre-existing v0.7..v0.19 callers passing the bare default
+        # ``ReproductionConfig`` with ``child_funding_mode=None`` are
+        # unaffected (the early return preserves the existing
+        # reference).
+        repro_cfg = ReproductionConfig(
+            **{**repro_cfg.model_dump(), "child_funding_mode": child_funding_mode}
+        )
     trait_cfg = trait_config if trait_config is not None else TraitConfig()
 
     # Founders spaced along the chamber's spawn column.
@@ -410,6 +438,16 @@ def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction w
             "pool_blocked_count_respawn": int(pool.blocked_count_respawn),
             "pool_blocked_count_child_startup": int(pool.blocked_count_child_startup),
         }
+    # v0.20: snapshot the conservation-ledger accumulators off the model.
+    # Always populated regardless of mode — under POOL_FULL only
+    # ``reproduction_heat_loss`` increments; under TRANSFER only
+    # ``parent_energy_transferred_to_child``. ``births_blocked_by_parent_energy``
+    # is always 0 under POOL_FULL (the gate fires only under TRANSFER mode).
+    v0_20_kwargs: dict[str, object] = {
+        "reproduction_heat_loss": float(model.reproduction_heat_loss),
+        "parent_energy_transferred_to_child": float(model.parent_energy_transferred_to_child),
+        "births_blocked_by_parent_energy": int(model.births_blocked_by_parent_energy),
+    }
     summary = ChamberRunResult(
         run_id=run_id,
         seed=seed,
@@ -428,6 +466,7 @@ def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction w
         stays=episode.tally.stays,
         output_dir=runs_root / run_id,
         **pool_kwargs,  # type: ignore[arg-type]
+        **v0_20_kwargs,  # type: ignore[arg-type]
     )
 
     if write_outputs:

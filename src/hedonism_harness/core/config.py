@@ -11,7 +11,35 @@ with valence.py, etc.).
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+
+
+class ChildFundingMode(StrEnum):
+    """How a newborn child's starting energy is sourced (v0.20).
+
+    ``POOL_FULL`` (the v0.7..v0.19 default) — the ambient energy pool
+    funds the child's full ``offspring_start_energy``; the parent's
+    ``energy_cost`` is destroyed as heat. Per-birth system energy delta
+    is ``-energy_cost`` (heat loss).
+
+    ``PARENT_TRANSFER_POOL_GAP`` (v0.20 mechanism) — the parent's
+    ``energy_cost`` is transferred into the child's body energy; the
+    pool funds only the remaining gap
+    (``offspring_start_energy - energy_cost``). Per-birth system energy
+    delta is ``0`` (no heat loss at reproduction). Mechanically realised
+    at the system-ledger level: per-agent body deltas (parent ``-15``,
+    child ``+30``) are unchanged between modes; only the pool debit
+    shrinks. This mode requires a configured energy pool
+    (``WorldConfig.energy_pool_initial is not None``); inf-pool under
+    transfer mode is rejected at chamber-driver construction time. See
+    ``docs/experiments/fear_hunger_v0.20.md``.
+    """
+
+    POOL_FULL = "pool_full"
+    PARENT_TRANSFER_POOL_GAP = "parent_transfer_pool_gap"
+
 
 UINT32_MAX = 2**32 - 1
 
@@ -185,3 +213,41 @@ class ReproductionConfig(BaseModel):
             "Hazard signal here is the same axial sum used by sensors."
         ),
     )
+    child_funding_mode: ChildFundingMode = Field(
+        default=ChildFundingMode.POOL_FULL,
+        description=(
+            "v0.20: how a newborn child's starting energy is sourced. "
+            "POOL_FULL (the default) preserves v0.7..v0.19 semantics: the "
+            "pool funds offspring_start_energy and the parent's energy_cost "
+            "is destroyed as heat. PARENT_TRANSFER_POOL_GAP routes the "
+            "parent's energy_cost into the child's body energy; the pool "
+            "funds only offspring_start_energy - energy_cost. Per-agent "
+            "body deltas are mode-invariant; only the pool debit and the "
+            "system-energy ledger differ. See "
+            "docs/experiments/fear_hunger_v0.20.md."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _check_offspring_covers_energy_cost(self) -> ReproductionConfig:
+        # v0.20: under PARENT_TRANSFER_POOL_GAP, the pool funds
+        # ``offspring_start_energy - energy_cost``; a negative gap is a
+        # surplus regime not handled in v0.20 and is rejected at config
+        # construction. Under POOL_FULL the parent's energy_cost is heat
+        # loss (independent of offspring_start_energy); the v0.7..v0.19
+        # bare ``ReproductionConfig()`` default (cost=35, offspring=30)
+        # is legal under POOL_FULL and preserves bit-identity. The
+        # check therefore only fires under TRANSFER mode.
+        if (
+            self.child_funding_mode == ChildFundingMode.PARENT_TRANSFER_POOL_GAP
+            and self.offspring_start_energy < self.energy_cost
+        ):
+            msg = (
+                f"offspring_start_energy ({self.offspring_start_energy}) must be "
+                f">= energy_cost ({self.energy_cost}) under "
+                "ChildFundingMode.PARENT_TRANSFER_POOL_GAP; a smaller offspring "
+                "start would imply a negative pool gap. v0.21+ may introduce a "
+                "surplus-handling rule if biologically motivated."
+            )
+            raise ValueError(msg)
+        return self
