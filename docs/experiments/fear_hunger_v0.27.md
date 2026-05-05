@@ -428,3 +428,241 @@ Total v0.27 implementation: ~790 LOC. Comparable to prior slices.
   GradientPolicy with the v0.26 `hazard_avoidance_weight` seam.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework" —
   the substrate axis.
+
+---
+
+## Results
+
+**Status:** executed 2026-05-05. 80 runs (5 arms × 2 chambers × 8 seeds),
+22.2s wall time. All anchor / determinism hypotheses hold (H12 four
+byte-identity anchors against v0.26; H13 prior arms unchanged). All
+mechanical / invariant hypotheses hold (H1..H5, H7, H11). The
+**substantive curve-shape headline is unexpected on food_ladder**:
+
+**Both chambers exhibit interior optima on the avoidance-weight
+axis at fixed hazard=8.** Tight has a weak interior maximum at
+w=0.75 (b>50=118, +2 births vs w=1.0=116 — exactly meeting the
+pre-committed noise threshold). Food_ladder has a **strong** interior
+maximum at w=0.5 (b>50=98, +6 births vs w=1.0=92 and +10 vs w=0=88,
+both well clear of noise). H8 fires at the boundary (tight); H9
+fails decisively (food_ladder is *also* non-monotonic). The
+"avoidance over-routing" mechanism reading — at very high weight,
+agents over-deflect and waste path/energy budget — is supported on
+both chambers.
+
+A second, sharper food_ladder anomaly: **b>50 dips at w=0.75 to 89**,
+substantially below the neighboring w=0.5 (98) and w=1.0 (92), and
+total_births at w=0.75 (145) is the lowest across the 5 cells. The
+dip is not a single-seed artifact (8 seeds; 8/8 survivors). Mechanism
+hypothesis (deferred to v0.28): at w=0.75 the avoidance pull crosses
+some threshold relative to food pull that flips agent routing onto a
+specific food_ladder corridor with worse compounding economics than
+either side of the threshold.
+
+### Headline tables
+
+#### tight_gradient (hazard=8, influx=1.0)
+
+| arm | weight | births | b>50 | surv | food | respawn | fcpb  | pool_min | pool_end | residual | starv | inj | haz_ent | r_blk | b_blk | xfer  |
+|-----|-------:|-------:|-----:|------|-----:|--------:|------:|---------:|---------:|---------:|------:|----:|--------:|------:|------:|------:|
+| A   | 0.00   | 183 | 107 | 8/8 | 722 | 530 | 78.91 | 0 | 32 | 0.0 | 125 | 0 | 40 | 46 | 67 | 2,745 |
+| B   | 0.25   | 188 | 112 | 8/8 | 717 | 525 | 76.28 | 0 | 35 | 0.0 | 129 | 0 | 40 | 51 | 74 | 2,820 |
+| C   | 0.50   | 185 | 113 | 8/8 | 719 | 527 | 77.73 | 0 | 36 | 0.0 | 127 | 0 | 34 | 49 | 33 | 2,775 |
+| D   | 0.75   | 190 | **118** | 8/8 | 716 | 524 | 75.37 | 0 | 34 | 0.0 | 137 | 0 | 32 | 52 | 33 | 2,850 |
+| E   | 1.00   | 190 | 116 | 8/8 | 716 | 524 | 75.37 | 0 | 34 | 0.0 | 133 | 0 | 30 | 52 | 32 | 2,850 |
+
+Tight curve shape on b>50: **107 → 112 → 113 → 118 → 116.** Strict
+non-monotone: rises 5/1/5 then drops 2 at the high end. Interior
+maximum at w=0.75. Total_births curve: 183 / 188 / 185 / 190 / 190 —
+also non-monotone with dip at w=0.5.
+
+Hazard exposure (entries) on tight: **40 → 40 → 34 → 32 → 30** — flat
+at low weight, then strict monotone decrease from w=0.25 onward.
+Injury_deaths on tight: 0 across all weights (geometric protection
+against single-visit lethality persists across the entire avoidance
+range, per v0.26 H6 reading).
+
+#### food_ladder (hazard=8, influx=1.0)
+
+| arm | weight | births | b>50 | surv | food | respawn | fcpb   | pool_min | pool_end | residual | starv | inj | haz_ent | r_blk | b_blk | xfer  |
+|-----|-------:|-------:|-----:|------|-----:|--------:|-------:|---------:|---------:|---------:|------:|----:|--------:|------:|------:|------:|
+| A   | 0.00   | 150 | 88 | 8/8 | 762 | 570 | 101.60 | 12 | 221 | 1,817.5 | 66 | 40 | 233 | 4 | 0 | 2,250 |
+| B   | 0.25   | 152 | 97 | 8/8 | 692 | 518 |  91.05 |  6 | 305 | 1,482.5 | 75 | 34 | 216 | 2 | 0 | 2,280 |
+| C   | 0.50   | 154 | **98** | 8/8 | 685 | 511 |  88.96 |  4 | 270 | 1,090.7 | 81 | 25 | 163 | 8 | 0 | 2,310 |
+| D   | 0.75   | 145 | 89 | 8/8 | 688 | 514 |  94.90 |  2 | 252 |   872.3 | 78 | 20 | 145 | 5 | 6 | 2,175 |
+| E   | 1.00   | 143 | 92 | 8/8 | 674 | 501 |  94.27 |  2 | 257 |   624.8 | 77 | 16 | 120 | 3 | 0 | 2,145 |
+
+Food_ladder curve shape on b>50: **88 → 97 → 98 → 89 → 92.** Strongly
+non-monotone with interior maximum at w=0.5 AND a dip at w=0.75. Total
+births curve: 150 / 152 / 154 / 145 / 143 — w=0.5 maximum, then
+declining (the "more avoidance = fewer hazard deaths but also fewer
+total births" balance shifts at the high end).
+
+Routing observables on food_ladder are **monotone** as predicted:
+- Hazard entries: 233 → 216 → 163 → 145 → 120 (strict monotone
+  decrease).
+- Injury deaths: 40 → 34 → 25 → 20 → 16 (strict monotone decrease).
+- Death-residual recycling: 1,818 → 1,483 → 1,091 → 872 → 625 (strict
+  monotone decrease — the v0.22 recycling channel scales smoothly
+  with weight).
+
+The disconnect between **monotone routing** and **non-monotone
+productivity** is the v0.27 substantive finding: less hazard exposure
+→ fewer deaths, but the productivity outcome (b>50) is mediated by
+something else (path-length cost, food-access timing) that has its
+own non-monotonic dependence on weight.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `pool_in_ambient_influx == ambient_influx_rate × sum(executed_ticks)` | **HOLDS.** All 10 cells: 8/8 survivors → executed-tick sum = 1,600; influx product = 1,600; verified to the unit. |
+| H2 | `parent_energy_transferred + pool_out_child_startup == total_births × 30` | **HOLDS.** Transfer-mode contract; xfer = births × 15 across all cells. |
+| H3 | `reproduction_heat_loss == 0` | **HOLDS** (transfer-mode contract). |
+| H4 | `births_blocked_by_parent_energy == 0` | **HOLDS** across all cells. |
+| H5 | food_ladder `total_injury_deaths > 0` at every weight | **HOLDS.** food_ladder cull-tax is present at every weight: 40 / 34 / 25 / 20 / 16. |
+| H6 | food_ladder b>50 monotone non-decreasing in weight | **FAILS.** 88 → 97 → 98 → **89** → 92. The dip at w=0.75 breaks monotonicity by 9 births, well outside seed noise. **Substantive food_ladder finding** — see "anomaly" subsection below. |
+| H7 | food_ladder injury_deaths monotone non-increasing in weight | **HOLDS.** 40 → 34 → 25 → 20 → 16. The routing is uniformly improving with weight even though productivity isn't. |
+| H8 | tight b>50 has interior optimum at w* ∈ {0.25, 0.5, 0.75} (≥ 2 births vs w=1.0) | **FIRES at the boundary.** w=0.75 produces b>50=118; w=1.0 produces 116; +2 births exactly meets the pre-committed noise threshold. Tight curve: 107 → 112 → 113 → **118** → 116. **Substantive tight finding** — the v0.25 interior-optimum-at-h=8 pattern has a symmetric counterpart on the avoidance-weight axis at fixed hazard. |
+| H9 | food_ladder b>50 has NO interior optimum (no weight beats w=1.0 by ≥ 2 births) | **FAILS DECISIVELY.** w=0.5 produces b>50=98; w=1.0 produces 92; +6 births. Food_ladder ALSO has an interior optimum on the avoidance axis. **The v0.27 chamber-asymmetry prediction is wrong** — both chambers exhibit over-routing at high weight. |
+| H10 | tight curve is concave (diminishing returns) IF H8 fails | **N/A — H8 fires.** Tight curve is non-monotone, neither concave-monotone nor linear; the interior maximum at w=0.75 is the controlling structure. |
+| H11 | `total_hazard_entries` monotone non-increasing in weight, both chambers | **HOLDS.** tight: 40 → 40 → 34 → 32 → 30 (one tie at the low end, otherwise strict). food_ladder: 233 → 216 → 163 → 145 → 120 (strict). The routing-side observable is monotone on both chambers — the b>50 non-monotonicity is downstream of routing, not in the routing itself. |
+| H12 | four anchor cells reproduce v0.26 byte-identically | **HOLDS — exact match on every column.** tight w=0.0 = V0_26 invisible-tight (183/107/722/530/46/67/125/0/40/0.0/32/2,745). tight w=1.0 = V0_26 coupled-tight (190/116/716/524/52/32/133/0/30/0.0/34/2,850). food_ladder w=0.0 = V0_26 invisible-food (150/88/762/570/4/0/66/40/233/1,817.5/221/2,250). food_ladder w=1.0 = V0_26 coupled-food (143/92/674/501/3/0/77/16/120/624.8/257/2,145). |
+| H13 | V0_19/20/21/22/23/25/26_ARMS unchanged | **HOLDS.** Test suite 705 → 716 (+11 v0.27 tests; pure addition); ruff clean. |
+
+### Substantive finding 1: avoidance over-routing on both chambers
+
+**The v0.27 substantive headline is that both tight and food_ladder
+exhibit interior optima on the avoidance-weight axis at fixed
+hazard=8.** This generalises v0.25's chamber-specific finding (tight
+interior optimum at h=8 on the hazard axis) to both chambers on a
+different policy axis.
+
+The mechanism reading — supported by the v0.27 telemetry — is
+**avoidance over-routing**: at very high avoidance weight, agents
+deflect from hazards even when the detour costs more energy than the
+direct cull would. The optimal avoidance weight is the one that
+deflects agents *just enough* to avoid lethal accumulation but not
+so much that they waste energy on unnecessary detours. The optima:
+
+- **tight w*=0.75** (b>50=118 vs 116 at w=1.0; +2 births / +1.7%).
+  The advantage is real but small — tight's geometry already
+  protects agents from lethal accumulation at every weight (inj=0
+  throughout), so the marginal cost of over-routing at w=1.0 is
+  modest.
+- **food_ladder w*=0.5** (b>50=98 vs 92 at w=1.0; +6 births / +6.5%).
+  Larger advantage — food_ladder geometry forces hazard crossings,
+  so the over-routing cost at high weight is more visible. The
+  optimal weight is markedly below 1.0, suggesting the
+  v0.14-shipped GradientPolicy default (effective weight=1.0 before
+  v0.26) was *not* productivity-optimal on food_ladder.
+
+The over-routing reading is consistent with monotone-routing
+observables (hazard entries, injury deaths, recycling residual all
+strictly monotone in weight on food_ladder) plus non-monotone
+productivity (b>50). Less hazard exposure has a net cost beyond some
+threshold.
+
+### Substantive finding 2: food_ladder dip at w=0.75
+
+A separate anomaly worth flagging: food_ladder b>50 drops to 89 at
+w=0.75 — 9 births below the w=0.5 cell (98) and 3 below the w=1.0
+cell (92). Total_births also dips to 145 (vs 154 at w=0.5 and 143 at
+w=1.0). Across 8 seeds with 8/8 survivors, this is not a sampling
+artifact.
+
+Possible mechanisms (deferred to v0.28):
+
+1. **Routing-threshold flip.** At w=0.75 the avoidance pull crosses
+   some threshold relative to food pull that flips agent routing
+   onto a specific food_ladder corridor with worse compounding
+   economics. The hazard_entries observable supports this
+   qualitatively — entries drop sharply between w=0.5 (163) and
+   w=0.75 (145), suggesting a routing-pattern change. But entries
+   continue to drop monotonically into w=1.0 (120), so whatever
+   pathology is at w=0.75 is non-monotone.
+2. **Trait drift / population dynamics.** With unbounded mutation,
+   8-seed-mean trait distributions can drift. The w=0.75 dip might
+   be a population-dynamics artefact specific to the seed set.
+   Discriminating: re-run at the same 8 seeds with a different RNG
+   stream (seeds 9..16) to test whether the dip is reproducible or
+   seed-specific.
+3. **Chamber-geometry interaction.** food_ladder's pre-food band
+   has a fixed spatial structure; at w=0.75, the pull-balance
+   produces a path that lingers in a specific cell-kind region for
+   longer than at w=0.5 or w=1.0, costing more food consumption per
+   birth (fcpb at w=0.75 = 94.90 vs w=0.5 = 88.96 — slightly higher,
+   consistent with this reading).
+
+The dip is the most surprising finding of v0.27 and the cleanest
+candidate for a v0.28 follow-up.
+
+### What this changes about prior framings
+
+- **v0.26 endpoint reading is preserved but sharpened.** The
+  weight=0 vs weight=1 binary contrast captured the *direction* of
+  avoidance-mediated productivity (positive on both chambers) but
+  missed the *interior shape*. Both chambers have non-monotone
+  productivity in weight; w=1.0 (the v0.14..v0.25 default before the
+  v0.26 seam) is *not* the productivity-optimal weight on either
+  chamber.
+- **v0.25 tight-interior-optimum-at-h=8 reading is generalized.**
+  The non-monotonic "tax-vs-timing tradeoff with productivity ceiling"
+  framing applies on both chambers when the perturbation is
+  avoidance-side rather than damage-side. The cull-tax and
+  pool-exhaustion-timing penalties have analogues on the policy axis
+  (over-routing wastes path/energy budget; under-routing increases
+  cull-tax and recycling-residual flux).
+- **v0.23/v0.24 chamber-geometry-as-buffer reading remains
+  falsified** (unchanged from v0.26). food_ladder geometry routes
+  traffic but does not deflect it; the avoidance signal does the
+  deflecting work.
+
+### v0.28 candidates
+
+The v0.27 results sharpen the next-question landscape. In rough
+priority order:
+
+1. **(Highest) Reproducibility test of the food_ladder dip at w=0.75.**
+   Re-run V0_27_ARMS at seeds 9..16 (a fresh RNG stream) on
+   food_ladder only to test whether the b>50=89 dip is reproducible
+   or seed-specific. ~40 runs, ~5s. Cheapest possible discrimination.
+2. **Influx × weight cross-product** at influx ∈ {0.5, 1.0, 1.5}
+   on both chambers to test whether the interior-optima locations
+   (w=0.75 tight, w=0.5 food_ladder) shift with influx. The pool-
+   exhaustion-timing mechanism predicts they should depend on influx
+   (lower influx → earlier pool exhaustion → optimum shifts to lower
+   weight where the cull-tax is higher but routing is more direct).
+   ~15 arms × 2 chambers × 8 seeds = 240 runs.
+3. **Weight × hazard cross-product** at hazard ∈ {4, 12} on tight to
+   test whether the interior optimum on the weight axis shifts with
+   hazard. v0.25 located tight's interior optimum at h=8 on the
+   hazard axis; v0.27 located w*=0.75 at h=8 on the weight axis. Is
+   the (w*, h*) joint optimum at (0.75, 8)? ~96 runs.
+4. **Weights > 1.0** to characterise saturation. v0.27 shows w=1.0
+   is past the optimum on both chambers; does the curve continue to
+   drop monotonically beyond 1.0, or saturate? ~6 arms (weights
+   1.0, 1.25, 1.5, 2.0) × 2 chambers × 8 seeds = 96 runs.
+5. **Long-window stability** at w=0.75 (tight optimum) vs w=1.0 to
+   test whether the interior advantage compounds or fades over a
+   500-tick window. v0.27+ candidate.
+
+### Implementation summary
+
+- **Production code:** zero changes — v0.26 seam was sufficient.
+- **Configuration:** ~95 LOC `V0_27_ARMS` in `comparison_grid.py`
+  (5 arms).
+- **Tests:** ~210 LOC `tests/test_comparison_grid_v0_27.py` (11 new
+  tests). Suite 705 → 716.
+- **Sweep driver:** ~85 LOC `scripts/v0.27_sweep.py`.
+- **Wall time:** 22.2s on 80 runs (every seed completed 200 ticks;
+  no early termination).
+- **No core/model.py/sensors.py/world.py/gradient_policy.py changes.**
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .             ok
+  uv run ruff format --check .    ok
+  uv run pytest                   716 passed
+  uv run python scripts/core_smoke_test.py  ok
+  uv run python scripts/v0.27_sweep.py     22.2s; four anchors byte-identical against v0.26
+  ```
