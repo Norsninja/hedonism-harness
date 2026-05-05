@@ -550,3 +550,210 @@ hazard=0 substrate.
   Source of the H4 conservation invariant carried forward to v0.23 H2.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework" —
   the substrate axis.
+
+---
+
+## Results
+
+**Status:** executed 2026-05-05. 80 runs (5 arms × 2 chambers × 8 seeds),
+30s wall time. All hard pins hold (H1/H5/H6/H14/H15). The
+chamber-asymmetry gap survives hazard removal at the H9/H10 boundary
+(Δ_primary = +0.5/tick). Unexpected sub-finding: **tight_gradient
+gets worse at hazard=0**, not better — tight primary i\* rises from
+1.5/tick (hazard=8 v0.21) to 2.0/tick (hazard=0 v0.23). The hazard
+wall was net-supportive on tight, mirroring v0.22's "recycling was a
+net tax" finding on food_ladder but with the opposite sign relative
+to expectations.
+
+### Headline tables
+
+#### tight_gradient (hazard=0)
+
+| arm | influx | births | b>50 | surv | food | respawn | fcpb  | pool_min | pool_end | residual | starv | inj | haz_ent | r_blk | b_blk | xfer  |
+|-----|-------:|-------:|-----:|------|-----:|--------:|------:|---------:|---------:|---------:|------:|----:|--------:|------:|------:|------:|
+| A   | 0.0    | 238    |  92  | 8/8  |  611 |    419  | 51.34 |       0  |       6  |     0.0  |  233  |  0  |     42  |  157  |   61  | 3,570 |
+| B   | 0.5    | 243    |  97  | 8/8  |  640 |    448  | 52.67 |       0  |      24  |     0.0  |  219  |  0  |     42  |  128  |   20  | 3,645 |
+| C   | 1.0    | 246    | 100  | 8/8  |  673 |    481  | 54.72 |       0  |      36  |     0.0  |  202  |  0  |     42  |   95  |   42  | 3,690 |
+| D   | 1.5    | 253    | 107  | 8/8  |  703 |    511  | 55.57 |       0  |      48  |     0.0  |  189  |  0  |     42  |   65  |   38  | 3,795 |
+| E   | 2.0    | 265    | 119  | 8/8  |  733 |    541  | 55.32 |       0  |      51  |     0.0  |  186  |  0  |     42  |   35  |   90  | 3,975 |
+
+#### food_ladder (hazard=0)
+
+| arm | influx | births | b>50 | surv | food | respawn | fcpb  | pool_min | pool_end | residual | starv | inj | haz_ent | r_blk | b_blk | xfer  |
+|-----|-------:|-------:|-----:|------|-----:|--------:|------:|---------:|---------:|---------:|------:|----:|--------:|------:|------:|------:|
+| A   | 0.0    | 239    | 106  | 8/8  |  610 |    418  | 51.05 |       0  |       7  |     0.0  |  234  |  0  |    188  |  158  |   69  | 3,585 |
+| B   | 0.5    | 246    | 113  | 8/8  |  639 |    447  | 51.95 |       0  |      21  |     0.0  |  220  |  0  |    197  |  129  |   28  | 3,690 |
+| C   | 1.0    | 249    | 116  | 8/8  |  670 |    478  | 53.82 |       0  |      38  |     0.0  |  206  |  0  |    200  |   98  |   12  | 3,735 |
+| D   | 1.5    | 258    | 125  | 8/8  |  702 |    510  | 54.42 |       0  |      41  |     0.0  |  195  |  0  |    208  |   66  |   33  | 3,870 |
+| E   | 2.0    | 264    | 131  | 8/8  |  733 |    541  | 55.53 |       0  |      52  |     0.0  |  185  |  0  |    216  |   35  |   51  | 3,960 |
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `pool_in_ambient_influx == ambient_influx_rate × sum(executed_ticks)` | **HOLDS.** Every arm 8/8 survivors → executed-tick sum = 1,600. Influx products: 0/800/1,600/2,400/3,200 — match every arm on both chambers. |
+| H2 | `parent_energy_transferred + pool_out_child_startup == total_births × offspring_start_energy` | **HOLDS.** Transfer-mode contract: xfer = births × 15 across all 10 arms; pool_out_child_startup = births × 15 by definition; sum = births × 30. |
+| H3 | `reproduction_heat_loss == 0` | **HOLDS** (transfer mode contract). |
+| H4 | `births_blocked_by_parent_energy == 0` | **HOLDS.** No arm produced parent-energy-gate blocks. |
+| H5 | `total_injury_deaths == 0` | **HOLDS — hard pin.** All 10 arms reported inj=0. |
+| H6 | `pool_in_death_residual == 0` | **HOLDS — hard pin.** All 10 arms reported residual=0.0. |
+| H7 | b>50 monotone non-decreasing in influx | **HOLDS — strong form.** tight: 92→97→100→107→119; food_ladder: 106→113→116→125→131. Strictly monotonic on both chambers. |
+| H8 | r_blk + b_blk monotone non-increasing in influx | **PARTIAL.** food_ladder: 227→157→110→99→86 — strictly monotonic. tight: 218→148→137→103→125 — non-monotonic at the high end (b_blk component: 61→20→42→38→90). The redistribution finding (v0.20/v0.21/v0.22) extends to v0.23 tight: as productivity rises, pool binding migrates from respawn-side to birth-side. Cautious form held. |
+| H9 | Δ_primary ≥ +0.5/tick (gap survives) | **FIRES at the boundary.** Δ_primary = 0.5/tick exactly. food_ladder primary i\* = 1.5; tight primary i\* = 2.0. Geometry/food-accessibility is load-bearing; the v0.21 1.0/tick gap was approximately half hazard-mediated, half geometric. |
+| H10 | 0 ≤ Δ_primary < +0.5/tick (gap collapses) | **DOES NOT FIRE** (boundary case resolves to H9 per pre-reg's `≥ +0.5` band). |
+| H11 | Δ_primary ≤ −0.5/tick (reverses) | **DOES NOT FIRE.** food_ladder still transitions earlier than tight. |
+| H12 | tight primary i\* ≤ 1.0/tick (tight was hazard-wall-constrained) | **DOES NOT FIRE.** tight primary i\* at hazard=0 is **2.0/tick**, *worse* than the v0.21 hazard=8 anchor (1.5/tick). Tight is not hazard-wall-constrained; removing the wall made tight harder, not easier. |
+| H13 | food_ladder primary i\* < 0.5/tick at hazard=0 | **DOES NOT FIRE** under the self-referential criterion (food_ladder i\* = 1.5/tick at hazard=0 because arm E rose to b>50=131, lifting the 90% threshold to 117.9). In **absolute** terms, food_ladder at hazard=0 influx=0 produces b>50=106 — already 15% above v0.21's hazard=8 plateau (92), so the v0.22 finding extends qualitatively even though the relative-criterion threshold did not catch it. |
+| H14 | byte-identity arm C food_ladder vs v0.22 hazard-0 | **HOLDS — exact match.** births=249, b>50=116, food=670, respawn=478, r_blk=98, b_blk=12, starv=206, inj=0, residual=0.0, haz_entries=200, pool_min=0, pool_end=38, xfer=3,735. Identical to v0.22 anchor on every column. |
+| H15 | V0_19/20/21/22 unchanged | **HOLDS.** Test suite 652→662 (purely additive); ruff clean; core_smoke_test green. |
+
+### Headline finding: chamber asymmetry has both hazard and geometry components
+
+The v0.21 1.0/tick chamber-asymmetry gap (food_ladder 0.5 vs tight 1.5
+at hazard=8) **partially survives hazard removal**: at hazard=0 the
+gap is +0.5/tick (food_ladder 1.5 vs tight 2.0). H9 fires at the band
+boundary. Geometry/food-accessibility is **load-bearing**, and the
+hazard-mediated component is roughly half of the v0.21 gap. The
+chamber comparison axis remains a meaningful experimental dimension
+under the conservation substrate.
+
+Cross-chamber productivity at every shared influx (b>50 ratio
+food_ladder/tight): 1.15, 1.16, 1.16, 1.17, 1.10. food_ladder
+out-produces tight by 10–17% at every influx point under hazard=0 —
+a clean geometric advantage independent of the hazard mechanism.
+
+### Sub-finding: tight gets worse at hazard=0 (the v0.22 mirror, opposite sign)
+
+v0.22 found that recycling on food_ladder was a **net tax** —
+removing hazards lifted food_ladder productivity 26% above the v0.21
+plateau. v0.23 reveals the **opposite sign on tight**: tight primary
+i\* rises from 1.5/tick (hazard=8) to 2.0/tick (hazard=0). Removing
+the hazard cull made tight harder, not easier.
+
+Mechanism candidates (deferred to v0.24+ to discriminate):
+
+1. **Hazard cull was throughput-relieving on tight.** At hazard=8,
+   tight's hazard wall culled agents that would otherwise contribute
+   to pool drain via metabolism + respawn pressure. The cull
+   functioned as a population-control mechanism specific to tight's
+   geometry; without it, more agents survive into deeper starvation
+   regimes and the pool-bound binding intensifies.
+
+2. **Hazard avoidance on tight was load-bearing for food access.**
+   At hazard=8, the GradientPolicy's avoidance signal routed tight
+   agents around the hazard wall toward the food zone. At hazard=0,
+   that signal is dormant. tight's compact geometry means the
+   straight-line "through hazard" path may not actually reach
+   food more efficiently than the v0.21 routing, and the loss of
+   the avoidance signal degrades tight's effective food access.
+
+3. **Combination.** Both mechanisms are plausible and not
+   mutually exclusive. v0.24+ candidate to discriminate is
+   parameterising hazard-avoidance independently of hazard-damage
+   in `GradientPolicy`.
+
+food_ladder shows the opposite pattern: haz_entries clustered at
+188–216 across influx points (vs 200 at the v0.22 hazard=0 anchor —
+consistent), and productivity rose smoothly across all influx
+points. food_ladder's pre-food band remains accessible regardless
+of hazard signal; tight's geometry depends on the avoidance behavior
+more than was previously visible.
+
+### Sub-finding: hazard=0 substrate is pool-bound across all influxes
+
+Every arm on both chambers hit `pool_min_observed = 0` and produced
+substantial r_blk + b_blk. Even arm E (influx=2.0) on tight hit
+pool_min=0 with 35 r_blk + 90 b_blk (b_blk increased D→E),
+indicating birth-side pool binding intensifies as influx relieves
+respawn-side binding (the v0.20–v0.22 redistribution). Starvation
+pressure remains the binding observable: 185–234 starvations per
+arm across the sweep. fcpb clusters at 51–56, near the transfer-mode
+metabolic floor (~60), confirming the substrate is paying for
+births close to its energetic limit.
+
+### Hazard exposure asymmetry at hazard=0
+
+A telemetry-only observation: at hazard=0, agents enter hazard
+tiles freely (no avoidance). On food_ladder the per-arm
+haz_entries ranged 188–216 (mildly influx-dependent). On tight,
+**every arm reported haz_entries=42 exactly** — a striking
+constant. tight's compact geometry and reflex-baseline policy
+constrain hazard-tile residency to a fixed pattern independent of
+influx-driven population dynamics. Possibly reflects that tight's
+hazard band is small enough that early agents establish a stable
+transit pattern that later cohorts inherit; on food_ladder the
+larger hazard surface produces population-size-dependent exposure.
+
+### What this changes about the v0.21 framing
+
+- v0.21's chamber asymmetry is **partially preserved** under
+  hazard removal: ~half geometric, ~half hazard-mediated. The
+  geometric component is real and worth characterising further
+  (v0.24+ candidate).
+- v0.21's tight=1.5/tick anchor was **not hazard-wall-constrained**
+  in the sense H12 anticipated. Tight's hazard wall was
+  net-supportive (mirrors v0.22's food_ladder finding); removing
+  it lifts the i\* threshold rather than lowers it.
+- v0.21/v0.22 framing of "tight is starvation-dominated, food_ladder
+  is hazard-dominated" survives and sharpens: tight at hazard=0 is
+  even more starvation-dominated (no recycling/cull buffer);
+  food_ladder at hazard=0 has more headroom because its geometry
+  self-supplies the food access that tight's hazard avoidance was
+  providing on tight.
+
+### Hazard-perception caveat (interpretation note)
+
+`hazard_damage=0` zeroes both the per-tile damage applied at
+runtime AND the avoidance signal — `GradientPolicy` keys avoidance
+off the per-tile damage value, so at damage=0 the avoidance
+behavior is dormant (haz_entries telemetry above confirms this).
+v0.23 is therefore the **broader hazard-removal test** in this
+taxonomy: damage AND avoidance both go to zero; only the cell-kind
+geometry (the hazard band still exists as a region of non-FOOD,
+non-SAFE cells agents traverse) is preserved.
+
+A geometry-isolated test (damage=0 with avoidance still active)
+would require a `GradientPolicy` parameterisation decoupling
+perceived-hazard from actual-damage. That is a v0.24+ candidate
+and is not in scope here. Any v0.23 attribution of "tight was not
+hazard-wall-constrained" should be read as "tight does not benefit
+from removing both damage and avoidance simultaneously" — the
+discrimination between damage-only and avoidance-only effects on
+tight is the natural follow-up.
+
+### v0.24+ candidates surfaced by v0.23
+
+- **Decouple hazard damage from hazard avoidance.** A
+  parameterised `GradientPolicy` (e.g.,
+  `hazard_avoidance_weight` independent of damage) would
+  discriminate "geometry-only" from "perception-only" effects on
+  tight, and test the two mechanism candidates above.
+- **Long-window stability** at hazard=0 on the high-productivity
+  food_ladder arms — does the substrate stay productive at
+  n_ticks ∈ {500, 1000} or does the pool eventually exhaust?
+- **Pool-size sweep at hazard=0** to characterise the new cliff
+  position now that the hazard cull is removed.
+- **Hazard × influx cross-product** — both v0.22 (food_ladder)
+  and v0.23 (both chambers at hazard=0) suggest the
+  hazard-vs-influx tradeoff surface is non-trivial and
+  chamber-asymmetric; mapping it fully would clarify the
+  population-control dynamics.
+
+### Implementation summary
+
+- **Code:** ~95 LOC (`V0_23_ARMS` in `comparison_grid.py`).
+- **Tests:** ~190 LOC (`tests/test_comparison_grid_v0_23.py`,
+  10 new tests; suite 652→662).
+- **Sweep driver:** ~95 LOC (`scripts/v0.23_sweep.py`).
+- **Wall time:** 30s on 80 runs (every seed completed 200 ticks;
+  no early-termination).
+- **No core/model.py/fear_hunger_chamber.py changes.** The seam
+  v0.22 shipped (`Arm.hazard_damage`, `total_injury_deaths`)
+  was sufficient.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .             ok
+  uv run ruff format --check .    ok
+  uv run --all-extras pytest      662 passed
+  uv run --all-extras python scripts/core_smoke_test.py  ok
+  ```
