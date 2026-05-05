@@ -453,11 +453,14 @@ both chambers.
 A second, sharper food_ladder anomaly: **b>50 dips at w=0.75 to 89**,
 substantially below the neighboring w=0.5 (98) and w=1.0 (92), and
 total_births at w=0.75 (145) is the lowest across the 5 cells. The
-dip is not a single-seed artifact (8 seeds; 8/8 survivors). Mechanism
-hypothesis (deferred to v0.28): at w=0.75 the avoidance pull crosses
-some threshold relative to food pull that flips agent routing onto a
-specific food_ladder corridor with worse compounding economics than
-either side of the threshold.
+aggregate 8-seed result is large enough to flag (≥ 8 births below
+either neighbor); v0.28 should inspect paired seed-level
+trajectories before treating the w=0.75 dip as a stable regime
+rather than a seed-set artefact. Mechanism hypothesis (deferred to
+v0.28): at w=0.75 the avoidance pull crosses some threshold relative
+to food pull that flips agent routing onto a specific food_ladder
+corridor with worse compounding economics than either side of the
+threshold.
 
 ### Headline tables
 
@@ -523,10 +526,10 @@ own non-monotonic dependence on weight.
 | H5 | food_ladder `total_injury_deaths > 0` at every weight | **HOLDS.** food_ladder cull-tax is present at every weight: 40 / 34 / 25 / 20 / 16. |
 | H6 | food_ladder b>50 monotone non-decreasing in weight | **FAILS.** 88 → 97 → 98 → **89** → 92. The dip at w=0.75 breaks monotonicity by 9 births, well outside seed noise. **Substantive food_ladder finding** — see "anomaly" subsection below. |
 | H7 | food_ladder injury_deaths monotone non-increasing in weight | **HOLDS.** 40 → 34 → 25 → 20 → 16. The routing is uniformly improving with weight even though productivity isn't. |
-| H8 | tight b>50 has interior optimum at w* ∈ {0.25, 0.5, 0.75} (≥ 2 births vs w=1.0) | **FIRES at the boundary.** w=0.75 produces b>50=118; w=1.0 produces 116; +2 births exactly meets the pre-committed noise threshold. Tight curve: 107 → 112 → 113 → **118** → 116. **Substantive tight finding** — the v0.25 interior-optimum-at-h=8 pattern has a symmetric counterpart on the avoidance-weight axis at fixed hazard. |
+| H8 | tight b>50 has interior optimum at w* ∈ {0.25, 0.5, 0.75} (≥ 2 births vs w=1.0) | **FIRES at the pre-registered boundary; evidence is positive but weak compared with food_ladder.** w=0.75 produces b>50=118; w=1.0 produces 116; +2 births exactly meets the pre-committed noise threshold (no margin above it). Tight curve: 107 → 112 → 113 → **118** → 116. The +2-birth advantage is small enough that a rerun on a fresh seed stream could plausibly flip the interior-optimum / saturation reading on tight; food_ladder's interior optimum (+6 births at w=0.5, see H9) is the substantive evidence carrying the v0.27 over-routing headline. |
 | H9 | food_ladder b>50 has NO interior optimum (no weight beats w=1.0 by ≥ 2 births) | **FAILS DECISIVELY.** w=0.5 produces b>50=98; w=1.0 produces 92; +6 births. Food_ladder ALSO has an interior optimum on the avoidance axis. **The v0.27 chamber-asymmetry prediction is wrong** — both chambers exhibit over-routing at high weight. |
 | H10 | tight curve is concave (diminishing returns) IF H8 fails | **N/A — H8 fires.** Tight curve is non-monotone, neither concave-monotone nor linear; the interior maximum at w=0.75 is the controlling structure. |
-| H11 | `total_hazard_entries` monotone non-increasing in weight, both chambers | **HOLDS.** tight: 40 → 40 → 34 → 32 → 30 (one tie at the low end, otherwise strict). food_ladder: 233 → 216 → 163 → 145 → 120 (strict). The routing-side observable is monotone on both chambers — the b>50 non-monotonicity is downstream of routing, not in the routing itself. |
+| H11 | `total_hazard_entries` monotone non-increasing in weight, both chambers | **HOLDS — non-increasing on tight, strict monotone on food_ladder.** tight: 40 → 40 → 34 → 32 → 30 (one tie at the low end, otherwise non-increasing). food_ladder: 233 → 216 → 163 → 145 → 120 (strict). The routing-side observable is monotone on both chambers (with the tight tie noted) — the b>50 non-monotonicity is downstream of routing, not in the routing itself. |
 | H12 | four anchor cells reproduce v0.26 byte-identically | **HOLDS — exact match on every column.** tight w=0.0 = V0_26 invisible-tight (183/107/722/530/46/67/125/0/40/0.0/32/2,745). tight w=1.0 = V0_26 coupled-tight (190/116/716/524/52/32/133/0/30/0.0/34/2,850). food_ladder w=0.0 = V0_26 invisible-food (150/88/762/570/4/0/66/40/233/1,817.5/221/2,250). food_ladder w=1.0 = V0_26 coupled-food (143/92/674/501/3/0/77/16/120/624.8/257/2,145). |
 | H13 | V0_19/20/21/22/23/25/26_ARMS unchanged | **HOLDS.** Test suite 705 → 716 (+11 v0.27 tests; pure addition); ruff clean. |
 
@@ -546,10 +549,13 @@ deflects agents *just enough* to avoid lethal accumulation but not
 so much that they waste energy on unnecessary detours. The optima:
 
 - **tight w*=0.75** (b>50=118 vs 116 at w=1.0; +2 births / +1.7%).
-  The advantage is real but small — tight's geometry already
-  protects agents from lethal accumulation at every weight (inj=0
-  throughout), so the marginal cost of over-routing at w=1.0 is
-  modest.
+  The advantage exactly meets the pre-committed noise threshold (no
+  margin above it); evidence for an interior optimum on tight is
+  positive but weak compared with food_ladder, and a fresh seed
+  stream could plausibly flip it to a saturation reading. tight's
+  geometry already protects agents from lethal accumulation at every
+  weight (inj=0 throughout), so the marginal cost of over-routing at
+  w=1.0 should be modest — consistent with the small observed gap.
 - **food_ladder w*=0.5** (b>50=98 vs 92 at w=1.0; +6 births / +6.5%).
   Larger advantage — food_ladder geometry forces hazard crossings,
   so the over-routing cost at high weight is more visible. The
