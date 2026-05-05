@@ -23,6 +23,7 @@ from hedonism_harness.core.body import make_body
 from hedonism_harness.core.config import (
     ActionConfig,
     BodyConfig,
+    ChildFundingMode,
     ReproductionConfig,
     WorldConfig,
 )
@@ -31,6 +32,7 @@ from hedonism_harness.core.events import (
     AgentBorn,
     AgentDied,
     AteFood,
+    BirthDeniedParentEnergy,
     FoodRespawned,
     LoggedEvent,
     PoolBirthDenied,
@@ -175,6 +177,22 @@ class HHModel(mesa.Model):
         self.reproduction_config = reproduction_config or ReproductionConfig()
         self.trait_config = trait_config or TraitConfig()
 
+        # v0.20 cross-config validator: PARENT_TRANSFER_POOL_GAP requires a
+        # finite or open energy pool. Inf-pool under transfer mode has no
+        # source for the gap top-up, so this configuration is rejected at
+        # construction time rather than silently degraded.
+        if (
+            self.reproduction_config.child_funding_mode == ChildFundingMode.PARENT_TRANSFER_POOL_GAP
+            and world_config.energy_pool_initial is None
+        ):
+            msg = (
+                "ChildFundingMode.PARENT_TRANSFER_POOL_GAP requires "
+                "WorldConfig.energy_pool_initial to be set; inf-pool under "
+                "transfer mode has no pool to fund the offspring_start_energy "
+                "gap. See docs/experiments/fear_hunger_v0.20.md."
+            )
+            raise ValueError(msg)
+
         self.streams: RngStreams = make_streams(world_config.seed)
 
         # ---- Build the world and PropertyLayers with SHARED storage ----
@@ -245,6 +263,22 @@ class HHModel(mesa.Model):
 
             self._ate_food_handler = _on_ate_food
             signal_for(AteFood).connect(_on_ate_food, sender=self)
+
+        # ---- v0.20 mode-specific reproduction accumulators -------------
+        # These track conservation-ledger semantics that the EnergyPool
+        # primitive cannot express on its own. Under POOL_FULL the
+        # parent's energy_cost is destroyed at each successful birth,
+        # accumulated as ``reproduction_heat_loss``; under
+        # PARENT_TRANSFER_POOL_GAP the same energy is conceptually
+        # routed into the child and accumulated as
+        # ``parent_energy_transferred_to_child`` (with
+        # ``reproduction_heat_loss`` staying at zero). The
+        # ``births_blocked_by_parent_energy`` counter captures the new
+        # transfer-mode-only failure path where the parent's energy
+        # dropped below energy_cost between queue and process time.
+        self.reproduction_heat_loss: float = 0.0
+        self.parent_energy_transferred_to_child: float = 0.0
+        self.births_blocked_by_parent_energy: int = 0
 
         # ---- v0.19 ambient energy pool ----------------------------------
         # Constructed only when ``energy_pool_initial`` is finite. Under
@@ -611,32 +645,59 @@ class HHModel(mesa.Model):
         # 8. Increment tick count.
         self.tick_count += 1
 
-    def _process_birth_queue(self) -> None:
+    def _process_birth_queue(self) -> None:  # noqa: PLR0912, PLR0915 — birth path is cohesive (gates + reproduction + child wiring + accumulators); extracting would obscure the lifecycle.
         if not self._birth_queue:
             return
         # Snapshot + clear so reproductions during processing don't recurse.
         parents = self._birth_queue
         self._birth_queue = []
+        # v0.20: per-mode debit amount + parent-energy gate guard. Resolved
+        # once per call rather than per-parent.
+        mode = self.reproduction_config.child_funding_mode
+        offspring_start_energy = float(self.reproduction_config.offspring_start_energy)
+        energy_cost = float(self.reproduction_config.energy_cost)
+        if mode == ChildFundingMode.PARENT_TRANSFER_POOL_GAP:
+            pool_debit_amount = offspring_start_energy - energy_cost
+        else:
+            pool_debit_amount = offspring_start_energy
         for parent in parents:
             if not parent.body.alive:
                 continue
             occupied = self.occupied_cells_excluding(parent)
-            # v0.19 strict-conservation: when an ambient pool is configured,
-            # check placement first (cheap, pure), then attempt to fund the
-            # child's startup energy from the pool. Only on both successes
-            # do we call ``process_reproduction`` (which charges the parent).
-            # Pre-checking placement before debiting avoids a refund channel
-            # in the per-flow telemetry — the pool is only touched when the
-            # child is actually about to be constructed. On pool failure the
-            # birth is denied atomically: parent's ``energy_cost`` is not
-            # debited, parent stays alive and re-eligible next tick.
+            # v0.19/v0.20 strict-conservation: when an ambient pool is
+            # configured, gates fire in (placement, parent-energy under
+            # transfer mode only, pool) order. All checks happen before any
+            # state mutation; on any failure no debits or events of birth
+            # fire (parent stays alive and re-eligible next tick). Under
+            # POOL_FULL the pool debit is offspring_start_energy (v0.19
+            # semantics, preserved). Under PARENT_TRANSFER_POOL_GAP it is
+            # the gap (offspring_start_energy - energy_cost); the parent
+            # debit happens inside process_reproduction unchanged.
             if self.energy_pool is not None:
                 if find_adjacent_empty_cell(self.world, parent.body, occupied) is None:
                     # No placement available — same outcome as v0.7..v0.18
                     # (no energy lost). Skip without touching the pool.
                     continue
-                offspring_start_energy = float(self.reproduction_config.offspring_start_energy)
-                if not self.energy_pool.try_debit_child_startup(offspring_start_energy):
+                # v0.20 transfer-mode parent-energy gate. Under POOL_FULL the
+                # parent's energy_cost is destroyed unconditionally
+                # (charge_parent floors at 0), preserving v0.19 dynamics
+                # exactly; this gate fires only when the parent's transfer
+                # would underfund the child's body energy.
+                if (
+                    mode == ChildFundingMode.PARENT_TRANSFER_POOL_GAP
+                    and parent.body.energy < energy_cost
+                ):
+                    self.record_event(
+                        BirthDeniedParentEnergy(
+                            parent_id=parent.body.id,
+                            x=parent.body.x,
+                            y=parent.body.y,
+                            tick=self.tick_count,
+                        )
+                    )
+                    self.births_blocked_by_parent_energy += 1
+                    continue
+                if not self.energy_pool.try_debit_child_startup(pool_debit_amount):
                     self.record_event(
                         PoolBirthDenied(
                             parent_id=parent.body.id,
@@ -703,5 +764,13 @@ class HHModel(mesa.Model):
             )
             self.event_log.append(LoggedEvent(tick=self.tick_count, event=born))
             emit(self, born)
+            # v0.20 conservation accumulators. Increment at successful birth
+            # only — failed births (placement / parent-energy / pool gates)
+            # already returned without touching parent or pool state, so no
+            # ledger entry should fire.
+            if mode == ChildFundingMode.PARENT_TRANSFER_POOL_GAP:
+                self.parent_energy_transferred_to_child += energy_cost
+            else:
+                self.reproduction_heat_loss += energy_cost
             # ``child_agent`` is intentionally referenced via model.agents only.
             del child_agent

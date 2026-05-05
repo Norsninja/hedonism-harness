@@ -138,6 +138,31 @@ class PoolBirthDenied:
     eligibility pool next tick (mirrors the existing
     ``find_adjacent_empty_cell`` rejection contract in
     ``core/reproduction.process_reproduction``).
+
+    Under v0.20 ``PARENT_TRANSFER_POOL_GAP`` mode, this is emitted when
+    the pool cannot fund the gap (``offspring_start_energy -
+    energy_cost``) rather than the full ``offspring_start_energy``; the
+    contract (parent retains energy, no child created) is unchanged.
+    """
+
+    parent_id: int
+    x: int
+    y: int
+    tick: int
+
+
+@dataclass(frozen=True)
+class BirthDeniedParentEnergy:
+    """v0.20: a queued birth was denied because the parent's body energy
+    fell below ``reproduction_cost`` between queueing and birth processing.
+
+    Only emitted under ``PARENT_TRANSFER_POOL_GAP`` mode. Under the v0.7..v0.19
+    ``POOL_FULL`` path, ``charge_parent`` debits unconditionally (energy floors
+    at 0); v0.20 transfer mode adds an explicit pre-check because routing a
+    sub-cost parent contribution into the child would underfund the child's
+    startup. On denial, no state changes: parent retains its full energy, pool
+    is untouched, no child is created. Parent re-enters the eligibility pool
+    next tick.
     """
 
     parent_id: int
@@ -158,6 +183,7 @@ AnyEvent = (
     | FoodRespawned
     | PoolRespawnDenied
     | PoolBirthDenied
+    | BirthDeniedParentEnergy
 )
 
 
@@ -200,6 +226,7 @@ _SIGNAL_NAMES: dict[type, str] = {
     FoodRespawned: "hh.food_respawned",
     PoolRespawnDenied: "hh.pool_respawn_denied",
     PoolBirthDenied: "hh.pool_birth_denied",
+    BirthDeniedParentEnergy: "hh.birth_denied_parent_energy",
 }
 
 

@@ -194,10 +194,13 @@ v0.20 mechanism.
 
 Two pydantic validators are added to `ReproductionConfig`:
 
-1. `offspring_start_energy >= energy_cost` — required so the gap is
-   non-negative. Violation under POOL_FULL is currently legal but becomes a
-   defect under PARENT_TRANSFER_POOL_GAP (negative pool top-up); we reject it
-   uniformly across modes for clarity.
+1. `offspring_start_energy >= energy_cost` — required under
+   `PARENT_TRANSFER_POOL_GAP` so the pool gap is non-negative. The check
+   fires only under transfer mode: under POOL_FULL the parent's
+   `energy_cost` is heat loss independent of `offspring_start_energy`,
+   and the v0.7..v0.19 bare-default `ReproductionConfig()` (cost=35,
+   offspring=30) remains legal — preserving bit-identity for every
+   pre-v0.20 test and sweep that relies on those defaults.
 2. (At `WorldConfig`+`ReproductionConfig` join — applied at chamber-driver
    construction time, not on `ReproductionConfig` alone) — when
    `child_funding_mode == PARENT_TRANSFER_POOL_GAP`,
