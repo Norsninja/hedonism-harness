@@ -97,11 +97,25 @@ class GradientPolicy:
     policy is bit-identical to v0.14 regardless of ``blackout_mode``.
     """
 
-    def __init__(self, blackout_mode: BlackoutMode = "chemotaxis") -> None:
+    def __init__(
+        self,
+        blackout_mode: BlackoutMode = "chemotaxis",
+        hazard_avoidance_weight: float = 1.0,
+    ) -> None:
         if blackout_mode not in ("chemotaxis", "persistence_only"):
             msg = f"blackout_mode must be 'chemotaxis' or 'persistence_only', got {blackout_mode!r}"
             raise ValueError(msg)
+        if hazard_avoidance_weight < 0.0:
+            msg = f"hazard_avoidance_weight must be >= 0.0, got {hazard_avoidance_weight!r}"
+            raise ValueError(msg)
         self.blackout_mode: BlackoutMode = blackout_mode
+        # v0.26 perception-vs-damage decoupling. Multiplier on pain_w in
+        # ``decide()``. Default 1.0 preserves v0.14..v0.25 bit-identity
+        # (multiplying by 1.0 is a no-op). 0.0 zeroes the avoidance pull
+        # entirely while leaving per-tile hazard damage applied to body
+        # physics intact — the v0.26 "invisible hazard" arm.
+        # See [[docs/experiments/fear_hunger_v0.26.md]].
+        self.hazard_avoidance_weight: float = float(hazard_avoidance_weight)
 
     def decide(self, ctx: DecisionContext) -> PolicyDecision:
         obs = ctx.observation
@@ -119,7 +133,9 @@ class GradientPolicy:
         # sensitization (a hungry cell perceives food gradients more strongly).
         hunger_amp = 1.0 + obs.hunger_level
         pleasure_w = traits.pleasure_sensitivity * hunger_amp
-        pain_w = traits.fear_sensitivity * (1.0 - traits.risk_tolerance)
+        pain_w = (
+            traits.fear_sensitivity * (1.0 - traits.risk_tolerance) * self.hazard_avoidance_weight
+        )
 
         # Net pull per cardinal MOVE direction. The cell only moves when
         # there is a strictly positive net pull along some direction —

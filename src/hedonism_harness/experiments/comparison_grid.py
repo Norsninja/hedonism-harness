@@ -115,6 +115,16 @@ class Arm:
     ``V0_22_ARMS`` (sweeps {0, 4, 8, 12} on food_ladder under transfer
     mode at influx=1.0/tick to test whether hazard-injury death-residual
     recycling is load-bearing for the v0.21 productivity plateau).
+
+    ``hazard_avoidance_weight`` (v0.26) overrides the multiplier on
+    GradientPolicy's pain-pull (perception-vs-damage decoupling).
+    ``None`` (default) preserves v0.7..v0.25 bit-identity (factory
+    not wrapped; policy default 1.0 is a no-op multiplier). A finite
+    value wraps the policy_factory so each GradientPolicy instance
+    receives the configured weight. Used by ``V0_26_ARMS`` to test
+    whether tight's small cull-tax under v0.25 was driven by
+    GradientPolicy avoidance routing (weight=0 vs 1 at hazard=8) or
+    chamber geometry alone.
     """
 
     label: str
@@ -129,6 +139,7 @@ class Arm:
     ambient_influx_rate: float | None = None
     child_funding_mode: ChildFundingMode | None = None
     hazard_damage: float | None = None
+    hazard_avoidance_weight: float | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -996,6 +1007,94 @@ V0_25_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.26 arms — perception-vs-damage decoupling. 2x2 grid:
+# hazard_damage in {0, 8} x hazard_avoidance_weight in {0.0, 1.0}, run on
+# both food_ladder and tight_gradient at influx=1.0 under
+# PARENT_TRANSFER_POOL_GAP, pool_initial=1500. Same 8 seeds as
+# v0.21/v0.22/v0.23/v0.25.
+#
+# Reading A — pure policy seam: hazard_avoidance_weight multiplies pain_w
+# in GradientPolicy. At hazard_damage=0 the world's hazard layer is zero,
+# so hazard_signal_* is zero, and the multiplier is dormant. Therefore
+# arms C (phantom: damage=0, weight=1.0) and D (no-hazard: damage=0,
+# weight=0.0) are deductively identical to v0.25 hazard=0 cells; the
+# substantive new cell is B (invisible: damage=8, weight=0.0), which
+# isolates "damage applies, no avoidance pull" — the decisive observable
+# for whether tight's small cull-tax under v0.25 was avoidance-driven.
+#
+# Six byte-identity anchors (against v0.25 sweep artifacts at influx=1.0):
+#   - A on tight       = V0_25 transfer-1500-hzd8-influx-1.0 (b>50=116)
+#   - C on tight       = V0_25 transfer-1500-hzd0-influx-1.0 (b>50=100)
+#   - D on tight       = V0_25 transfer-1500-hzd0-influx-1.0 (b>50=100)
+#   - A on food_ladder = V0_25 transfer-1500-hzd8-influx-1.0 (b>50= 92)
+#   - C on food_ladder = V0_25 transfer-1500-hzd0-influx-1.0 (b>50=116)
+#   - D on food_ladder = V0_25 transfer-1500-hzd0-influx-1.0 (b>50=116)
+# B (invisible) on each chamber is the truly new cell. See
+# [[docs/experiments/fear_hunger_v0.26.md]].
+V0_26_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="hzd8-avd1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+        hazard_avoidance_weight=1.0,
+    ),
+    Arm(
+        label="hzd8-avd0.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=8.0,
+        hazard_avoidance_weight=0.0,
+    ),
+    Arm(
+        label="hzd0-avd1.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+        hazard_avoidance_weight=1.0,
+    ),
+    Arm(
+        label="hzd0-avd0.0",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+        energy_pool_initial=1_500.0,
+        ambient_influx_rate=1.0,
+        child_funding_mode=ChildFundingMode.PARENT_TRANSFER_POOL_GAP,
+        hazard_damage=0.0,
+        hazard_avoidance_weight=0.0,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -1465,6 +1564,7 @@ def _run_one_arm_seed(
         ambient_influx_rate=arm.ambient_influx_rate,
         child_funding_mode=arm.child_funding_mode,
         hazard_damage=arm.hazard_damage,
+        hazard_avoidance_weight=arm.hazard_avoidance_weight,
         condition=arm.label,
         setup_observer=setup,
     )
