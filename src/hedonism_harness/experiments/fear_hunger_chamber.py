@@ -276,7 +276,7 @@ def default_policy_factory() -> Policy:
     return HedonismPolicy(exploration_noise=0.05)
 
 
-def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction would obscure the lifecycle.
+def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; extraction would obscure the lifecycle.
     *,
     seed: int,
     runs_root: Path,
@@ -296,6 +296,7 @@ def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction w
     energy_pool_initial: float | None = None,
     ambient_influx_rate: float | None = None,
     child_funding_mode: ChildFundingMode | None = None,
+    hazard_damage: float | None = None,
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
@@ -326,6 +327,14 @@ def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction w
     ``"directional"`` uses the v0.11 ``DirectionalMemory`` (4-vector
     chemotaxis-style tendencies, no spatial map).
 
+    ``hazard_damage``: v0.22 per-tile hazard damage override. ``None``
+    (default) preserves v0.7..v0.21 bit-identity — ``build_chamber_layout``
+    runs at its default (``8.0``), the value v0.18..v0.21 sweeps inherited.
+    A finite value threads into ``WorldConfig.hazard_damage_default``.
+    Used by ``V0_22_ARMS`` to test whether hazard-injury death-residual
+    recycling is load-bearing for the v0.21 food_ladder productivity
+    plateau under transfer mode at influx=1.0/tick.
+
     ``setup_observer``: optional callable invoked with the model **after**
     ``paint_chamber`` and aggregator ``connect()``, **before** the first
     ``model.step()``. The v0.8 eligibility-telemetry seam uses this hook
@@ -337,7 +346,15 @@ def run_chamber(  # noqa: PLR0915 — single chamber-driver wiring; extraction w
     the final tick. ``None`` keeps the existing behavior.
     """
     layout = layout or ChamberLayout()
-    world_cfg = build_chamber_layout(layout).model_copy(update={"seed": seed})
+    # v0.22: thread per-tile hazard damage into build_chamber_layout when set.
+    # ``None`` (default) keeps the build_chamber_layout default (8.0) that
+    # v0.7..v0.21 inherited; preserves bit-identity for every prior arm.
+    if hazard_damage is not None:
+        world_cfg = build_chamber_layout(layout, hazard_damage=hazard_damage).model_copy(
+            update={"seed": seed}
+        )
+    else:
+        world_cfg = build_chamber_layout(layout).model_copy(update={"seed": seed})
     if food_respawn_cooldown is not None:
         # v0.18: thread cooldown into the frozen WorldConfig. Default
         # None preserves v0.7..v0.17 bit-identity (no respawn).
