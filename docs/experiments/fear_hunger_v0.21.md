@@ -479,9 +479,11 @@ b>50, with no single step accounting for the bulk of the lift.
 
 **Primary i\* (≥90% of arm E b>50): food_ladder=0.5/tick, tight=1.5/tick.
 Chamber asymmetry: 1.0/tick.** This exceeds the 0.5/tick strong-support
-threshold pre-registered in H8 by 2×, indicating that hazard-residual
-recycling on food_ladder substitutes for ambient influx more
-strongly than the ~0.4/tick back-of-envelope predicted.
+threshold pre-registered in H8 by 2×. **food_ladder behaves as if it has
+substantially more effective usable energy than tight_gradient — likely
+through residual recycling, chamber geometry, or some combination.**
+Attributing the full 1.0/tick gap to hazard-residual recycling alone is
+premature; v0.22 will test the recycling mechanism directly.
 
 The qualitative chamber asymmetry — phase transition vs gradient —
 is itself a finding. It suggests the substrate's response to ambient
@@ -605,13 +607,17 @@ sharply.
   125 → 130. food_ladder: 77 → 85 → 92 → 92 → 92 (saturated above
   1.0/tick).
 - **H6.** Total pool blocks (r_blk + b_blk) monotonically non-
-  increasing in influx. **Falsified weakly on tight** (244 → 139
-  → 84 → 86 → 12 — small non-monotone blip at C → D); **falsified
-  weakly on food_ladder** (101 → 105 → 3 → 0 → 0 — small rise at
-  A → B). Both non-monotonicities are the v0.20 redistribution
-  finding firing again: more parents reach reproduction → birth-
-  side contention rises briefly even as respawn-side relief grows.
-  The overall trend is strongly downward on both chambers.
+  increasing in influx. **Weakly falsified but overall downward
+  on both chambers.** tight: 244 → 139 → 84 → 86 → 12 (small
+  non-monotone blip at C → D, ~2-block uptick on a 60-block
+  baseline). food_ladder: 101 → 105 → 3 → 0 → 0 (small +4 rise
+  at A → B before the phase transition collapses everything).
+  Both non-monotonicities are the v0.20 redistribution finding
+  firing again: more parents reach reproduction → birth-side
+  contention rises briefly even as respawn-side relief grows.
+  The headline trend is strongly downward (95% reduction on
+  tight; 100% reduction on food_ladder); the strict-monotone
+  reading rejected, the directional reading confirmed.
 - **H7.** A single consecutive-arm step accounts for >50% of the
   total-blocks (E−A) delta. **Falsified on tight** (no step exceeds
   ~45%); **confirmed strongly on food_ladder** (B → C accounts
@@ -622,9 +628,11 @@ sharply.
   effective-influx). **Confirmed**, and the strong-support
   ≥0.5/tick gap is **strongly cleared**: food_ladder primary i\* =
   0.5; tight primary i\* = 1.5; gap = 1.0/tick (2× the strong-
-  support threshold). Hazard-residual recycling on food_ladder
-  substitutes for ambient influx more strongly than the back-of-
-  envelope predicted.
+  support threshold). The gap is consistent with the recycling-
+  as-effective-influx hypothesis but is not by itself a direct
+  test of the mechanism — chamber geometry could also account
+  for some of the asymmetry. v0.22 isolates the hazard-residual
+  recycling channel via a direct hazard-damage sweep.
 - **H9.** Primary i\* ≤ 2.0/tick on tight, ≤ 1.5/tick on food_ladder.
   **Confirmed.** Observed: tight=1.5, food_ladder=0.5. Both well
   within the predicted upper bounds.
@@ -652,12 +660,16 @@ The pre-reg's "frontier sharply mapped" branch fires partially:
 The decision rule said v0.22 should become either reproduction-
 efficiency parameterisation or chamber-geometry parameterisation
 depending on which finding looks more striking. **The chamber
-asymmetry is the more striking finding** — the qualitatively
-different frontier shapes between chambers, combined with the
-2× over-prediction of the recycling-as-effective-influx hypothesis,
-makes chamber geometry the higher-information v0.22 axis.
-Reproduction-efficiency parameterisation remains a credible
-v0.23+ candidate.
+asymmetry is the more striking finding**, but rather than sweep
+the broader chamber-geometry axis (width × hazard density × pre-food
+band × capacity all at once — which would muddy the causal read),
+**v0.22 should narrow to a hazard-damage / residual-recycling sweep
+on food_ladder under transfer mode at the productive influx**.
+This isolates the recycling channel directly: if recycling is
+load-bearing, productivity should track hazard-damage in a
+predictable way; if geometry is load-bearing, productivity
+should be insensitive to hazard-damage variation. Reproduction-
+efficiency parameterisation deferred to v0.23+.
 
 ### Three findings worth flagging for v0.22
 
@@ -692,28 +704,46 @@ v0.23+ candidate.
 
 ### Data points worth flagging for v0.22
 
-- **The chamber-geometry axis is the next-natural slice.** Hazard
-  density (currently 8.0 damage/tile under chamber default) directly
-  controls the death-residual recycling rate. Sweeping hazard density
-  in {4, 8, 12} on food_ladder under transfer mode at the productive
-  influx (1.0/tick) would directly test the recycling-as-effective-
-  influx mechanism: more hazard → more recycling → lower required
-  influx for productivity. Chamber width / pre-food band size are
-  alternative levers.
+- **v0.22 should be a focused hazard-damage sweep, not a broader
+  geometry parameterisation.** Sweeping width, hazard density,
+  pre-food band, and capacity simultaneously would muddy the causal
+  read. The high-information v0.22 design is hazard_damage ∈
+  `{0, 4, 8, 12}` (or `{2, 4, 8, 12}` if a tighter span is preferred)
+  on food_ladder under transfer mode at the productive influx
+  (1.0/tick), with `hazard_damage=0` as the crucial control: it
+  produces zero injury deaths → zero death-residual recycling, while
+  preserving food_ladder's geometry. If productivity drops on the
+  zero-hazard arm, recycling is load-bearing; if it stays unchanged,
+  geometry is load-bearing. The same v0.21 seeds should be re-used
+  so per-seed comparisons are interpretable.
+- **Two competing hypotheses to keep separate in v0.22.**
+  (a) Recycling-as-effective-influx: more hazard → more residual
+  recycling → lower required ambient influx for productivity.
+  Predicts hazard_damage=0 collapses food_ladder's productivity
+  back toward tight-like binding levels.
+  (b) Chamber-geometry-as-buffer: food_ladder's pre-food band
+  permits multi-step refueling without crossing the hazard wall;
+  this could fund productivity independent of recycling. Predicts
+  hazard_damage=0 preserves productivity (geometry is the lever,
+  not recycling).
+  v0.22 should pre-register specific quantitative thresholds for
+  which hypothesis fires.
+- **The 2× over-prediction of recycling-as-effective-influx** is
+  worth attribution. Death residual in v0.20 transfer-1500
+  food_ladder was ~80 energy/seed/200 ticks (= 0.4/tick effective).
+  If the observed 1.0/tick gap holds, food_ladder's effective extra
+  energy is ~1.0/tick. Either (a) recycling energy is more "useful"
+  than ambient influx because it arrives in discrete deposits at
+  population-correlated timings, (b) the death rate scales with
+  population growth and the back-of-envelope underestimated total
+  recycling, or (c) chamber geometry contributes meaningful
+  effective-energy buffering independent of recycling. v0.22's
+  hazard_damage=0 control distinguishes (a/b) from (c).
 - **tight vs food_ladder behave so differently that future
   chamber-asymmetric experiments may want a third chamber** with
   intermediate recycling characteristics (e.g., a low-hazard
-  food_ladder variant) to span the spectrum.
-- **The 2× over-prediction of recycling-as-effective-influx** is
-  worth a closer audit. Death residual in v0.20 transfer-1500
-  food_ladder was ~80 energy/seed/200 ticks (= 0.4/tick effective).
-  If the observed 1.0/tick gap holds, food_ladder's recycling is
-  worth 1.0/tick effective, not 0.4/tick. Either (a) recycling
-  energy is more "useful" than ambient influx because it arrives
-  in larger discrete deposits at advantageous timings, or (b) the
-  death rate scales with population growth and the back-of-envelope
-  underestimated total recycling. v0.22 hazard-density sweep would
-  test this directly.
+  food_ladder variant) to span the spectrum. v0.22's
+  hazard-damage sweep effectively constructs that third chamber.
 - **Secondary i\* on tight (0.5/tick for total_births, vs 1.5 for
   b>50)** suggests that early-run reproduction is cheap to recover
   but late-run compounding is the expensive frontier. v0.22+ chamber
