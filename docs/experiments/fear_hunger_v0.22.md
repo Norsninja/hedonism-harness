@@ -275,13 +275,17 @@ counts. v0.22 tracks:
 - **Pool late-run trajectory.** `pool_min_observed`, `pool_end`,
   `pool_in_death_residual`, `pool_in_ambient_influx` (invariant check),
   `pool_out_respawn`, `pool_out_child_startup`.
-- **Death cause distribution.** `total_starvation_deaths` (from
-  ChamberRunResult.starvation_deaths). At hazard=0 every death is
-  STARVATION by construction. At higher hazards, the STARVATION:INJURY
-  ratio shifts. **Pre-commit reporting both counts** — distinguishes
-  "no injuries because hazard=0" from "no injuries because agents
-  avoided hazards" (both produce low residual but mean different
-  things).
+- **Death cause distribution.** `total_starvation_deaths` AND
+  `total_injury_deaths` per arm. `ChamberRunResult` already tracks
+  both; `ArmCellAggregate` currently only surfaces
+  `total_starvation_deaths` and v0.22 adds
+  `total_injury_deaths: int = 0` (default 0 preserves bit-identity
+  for prior aggregates). At hazard=0 `total_injury_deaths = 0` by
+  construction; at higher hazards the STARVATION:INJURY ratio
+  shifts. **The decisive disambiguation in the ambiguous band
+  (84–90)** is the injury-vs-starvation split: low injury_deaths +
+  high hazard_entries = "agents avoided hazards" (recycling channel
+  was mechanically dormant); high injury_deaths = "channel active".
 - **Hazard exposure.** `total_hazard_entries`. If agents avoid hazard
   tiles at all damage levels, the recycling channel is mechanically
   dead even before hazard=0. If `total_hazard_entries` is
@@ -332,10 +336,18 @@ anchor.
 
 ### Strong form (mechanism + invariants)
 
-- **H1.** `pool_in_ambient_influx == 1.0 × n_ticks × n_seeds = 1,600`
-  per arm, modulo seeds that terminate early via population extinction.
-  Direct invariant on the deterministic per-tick credit (continues v0.21
-  H1 contract).
+- **H1.** `pool_in_ambient_influx == ambient_influx_rate ×
+  sum(executed_ticks_per_seed)` per arm. `run_chamber` breaks the
+  per-tick loop early when `_any_alive(model)` returns False (no
+  surviving agents), so an extinct seed contributes
+  `executed_ticks < n_ticks`. v0.21 had no extinct seeds (every arm
+  recorded `in_influx = 1.0 × 200 × 8 = 1,600`); v0.22 is expected to
+  match (8/8 survivors throughout v0.20/v0.21 transfer arms on
+  food_ladder). If any v0.22 seed terminates early, the invariant uses
+  the per-seed executed-tick sum, and the arm's row in the sweep
+  report annotates seeds-with-early-termination separately. Direct
+  invariant on the deterministic per-tick credit; halt only if the
+  invariant fails after accounting for early termination.
 - **H2.** v0.20 H4 invariant holds at every v0.22 arm:
   `parent_energy_transferred_to_child + pool_out_child_startup ==
   total_births × offspring_start_energy`.
@@ -345,13 +357,18 @@ anchor.
   (defensive parent-energy gate; v0.20/v0.21 verified empirical
   irrelevance under cost=15, threshold=50 across all transfer-mode
   sweeps to date).
-- **H5.** `pool_in_death_residual` **monotonically non-decreasing in
-  hazard_damage across arms A → D**. Direct test that the recycling
-  channel is operating mechanically: more hazard_damage → faster
-  injury deaths → more residual deposits per run. **Cautious in
-  strict monotonicity** — at hazard=4 vs hazard=8, agents may
-  systematically avoid hazards more under the higher damage, lowering
-  total entries and offsetting the per-death residual gain.
+- **H5.** `pool_in_death_residual` is **low at arm A (hazard=0) and
+  materially non-zero at arms B/C/D (hazard>0) when the recycling
+  channel is active**. Strict monotonicity in hazard_damage is
+  diagnostic but **not required**: higher damage can kill agents
+  sooner, change population size during the run, alter the
+  starvation:injury ratio, or shift hazard residency / avoidance
+  behavior, any of which could produce a non-monotone but still
+  causally-consistent residual flux. A useful non-monotone result
+  (e.g. residual at hazard=12 below residual at hazard=8) is
+  **not a hypothesis failure**; it is information about how
+  damage-rate interacts with population dynamics. The hard pin is
+  H7 (residual at A bounded above by ~5/seed avg).
 - **H6.** `total_starvation_deaths` **non-increasing in hazard_damage
   across arms A → D**. As hazard_damage rises, agents are increasingly
   culled by INJURY before they can starve. **Cautious; ties expected
@@ -488,8 +505,11 @@ anchor.
 - **Modify:** [[src/hedonism_harness/experiments/comparison_grid.py]] —
   add `Arm.hazard_damage: float | None = None` field. Thread to
   `run_chamber` in `_run_one_arm_seed`: pass
-  `hazard_damage=arm.hazard_damage`. Add `V0_22_ARMS` tuple of four
-  `Arm` instances per the table above. ~30 LOC.
+  `hazard_damage=arm.hazard_damage`. Add
+  `ArmCellAggregate.total_injury_deaths: int = 0` (default 0 preserves
+  bit-identity for prior aggregates) and sum
+  `injury_deaths` from `results` in `_aggregate`. Add `V0_22_ARMS`
+  tuple of four `Arm` instances per the table above. ~35 LOC.
 - **Modify:** [[src/hedonism_harness/experiments/fear_hunger_chamber.py]] —
   `run_chamber` accepts `hazard_damage: float | None = None` kwarg.
   When non-None, replace the `build_chamber_layout(layout)` call with
@@ -534,8 +554,9 @@ anchor.
 
 ### LOC estimate
 
-- `experiments/comparison_grid.py`: +30 LOC (Arm field, V0_22_ARMS,
-  threading in `_run_one_arm_seed`).
+- `experiments/comparison_grid.py`: +35 LOC (Arm field, V0_22_ARMS,
+  threading in `_run_one_arm_seed`, `total_injury_deaths` on
+  ArmCellAggregate).
 - `experiments/fear_hunger_chamber.py`: +5 LOC (kwarg + threading).
 - `scripts/v0.22_sweep.py`: ~70 LOC (sweep driver, food_ladder only).
 - New tests: ~120 LOC.
