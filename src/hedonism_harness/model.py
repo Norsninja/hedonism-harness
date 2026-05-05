@@ -26,7 +26,15 @@ from hedonism_harness.core.config import (
     ReproductionConfig,
     WorldConfig,
 )
-from hedonism_harness.core.events import AgentBorn, AgentDied, LoggedEvent, emit
+from hedonism_harness.core.events import (
+    AgentBorn,
+    AgentDied,
+    AteFood,
+    FoodRespawned,
+    LoggedEvent,
+    emit,
+    signal_for,
+)
 from hedonism_harness.core.memory import (
     DirectionalMemory,
     ScalarMemory,
@@ -38,7 +46,7 @@ from hedonism_harness.core.memory import (
 from hedonism_harness.core.reproduction import process_reproduction
 from hedonism_harness.core.rng import RngStreams, make_streams, spawn_agent_rng
 from hedonism_harness.core.traits import TraitConfig, Traits, random_traits
-from hedonism_harness.core.world import World, build_world
+from hedonism_harness.core.world import CellKind, World, build_world
 from hedonism_harness.mesa_agents import HHAgent
 
 if TYPE_CHECKING:
@@ -219,6 +227,22 @@ class HHModel(mesa.Model):
         # pipeline. Always populated; cheap (one dict copy per spawn).
         self.trait_fingerprints: list[dict[str, object]] = []
 
+        # ---- v0.18 food respawn subscription ----------------------------
+        # When cooldown is configured, every AteFood event schedules the
+        # consumed cell to refill ``cooldown`` ticks later. Sender-scoped
+        # (sender=self) so concurrent batch runs do not cross-talk. The
+        # handler is stored on the instance so it stays alive against
+        # blinker's weak-reference behaviour.
+        self._ate_food_handler: Callable[..., None] | None = None
+        if world_config.food_respawn_cooldown is not None:
+            cooldown = int(world_config.food_respawn_cooldown)
+
+            def _on_ate_food(_sender: object, *, event: AteFood) -> None:
+                self.world.respawn_at_tick[event.x, event.y] = self.tick_count + cooldown
+
+            self._ate_food_handler = _on_ate_food
+            signal_for(AteFood).connect(_on_ate_food, sender=self)
+
         # ---- Place founders --------------------------------------------
         for spec in founders:
             self._spawn_founder(spec)
@@ -244,23 +268,32 @@ class HHModel(mesa.Model):
             "hazard_damage", dims, default_value=np.float32(0.0), dtype=np.float32
         )
         safe_pl = PropertyLayer("safe_value", dims, default_value=np.float32(0.0), dtype=np.float32)
+        # v0.18: per-tile cooldown schedule for food respawn. 0 = not
+        # scheduled. Allocated regardless of config; never written when
+        # food_respawn_cooldown is None (preserves v0.7..v0.17 bit-identity).
+        respawn_pl = PropertyLayer(
+            "respawn_at_tick", dims, default_value=np.int32(0), dtype=np.int32
+        )
 
         # Copy initial terrain into PL storage, then point World at it.
         kind_pl.data[:] = self.world.kind_layer
         food_pl.data[:] = self.world.food_value
         hazard_pl.data[:] = self.world.hazard_damage
         safe_pl.data[:] = self.world.safe_value
+        respawn_pl.data[:] = self.world.respawn_at_tick
 
         self.world.kind_layer = kind_pl.data
         self.world.food_value = food_pl.data
         self.world.hazard_damage = hazard_pl.data
         self.world.safe_value = safe_pl.data
+        self.world.respawn_at_tick = respawn_pl.data
 
         self._property_layers: dict[str, PropertyLayer] = {
             "kind": kind_pl,
             "food_value": food_pl,
             "hazard_damage": hazard_pl,
             "safe_value": safe_pl,
+            "respawn_at_tick": respawn_pl,
         }
 
     # ------------------------------------------------------------------
@@ -432,7 +465,52 @@ class HHModel(mesa.Model):
     # Tick loop (SPEC §27.4)
     # ------------------------------------------------------------------
 
+    def _apply_food_respawn(self) -> None:
+        """Phase 0 of ``step()``: refill scheduled FOOD cells (v0.18).
+
+        No-op when no cooldown is configured (the subscription never
+        registered, so ``respawn_at_tick`` stays all-zero and the
+        predicate is false everywhere). When configured, scans for cells
+        where ``kind == EMPTY AND respawn_at_tick > 0 AND
+        tick_count >= respawn_at_tick``. For each such cell, flip
+        ``kind`` to FOOD with ``food_value_default``, reset
+        ``respawn_at_tick`` to 0, and emit one ``FoodRespawned`` event.
+
+        Refill happens regardless of cell occupancy. An agent standing
+        on a cell that refills sees the food via its sensor next tick
+        and (under the v0.14 reflex) eats it. This preserves symmetry
+        between occupied and unoccupied cells and avoids the
+        stationary-agent-blocks-respawn fairness asymmetry.
+        """
+        if self._ate_food_handler is None:
+            return  # No cooldown configured; nothing scheduled, ever.
+        # Vectorized predicate; cheap on chamber-sized layers.
+        ready = (
+            (self.world.kind_layer == CellKind.EMPTY)
+            & (self.world.respawn_at_tick > 0)
+            & (self.world.respawn_at_tick <= self.tick_count)
+        )
+        if not ready.any():
+            return
+        food_value_default = float(self.world_config.food_value_default)
+        # np.argwhere returns ((x, y), ...) in lexicographic order — stable
+        # across runs given identical world state, so determinism is
+        # preserved without extra sorting.
+        for x, y in np.argwhere(ready):
+            x_i, y_i = int(x), int(y)
+            self.world.kind_layer[x_i, y_i] = CellKind.FOOD
+            self.world.food_value[x_i, y_i] = food_value_default
+            self.world.respawn_at_tick[x_i, y_i] = 0
+            self.record_event(FoodRespawned(x=x_i, y=y_i, tick=self.tick_count))
+
     def step(self) -> None:
+        # 0. v0.18 food respawn (phase 0). No-op when cooldown is not
+        #    configured (subscription never fired, all schedules are 0).
+        #    Refilled cells are visible to the foraging policy this tick —
+        #    placement before the snapshot avoids the off-by-one that
+        #    would arise if respawn ran after agent decisions.
+        self._apply_food_respawn()
+
         # 1. Snapshot active agents.
         active: list[HHAgent] = [a for a in self.agents if isinstance(a, HHAgent) and a.body.alive]
         # 2. Deterministic shuffle via NumPy agent_order stream.

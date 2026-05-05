@@ -52,6 +52,18 @@ class WorldConfig(BaseModel):
         ge=0.0,
         description="Fear-reduction strength of a SAFE cell.",
     )
+    food_respawn_cooldown: int | None = Field(
+        default=None,
+        ge=1,
+        description=(
+            "v0.18: per-tile cooldown (in ticks) before a consumed FOOD cell "
+            "refills back to FOOD with food_value_default. None disables "
+            "respawn — the v0.7..v0.17 default. K must be >= 1; K=0 would "
+            "clash with the unscheduled sentinel (respawn_at_tick == 0). "
+            "Determinism: cooldown is fully scheduled (no RNG draws); "
+            "K=None preserves v0.7..v0.17 bit-identity by construction."
+        ),
+    )
 
 
 class BodyConfig(BaseModel):

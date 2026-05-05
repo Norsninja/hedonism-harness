@@ -40,12 +40,24 @@ class World:
     """NumPy-backed world state.
 
     Layer shapes are ``(width, height)`` and indexed as ``layer[x, y]``.
+
+    ``respawn_at_tick`` (v0.18 cooldown food respawn): per-tile schedule
+    for when an EMPTY-because-eaten cell should refill back to FOOD.
+    Sentinel ``0`` means "not scheduled" (the initial state for every
+    tile). When an agent eats a FOOD cell at tick T and the configured
+    cooldown is K, the model sets ``respawn_at_tick[x, y] = T + K``;
+    phase 0 of ``HHModel.step()`` flips cells back to FOOD when
+    ``kind == EMPTY AND respawn_at_tick > 0 AND tick >= respawn_at_tick``,
+    resetting the schedule to 0. The layer is allocated regardless of
+    config (storage hygiene) and remains all-zero when no cooldown is
+    configured (preserving v0.7..v0.17 bit-identity).
     """
 
     kind_layer: np.ndarray  # uint8, values from CellKind
     food_value: np.ndarray  # float32
     hazard_damage: np.ndarray  # float32
     safe_value: np.ndarray  # float32
+    respawn_at_tick: np.ndarray  # int32; 0 = not scheduled
     width: int
     height: int
 
@@ -75,6 +87,7 @@ def build_world(config: WorldConfig) -> World:
     food_value = np.zeros(shape, dtype=np.float32)
     hazard_damage = np.zeros(shape, dtype=np.float32)
     safe_value = np.zeros(shape, dtype=np.float32)
+    respawn_at_tick = np.zeros(shape, dtype=np.int32)
 
     # Single uniform draw, then partition into FOOD / HAZARD / EMPTY by threshold.
     # This keeps the consumed RNG sequence stable when densities change at the margin.
@@ -94,6 +107,7 @@ def build_world(config: WorldConfig) -> World:
         food_value=food_value,
         hazard_damage=hazard_damage,
         safe_value=safe_value,
+        respawn_at_tick=respawn_at_tick,
         width=config.width,
         height=config.height,
     )

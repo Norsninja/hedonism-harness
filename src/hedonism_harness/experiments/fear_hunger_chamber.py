@@ -262,6 +262,7 @@ def run_chamber(
     reproduction_config: ReproductionConfig | None = None,
     use_memory: bool = False,
     memory_type: str = "cell_exact",
+    food_respawn_cooldown: int | None = None,
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
 ) -> ChamberRunResult:
@@ -304,6 +305,10 @@ def run_chamber(
     """
     layout = layout or ChamberLayout()
     world_cfg = build_chamber_layout(layout).model_copy(update={"seed": seed})
+    if food_respawn_cooldown is not None:
+        # v0.18: thread cooldown into the frozen WorldConfig. Default
+        # None preserves v0.7..v0.17 bit-identity (no respawn).
+        world_cfg = world_cfg.model_copy(update={"food_respawn_cooldown": food_respawn_cooldown})
     body_cfg = BodyConfig()
     action_cfg = ActionConfig()
     repro_cfg = reproduction_config if reproduction_config is not None else ReproductionConfig()
