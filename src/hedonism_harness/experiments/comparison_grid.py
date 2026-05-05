@@ -80,6 +80,13 @@ class Arm:
     ``tuned_reproduction_config`` default (``30.0``). ``None``
     preserves v0.14/v0.15/v0.16 bit-identity. Used by ``V0_17_ARMS``
     to sweep newborn starting energy under reflex-baseline + cost-15.
+
+    ``food_respawn_cooldown`` (v0.18) configures per-tile food
+    respawn under the cooldown mechanism. ``None`` (default)
+    disables respawn — preserves v0.7..v0.17 bit-identity. An
+    integer ``K >= 1`` enables respawn: a consumed FOOD cell refills
+    after K ticks. Used by ``V0_18_ARMS`` to sweep K under
+    reflex-baseline + cost-15 + offspring=30.
     """
 
     label: str
@@ -89,6 +96,7 @@ class Arm:
     energy_cost: float | None = None
     energy_threshold: float | None = None
     offspring_start_energy: float | None = None
+    food_respawn_cooldown: int | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -224,6 +232,56 @@ V0_17_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.18 arms — food-respawn-cooldown variants under reflex-baseline +
+# cost-15 + offspring_start_energy=30 (the v0.17 baseline). Sweeps
+# food_respawn_cooldown in {None, 100, 50, 20}; tests whether
+# non-saturating food alone (without raising offspring energy)
+# supports lineage compounding. The K-inf arm reproduces v0.17
+# start-30 bit-identically. See [[docs/experiments/fear_hunger_v0.18.md]].
+V0_18_ARMS: tuple[Arm, ...] = (
+    Arm(
+        label="K-inf",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=None,
+    ),
+    Arm(
+        label="K-100",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=100,
+    ),
+    Arm(
+        label="K-50",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=50,
+    ),
+    Arm(
+        label="K-20",
+        policy_factory=_gradient_policy_factory,
+        auto_reproduction=True,
+        memory_type=None,
+        energy_cost=15.0,
+        energy_threshold=50.0,
+        offspring_start_energy=30.0,
+        food_respawn_cooldown=20,
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -247,6 +305,10 @@ class RunDiagnostics:
         appear as AgentBorn (they spawn via ``_spawn_founder`` with
         no event), so first-generation births (parent = founder)
         do not count; only second-generation-and-beyond births do.
+
+    v0.18 adds the respawn telemetry:
+      - ``total_food_respawn_events`` — count of FoodRespawned
+        emissions. Always 0 when no cooldown is configured.
     """
 
     births_after_tick_50: int
@@ -257,6 +319,7 @@ class RunDiagnostics:
     total_distinct_parents: int
     total_post_birth_lifespan_ticks: int
     total_grandchildren_count: int
+    total_food_respawn_events: int
 
     @property
     def total_action_ticks(self) -> int:
@@ -268,7 +331,7 @@ class RunDiagnostics:
         return (self.still_ticks / total) if total > 0 else 0.0
 
 
-def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event types is cohesive.
+def _read_run_diagnostics(  # noqa: PLR0912, PLR0915 — single-pass dispatch is cohesive.
     events_jsonl: Path, *, threshold: int = DEFAULT_TICK_THRESHOLD
 ) -> RunDiagnostics:
     """Walk events.jsonl once to derive birth-tick + per-action counts.
@@ -284,6 +347,7 @@ def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event 
     death_tick: dict[int, int] = {}
     born_agent_ids: set[int] = set()
     grandchildren_count = 0
+    food_respawn_count = 0
     max_event_tick = 0
     with events_jsonl.open() as f:
         for line in f:
@@ -329,6 +393,9 @@ def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event 
             elif kind in {"HazardDamageApplied", "HazardEntered"}:
                 # Body-physics events; not action emissions.
                 pass
+            elif kind == "FoodRespawned":
+                # Environmental event (v0.18). Counted; not an action emission.
+                food_respawn_count += 1
             elif kind == "ReproductionRequested":
                 # Reproduction is auto-substrate (B, C) or voluntary action
                 # (A). In A it's an action emission alongside AgentStayed
@@ -352,6 +419,7 @@ def _read_run_diagnostics(  # noqa: PLR0912 — single-pass dispatch over event 
         total_distinct_parents=len(first_birth_tick),
         total_post_birth_lifespan_ticks=total_lifespan,
         total_grandchildren_count=grandchildren_count,
+        total_food_respawn_events=food_respawn_count,
     )
 
 
@@ -374,6 +442,13 @@ class ArmCellAggregate:
       - ``total_grandchildren_count`` — total AgentBorn events whose
         parent was itself born during the run. The seed-denominator
         rate is exposed via ``mean_grandchildren_per_seed`` below.
+
+    v0.18 adds respawn telemetry + the conservation-accounting ratio:
+      - ``total_food_respawn_events`` — count of FoodRespawned
+        emissions (always 0 when no cooldown is configured).
+      - ``food_consumed_per_birth`` (property) — environmental energy
+        per birth = (food_events * food_value_default) / total_births.
+        Quantifies "is the substrate paying for births with food."
     """
 
     arm_label: str
@@ -392,6 +467,10 @@ class ArmCellAggregate:
     total_distinct_parents: int
     total_post_birth_lifespan_ticks: int
     total_grandchildren_count: int
+    total_food_respawn_events: int
+    # v0.18: snapshot of WorldConfig.food_value_default at sweep time so
+    # food_consumed_per_birth is computed without re-reading config.
+    food_value_default: float
 
     @property
     def mean_births_per_parent(self) -> float:
@@ -421,12 +500,35 @@ class ArmCellAggregate:
         """
         return (self.total_grandchildren_count / self.n_seeds) if self.n_seeds > 0 else 0.0
 
+    @property
+    def food_consumed_per_birth(self) -> float:
+        """Environmental energy per birth (v0.18 conservation-accounting).
+
+        ``(total_food_events * food_value_default) / total_births``.
+
+        Under v0.17 start-100 (handout) this ratio is artificially low
+        (~9.5) — many births were "free" from offspring_start_energy.
+        Under v0.18 (no handout, baseline offspring=30) the floor for
+        self-sustaining births is ``energy_cost + offspring_start_energy
+        = 45``; values approaching that floor indicate the substrate
+        is paying for births with food. Returns 0.0 when total_births
+        is zero (vacuous early-termination runs).
+        """
+        return (
+            (self.total_food_events * self.food_value_default) / self.total_births
+            if self.total_births > 0
+            else 0.0
+        )
+
 
 def _aggregate(
     arm: Arm,
     layout_name: str,
     pairs: list[tuple[ChamberRunResult, RunDiagnostics]],
 ) -> ArmCellAggregate:
+    # ``food_value_default`` matches ``build_chamber_layout`` (20.0); update
+    # both if the chamber spec ever varies food yield.
+    food_value_default = 20.0
     if not pairs:
         return ArmCellAggregate(
             arm_label=arm.label,
@@ -445,6 +547,8 @@ def _aggregate(
             total_distinct_parents=0,
             total_post_birth_lifespan_ticks=0,
             total_grandchildren_count=0,
+            total_food_respawn_events=0,
+            food_value_default=food_value_default,
         )
     results = [r for r, _d in pairs]
     diags = [d for _r, d in pairs]
@@ -467,6 +571,8 @@ def _aggregate(
         total_distinct_parents=sum(d.total_distinct_parents for d in diags),
         total_post_birth_lifespan_ticks=sum(d.total_post_birth_lifespan_ticks for d in diags),
         total_grandchildren_count=sum(d.total_grandchildren_count for d in diags),
+        total_food_respawn_events=sum(d.total_food_respawn_events for d in diags),
+        food_value_default=food_value_default,
     )
 
 
@@ -541,6 +647,7 @@ def _run_one_arm_seed(
         reproduction_config=repro_cfg,
         use_memory=use_memory,
         memory_type=memory_type,
+        food_respawn_cooldown=arm.food_respawn_cooldown,
         condition=arm.label,
         setup_observer=setup,
     )

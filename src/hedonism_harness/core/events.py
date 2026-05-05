@@ -96,6 +96,21 @@ class AgentDied:
     tick: int
 
 
+@dataclass(frozen=True)
+class FoodRespawned:
+    """Emitted by ``HHModel._apply_food_respawn`` (v0.18) when a previously-
+    consumed FOOD cell refills under the cooldown mechanism.
+
+    No agent_id — this is an environmental event. Carries its own ``tick``
+    so subscribers (and the events.jsonl writer) can disambiguate ordering
+    when multiple cells refill on the same tick.
+    """
+
+    x: int
+    y: int
+    tick: int
+
+
 AnyEvent = (
     AgentMoved
     | AgentStayed
@@ -105,6 +120,7 @@ AnyEvent = (
     | ReproductionRequested
     | AgentBorn
     | AgentDied
+    | FoodRespawned
 )
 
 
@@ -144,6 +160,7 @@ _SIGNAL_NAMES: dict[type, str] = {
     ReproductionRequested: "hh.reproduction_requested",
     AgentBorn: "hh.agent_born",
     AgentDied: "hh.agent_died",
+    FoodRespawned: "hh.food_respawned",
 }
 
 

@@ -219,6 +219,8 @@ def test_arm_cell_aggregate_mean_grandchildren_per_seed() -> None:
         total_distinct_parents=20,
         total_post_birth_lifespan_ticks=1600,
         total_grandchildren_count=12,
+        total_food_respawn_events=0,
+        food_value_default=20.0,
     )
     assert agg.mean_grandchildren_per_seed == pytest.approx(12 / 8)
     assert agg.mean_births_per_parent == pytest.approx(40 / 20)
@@ -245,5 +247,7 @@ def test_arm_cell_aggregate_mean_grandchildren_per_seed_zero_seeds() -> None:
         total_distinct_parents=0,
         total_post_birth_lifespan_ticks=0,
         total_grandchildren_count=0,
+        total_food_respawn_events=0,
+        food_value_default=20.0,
     )
     assert agg.mean_grandchildren_per_seed == 0.0
