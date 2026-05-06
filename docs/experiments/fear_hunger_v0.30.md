@@ -446,9 +446,10 @@ seeds 9..16:
 - `n_favoring`        = **7/8**  (ties allowed).
 - `n_strict_favoring` = **0/8**  (descriptive only — see below).
 
-w=0.75 beats both neighbours on the fresh stream by directionally
-non-trivial margins, but the 0.75-vs-1.0 axis falls well short of the
-H5 ROBUST ≥ 5 threshold. **The methodological rule from v0.29
+w=0.75 beats both neighbours on the fresh stream, but only the
+low-side margin is non-trivial; the high-side margin is +1 and
+remains sample-noise-scale. The 0.75-vs-1.0 axis falls well short of
+the H5 ROBUST ≥ 5 threshold. **The methodological rule from v0.29
 explicitly prohibits promotion of the tight w*=0.75 finding to a
 mechanism on this verdict.**
 
