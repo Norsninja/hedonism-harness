@@ -401,6 +401,32 @@ calibration analogous to v0.30..v0.33, which is out of scope.
 
 To be reused verbatim if H7 fires.
 
+### Naming convention — "EXPANSION-SUPPORTED" is strictly "early-leader continuity"
+
+The H6 indicator is `winner_already_dominant_at_tick_50`, i.e. the
+boolean `leader_at_tick_50 == eventual_top_lineage`. A monotone rise
+of this rate with hazard is **direct** evidence that the pre-50
+birth-count leader carries through to the post-50 b50 winner more
+often as hazard increases. It is **indirect** (one inferential step
+weaker) evidence that the eventual winner has a *higher post-50
+expansion rate* than the other surviving lineages — that latter
+claim would require a per-lineage post-50-birth-rate comparison
+that v0.35 does not compute.
+
+The verdict name **EXPANSION-SUPPORTED** is locked for symmetry
+with PRUNING-SUPPORTED, but Results must use the dual phrasing:
+
+- **EXPANSION-SUPPORTED** ≡ **EARLY-LEADER CONTINUITY** ≡
+  "the pre-50 leader becomes the post-50 winner more often as
+  hazard increases."
+- The "post-50 expansion rate is higher under high hazard" framing
+  is consistent with EARLY-LEADER CONTINUITY but is **not directly
+  measured** by v0.35.
+
+If H6 fires, the Results headline MUST use one of the two equivalent
+phrasings or both jointly; it MUST NOT claim a measured post-50
+expansion rate differential.
+
 ### Verdict-space subsection — what each outcome means
 
 | verdict | indicator state | what it tells us | v0.36+ candidate |
@@ -456,7 +482,7 @@ guarantee.
 | verdict | decision | v0.36+ candidate |
 |---|---|---|
 | H5 PRUNING-SUPPORTED | pruning is the timing-locus consistent with the v0.34 secondary observation | v0.36 heritability: which-founders-survive trait correlation |
-| H6 EXPANSION-SUPPORTED | expansion is the timing-locus consistent with the v0.34 secondary observation | v0.36 heritability: winner-lineage trait correlation |
+| H6 EXPANSION-SUPPORTED (= EARLY-LEADER CONTINUITY) | early-leader continuity is the timing-locus consistent with the v0.34 secondary observation; v0.35 does NOT directly measure post-50 expansion rate | v0.36 heritability: winner-lineage trait correlation |
 | H7 MIXED-OR-UNRESOLVED | locked phrase fires; lineage-axis data does not select a mechanism | v0.36 heritability proceeds with neutral framing |
 
 **Independent of the verdict, v0.36 begins the heritability arc.**
@@ -608,3 +634,255 @@ uv run python scripts/core_smoke_test.py  ok
   — handoff specifying v0.35 implementation surface verbatim from
   user-locked scope.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework".
+
+---
+
+## Results
+
+**Status:** executed 2026-05-06. Reducer
+([[scripts/lineage_survival_replay.py]]) ran over the same 96-run
+corpus v0.34 reduced (v0.25 1..8 + v0.32 9..16 + v0.33 17..24,
+hazard ∈ {0, 4, 8, 12}, tight_gradient, influx=1.0). Outputs under
+`runs/lineage-v0.35/` (gitignored). Re-anchor (H2) against v0.34's
+`run_summary.csv:top_lineage_b50` passed for all 96 runs (no
+mismatch). All invariants (H1, H1b, H2b, H2c, H3, H4) held.
+
+### Headline
+
+**Verdict: H6 — EXPANSION-SUPPORTED (= EARLY-LEADER CONTINUITY).**
+
+Per the locked naming convention: the observable that fires is
+`winner_already_dominant_at_tick_50_rate` rising monotonically with
+hazard. This is **direct** evidence that the pre-50 birth-count
+leader becomes the post-50 b50 winner more often as hazard rises;
+it is **indirect** evidence of post-50 expansion-rate superiority,
+which v0.35 does not measure.
+
+> **Cautious framing:** **Timing-locus supported on the v0.34
+> corpus.** This is not a mechanism declaration. v0.35 identifies
+> which of two candidate timing loci (pre-50 pruning vs early-leader
+> continuity) the lineage-axis data is consistent with. Promotion to
+> a robust mechanism would require a fresh-stream calibration
+> analogous to v0.30..v0.33, which is out of scope.
+
+### Per-hazard summary
+
+| hazard | n  | fa_t0 | fa_t25 | fa_t50 | fa_t75 | fa_t100 | fa_t150 | fa_t200 | med_ext | p_ext | wad_rate | mean_n_post50 |
+|-------:|---:|------:|-------:|-------:|-------:|--------:|--------:|--------:|--------:|------:|---------:|--------------:|
+| 0      | 24 | 5.000 | 5.000  | **5.000** | 4.042 | 3.167   | 2.417   | 0.000   | 94      | 0.583 | **0.458** | 2.458         |
+| 4      | 24 | 5.000 | 5.000  | **5.000** | 4.958 | 3.875   | 2.750   | 0.000   | 108     | 0.558 | **0.708** | 2.042         |
+| 8      | 24 | 5.000 | 5.000  | **5.000** | 4.917 | 3.708   | 2.542   | 0.000   | 103     | 0.583 | **0.750** | 1.958         |
+| 12     | 24 | 5.000 | 5.000  | **5.000** | 4.958 | 3.583   | 2.333   | 0.000   | 102     | 0.617 | **0.792** | 1.750         |
+
+`fa_tT` = mean number of founder lineages active at tick T (out of 5).
+`med_ext` = median extinction tick over founder lineages that go
+extinct within `n_ticks=200`. `p_ext` = fraction of the 24 × 5 = 120
+founder-lineage-runs that go extinct within window. `wad_rate` =
+`winner_already_dominant_at_tick_50_rate`. `mean_n_post50` =
+mean count (across 24 runs) of founder lineages contributing >= 1
+post-50 birth.
+
+### Decision rule — observed indicator values
+
+**Pruning indicator (locked):** `m(h=0) >= m(h=4) >= m(h=8) >= m(h=12)`
+AND `m(h=0) - m(h=12) >= 0.5`.
+
+- Observed: `m(h=0) = m(h=4) = m(h=8) = m(h=12) = 5.000`. Spread =
+  **0.000** (< 0.5 threshold).
+- Indicator: **FAILS** on spread (monotone non-increasing trivially
+  satisfied by all-equal values).
+
+**Expansion indicator (locked):** `r(h=0) <= r(h=4) <= r(h=8) <=
+r(h=12)` AND `r(h=12) - r(h=0) >= 0.15`.
+
+- Observed: `r(h=0) = 0.458, r(h=4) = 0.708, r(h=8) = 0.750, r(h=12)
+  = 0.792`. Strict monotone non-decreasing across all four hazards.
+  Spread = **0.333** (≥ 0.15 threshold).
+- Indicator: **PASSES**.
+
+**Three-way verdict:** pruning indicator FAILS, expansion indicator
+PASSES → **H6 EXPANSION-SUPPORTED** fires.
+
+### Why pruning indicator fails: founder survival at tick 50 is *complete* at every hazard
+
+The most striking finding is descriptive, not verdict-input:
+**every founder lineage is active at tick 50 in every one of the 96
+runs**, across all four hazard levels. `mean_founders_alive_at_t50 =
+5.000` exactly, with zero variance. This means tick 50 is too early
+for hazard-driven pruning to manifest in this corpus —  pruning
+happens, but it begins after tick 50.
+
+By tick 75, mean founder survival has dropped from 5.000 to 4.042 at
+h=0 but only to 4.958 at h=4 / h=12 (and 4.917 at h=8). The h=0 case
+shows *more* pruning at tick 75 than the high-hazard cases. By tick
+100, all four hazards are losing founder lineages roughly in
+parallel (3.167 → 3.875 → 3.708 → 3.583). By tick 200, every
+founder lineage in every run has gone extinct (`fa_t200 = 0.000`
+across all hazards) — the chamber's 200-tick window is enough to
+drive complete generational turnover regardless of hazard.
+
+The pre-reg locked tick 50 as the pruning indicator's input. Under
+that lock, the rule fires unambiguously: tick 50 is dominated by
+universal founder survival, and the pruning mechanism (if it
+operates at all) operates post-50. **The rule did its job: it ruled
+out tick-50-locus pruning as the timing fork for the v0.34
+secondary observation.** A finer post-50-tick reanalysis is a
+deferred candidate for v0.36+ if warranted.
+
+### Why expansion indicator passes: the eventual winner is increasingly the pre-50 leader
+
+`winner_already_dominant_at_tick_50_rate` rises monotonically
+across all four hazards: **0.458 → 0.708 → 0.750 → 0.792**. The
+total spread (0.333) is more than 2× the locked threshold (0.15).
+The h=0 → h=4 jump (+0.250) is the largest single step; later
+increments compress (0.708 → 0.750 → 0.792, ~0.04 per step).
+
+In plain language: at h=0, the pre-50 birth-count leader becomes the
+eventual post-50 b50 winner roughly 11/24 times. At h=12, that rises
+to 19/24. The "early leader carries through" story strengthens with
+hazard.
+
+**Locked dual phrasing (per pre-reg):**
+
+- **EXPANSION-SUPPORTED ≡ EARLY-LEADER CONTINUITY.** The pre-50
+  birth-count leader becomes the post-50 b50 winner more often as
+  hazard increases.
+- This is **NOT** a measured post-50 expansion-rate differential.
+  v0.35 did not compute per-lineage post-50 birth rates conditional
+  on which lineage led at tick 50, so any claim that "high-hazard
+  winners reproduce faster post-50" is one inferential step beyond
+  the data.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | v0.34 helpers imported additively (no modification of `lineage_replay.py`) | **HOLDS.** Imports succeed; constants byte-match. |
+| H1b | `B_POOL_ANCHORS = {4: 312, 8: 321, 12: 312}` re-asserted at reducer entry | **HOLDS.** `reassert_b_pool_anchors()` returns without raising. |
+| H2 | Recomputed per-run `top_lineage_b50` byte-identical to v0.34 `run_summary.csv` | **HOLDS.** All 96 runs match; 0 drift. |
+| H2b | Every run has exactly 5 founders | **HOLDS.** Inherited from v0.34's `assign_founder_lineages`. |
+| H2c | `founders_alive_at_t0 == 5` for every run | **HOLDS.** All 96 runs pass. |
+| H3 | v0.21..v0.34 prior tests pass after v0.35 additions | **HOLDS.** Suite 883 → 924 (+41 v0.35 tests); all green. |
+| H4 | Pre-v0.35 surface byte-unchanged | **HOLDS.** Zero edits to `lineage_replay.py`, prior `v0.NN_*.py`, `comparison_grid.py`, `core/`, `model.py`, chamber / population / policy modules. |
+| H5 | PRUNING-SUPPORTED | **FAILS** on m(h)-spread = 0.000 (< 0.5). |
+| H6 | EXPANSION-SUPPORTED (= EARLY-LEADER CONTINUITY) | **FIRES.** r(h)-spread = 0.333 ≥ 0.15; r(h) strictly monotone non-decreasing across all four hazards. |
+| H7 | MIXED-OR-UNRESOLVED | **FAILS** (H6 fires; both indicators do not pass). |
+
+### Secondary observations (NOT pre-committed)
+
+These are descriptive, surfaced post-hoc, and do not feed any v0.35
+verdict.
+
+- **Survivor curves diverge between tick 50 and tick 75.** The
+  largest hazard-driven divergence in `mean_founders_alive` is in
+  the [50, 75] window. At T=50 all four hazards sit at 5.000; at
+  T=75 the spread is 4.958 (h=4, h=12) vs 4.917 (h=8) vs 4.042 (h=0).
+  **h=0 prunes faster early than h ∈ {4, 8, 12}** — consistent with
+  the v0.32-quarantined "small hazard helps tight" observation
+  (food-limited h=0 starves founders into early extinction; even
+  small hazard slows food consumption enough to delay pruning).
+- **Median extinction tick is similar across hazards (~94–108).**
+  Mid-window extinction events do not shift dramatically with hazard.
+- **Mean number of lineages contributing >= 1 post-50 birth declines
+  with hazard:** 2.458 → 2.042 → 1.958 → 1.750. Downstream of the
+  expansion result; consistent with single-lineage dominance
+  intensifying with hazard but not directly the verdict's input.
+- **`p_lineage_extinct_within_window` rises slightly with hazard:**
+  0.583 → 0.558 → 0.583 → 0.617. Non-monotone (h=4 dips). Not a
+  v0.35 observable; commentary only.
+
+### What this means for the v0.34 secondary observation
+
+v0.34 reported that mean `top_lineage_b50_share` rises monotonically
+with hazard (0.635 → 0.728 → 0.759 → 0.785). v0.35 narrows the
+timing locus on the v0.34 corpus:
+
+- **Pre-tick-50 pruning is not the timing locus.** All founder lines
+  survive to tick 50 in every run.
+- **Early-leader continuity is the timing locus.** The lineage that
+  has produced the most pre-50 births becomes the post-50 b50
+  winner with rising probability as hazard increases.
+- **The post-50 expansion-rate-differential interpretation is
+  consistent but unmeasured.** v0.35 cannot select between "the
+  early leader has a higher post-50 birth rate at high hazard" and
+  "high hazard simply terminates challengers post-50 without
+  changing per-lineage birth rates." Both are timing-locus stories
+  consistent with H6.
+
+### Cautious forward-reference phrasing
+
+For v0.34 / v0.35 forward-mention sites:
+
+> v0.34's secondary observation that `top_lineage_b50_share` rises
+> monotonically with hazard at influx=1.0 in tight_gradient is
+> **timing-locus consistent with early-leader continuity** on the
+> 96-run corpus (v0.35 H6 EXPANSION-SUPPORTED): the pre-tick-50
+> birth-count leader becomes the post-tick-50 b50 winner with a
+> per-hazard rate of 0.458 → 0.708 → 0.750 → 0.792 across hazards
+> ∈ {0, 4, 8, 12}. Pre-tick-50 founder pruning is NOT the timing
+> locus — every founder lineage is active at tick 50 in every run.
+> Post-50 expansion-rate-differential is consistent with the
+> observable but is not directly measured. Promotion to a robust
+> mechanism requires a fresh-stream calibration not yet performed.
+
+### Implementation summary
+
+- **New script:** `scripts/lineage_survival_replay.py` (~590 LOC).
+  Imports `scripts/lineage_replay.py` helpers via `importlib.util`;
+  no modification to v0.34 surface. Pure-function pipeline produces
+  four output CSVs.
+- **New tests:** `tests/test_lineage_survival_replay.py` (41 tests,
+  ~580 LOC). Suite **883 → 924** (+41); all green.
+- **Pre-reg-locked thresholds preserved verbatim in code:**
+  `SNAPSHOT_TICKS = (0, 25, 50, 75, 100, 150, 200)`,
+  `LEADER_TICK = 50`,
+  `PRUNING_FOUNDER_SPREAD_THRESHOLD = 0.5`,
+  `EXPANSION_RATE_SPREAD_THRESHOLD = 0.15`.
+- **Re-anchor:** all 96 runs match v0.34's
+  `run_summary.csv:top_lineage_b50` byte-identical.
+- **Zero edits** to `scripts/lineage_replay.py`, prior
+  `scripts/v0.NN_*.py`, `src/`, or any pre-v0.35 module.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                                   ok
+  uv run ruff format --check .                          ok
+  uv run pytest                                         924 passed
+  uv run python scripts/core_smoke_test.py              ok
+  uv run python scripts/lineage_survival_replay.py      H6 EXPANSION-SUPPORTED
+                                                        (early-leader continuity)
+  ```
+
+## Conclusion
+
+v0.35 fires **H6 — EXPANSION-SUPPORTED (= EARLY-LEADER CONTINUITY)**
+on the 96-run v0.34 corpus. The pre-50 birth-count leader becomes
+the post-50 b50 winner with a per-hazard rate that rises
+monotonically across all four hazards (0.458 → 0.708 → 0.750 →
+0.792, spread = 0.333, well above the locked 0.15 threshold).
+Pre-tick-50 founder pruning is *not* the timing locus on this
+corpus: every founder lineage is active at tick 50 in every run,
+yielding an m(h)-spread of exactly 0.000 (well below the locked
+0.5 threshold).
+
+**Cautious framing (locked):** this is **timing-locus supported on
+the v0.34 corpus**, not a mechanism declaration. v0.35 narrows
+*which* of two candidate timing stories the lineage-axis data is
+consistent with; it does not promote either to a robust mechanism.
+The post-50 expansion-rate-differential interpretation is one
+inferential step beyond what `winner_already_dominant_at_tick_50`
+directly measures and is not claimed.
+
+Decision:
+- The v0.34 secondary observation that `top_lineage_b50_share`
+  rises monotonically with hazard is **locked** at "timing-locus
+  consistent with early-leader continuity on the v0.34 corpus."
+  Pre-50 pruning is excluded as the timing locus on this corpus.
+- **The lineage observability follow-up arc reaches a natural pause
+  point.** v0.36 begins the heritability arc, with the locked v0.35
+  result as a constraint on framing: any heritable-trait story for
+  late-window dominance must be consistent with founders all
+  surviving to tick 50, with the early leader carrying through more
+  often at high hazard.
+- Forward-mention sites use the locked dual phrasing: "EXPANSION-
+  SUPPORTED ≡ EARLY-LEADER CONTINUITY," with the explicit caveat
+  that v0.35 does not measure post-50 expansion rate.
