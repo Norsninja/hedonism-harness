@@ -591,3 +591,355 @@ from 828 to ~850 (+~22).
   weight_labels override v0.33 reuses for stream loading.
 - [[scripts/v0.32_sweep.py]] — sweep pattern v0.33_sweep mirrors.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework".
+
+---
+
+## Results
+
+**Status:** executed 2026-05-06. 32 fresh runs on tight_gradient × seeds
+17..24 × `V0_33_TIGHT_H_ARMS` written to
+`runs/fear-hunger-v0.33-tight_gradient/`. Audit driver
+(`scripts/v0.33_audit.py`) loaded all three streams (v0.25 1..8, v0.32
+9..16, v0.33 17..24), applied single-stream diagnostic verdicts (default
+8-seed thresholds, `candidate_label="h=8"`) and the pre-committed
+pooled 24-seed verdict (thresholds 15/15/3/15). Full per-seed report:
+`runs/fear-hunger-v0.33-tight_gradient/audit.md`.
+
+### Headline
+
+**Pooled 24-seed verdict: H6_pool — WEAK REPRODUCTION.**
+
+> **Locked phrase (pre-committed; reused verbatim from v0.31):
+> "Directionally persistent, not mechanistically robust."**
+
+| hazard | B_pool(h) = Σ b>50 over 24 seeds |
+|-------:|---------------------------------:|
+| 0 | 291 *(descriptive baseline; NOT in classifier)* |
+| 4 | 312 |
+| 8 | **321** |
+| 12 | 312 |
+
+- Δ_low_pool  = B(h=8) − B(h=4)  = **+9**  (≥ 3 ✓ for H6; < 15 for H5).
+- Δ_high_pool = B(h=8) − B(h=12) = **+9**  (≥ 3 ✓ for H6; < 15 for H5).
+- Neighbour lead = max(312, 312) − 321 = **−9**  (< 15 — H8 fails).
+- `n_favoring_pool`        = **21/24**  (ties allowed).
+- `n_strict_favoring_pool` = **2/24**   (descriptive only — seeds 8, 18).
+- `n_hazard_insensitive_pool` = **14/24**  (descriptive; below the 18/24
+  pre-committed candidate-finding bar by 4 seeds).
+
+**This is a different outcome from v0.31's weight-axis sister.** v0.31
+saw stream 3 collapse the direction (Δ_high_3 = −2), tipping the pool
+from H6_pool territory to H7_pool. v0.33's stream 3 *strengthened* the
+direction (Δ_high_3 = +5, the largest of the three streams), pushing
+the pooled Δ_high from +4 (1..16) up to +9 (1..24). The hazard axis
+compounds where the weight axis collapsed.
+
+But the magnitude does not approach H5_pool ROBUST: both pooled deltas
+are +9, well below the +15 threshold. The locked H6_pool phrase fires
+verbatim.
+
+### Stream 3 strengthened the direction
+
+Single-stream verdict on the v0.33 fresh stream (seeds 17..24):
+
+| hazard | B_3(h) = Σ b>50 |
+|-------:|----------------:|
+| 0 | 100 *(baseline)* |
+| 4 | 108 |
+| 8 | **109** |
+| 12 | 104 |
+
+- Δ_low_3  = 109 − 108 = **+1**.
+- Δ_high_3 = 109 − 104 = **+5**.
+- max neighbour lead = max(108, 104) − 109 = −1 (< 5 → H8 fails).
+- Single-stream classification: **H6 — WEAK REPRODUCTION** (h=8 beats
+  both classifier-slice neighbours; Δ_low and Δ_high both ≥ 1).
+
+Three-of-three streams fire H6 single-stream — a clean directional
+persistence pattern. v0.31 had two-of-three (streams 1, 2 H6; stream
+3 H7).
+
+### Cross-stream verdict table
+
+| stream | seeds | B(h=4) | B(h=8) | B(h=12) | Δ_low | Δ_high | n_fav | n_strict | single-stream verdict |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| Stream 1 (v0.25 source) | 1..8  | 113 | 116 | 114 | +3 | +2 | 7/8 | 1/8 | H6 WEAK |
+| Stream 2 (v0.32 fresh)  | 9..16 |  91 |  96 |  94 | +5 | +2 | 7/8 | 0/8 | H6 WEAK |
+| Stream 3 (v0.33 fresh)  | 17..24 | 108 | 109 | 104 | +1 | +5 | 7/8 | 1/8 | H6 WEAK |
+| **Pooled**              | **1..24** | **312** | **321** | **312** | **+9** | **+9** | **21/24** | **2/24** | **H6_pool WEAK** |
+
+Three streams agree directionally; two of three have Δ_low ≥ Δ_high,
+stream 3 inverts that ordering (Δ_high_3 > Δ_low_3). The pooled
+Δ_low and Δ_high both land at exactly +9, well within H6_pool but
+nowhere near H5_pool's +15. n_strict_favoring_pool = 2/24 — across 24
+independent seeds, only **seeds 8 and 18** strictly prefer h=8 over
+both classifier-slice neighbours.
+
+### Per-seed structure: 14/24 hazard-insensitive; aggregate residual of opposite-direction single-seed swings
+
+The per-seed pattern echoes v0.30 / v0.31 on the weight axis: the
+aggregate signal is residual of opposing single-seed swings, not a
+broad shift across most seeds.
+
+- **Hazard-insensitive seeds (14, b50 byte-identical across {h=4,
+  h=8, h=12}):** 1, 2, 3, 4, 5, 11, 12, 15, 16, 20, 21, 22, 23, 24.
+  ~58% of seeds.
+- **Strict-favoring h=8 seeds (2):** 8 (+2/+2), 18 (+2/+1).
+- **Per-seed swings driving the pooled Δ_low (=+9):** seed 6 (+5),
+  seed 8 (+2), seed 13 (+11), seed 18 (+2) — counter: seed 7 (−4),
+  seed 9 (−6), seed 19 (−1). Net +9 from 7 non-flat seeds.
+- **Per-seed swings driving the pooled Δ_high (=+9):** seed 8 (+2),
+  seed 10 (+1), seed 14 (+3), seed 17 (+4), seed 18 (+1) — counter:
+  seed 9 (−2). Net +9 from 6 non-flat seeds.
+
+The two pooled deltas are driven by *different* sets of single-seed
+swings, with seeds 8 and 18 the only ones contributing to both. The
+"interior optimum at h=8" reading at the aggregate level is not
+matched by a per-seed pattern of broad preference; it is a residual
+of single-seed swings concentrated in a handful of seeds.
+
+`n_hazard_insensitive_pool = 14/24` falls well short of the 18/24
+pre-committed candidate-finding bar — but at ~58%, per-seed
+hazard-insensitivity in the {h=4, h=8, h=12} window remains a
+substantial empirical pattern, even if not the headline. Compare to
+v0.31's `n_weight_insensitive_pool = 17/24` (~71%) on the weight axis;
+the hazard axis is somewhat more sensitive at the per-seed level
+(fewer flat seeds), but most seeds still shrug at the choice between
+h=4, h=8, h=12.
+
+### Routing-channel — the substrate seam holds across three streams
+
+Pooled 24-seed routing observables (all 4 hazards, including h=0
+baseline):
+
+| hazard | total_births | b>50 | total_food | hazard_entries | starvation | injury |
+|-------:|-------------:|-----:|-----------:|---------------:|-----------:|-------:|
+| 0 | 743 | 291 | 2014 | 124 | 618 | 0 |
+| 4 | 543 | 312 | 2169 | 112 | 335 | 0 |
+| 8 | 551 | 321 | 2164 | 102 | 339 | 0 |
+| 12 | 543 | 312 | 2170 | 92 | 338 | 0 |
+
+Hazard entries decline monotonically with hazard damage (124 → 112 →
+102 → 92), as expected — hazard is a routing tax, and the avoidance
+substrate scales smoothly with damage. h=0 is dominated by
+starvation: 618 starvations across 743 births. Adding any hazard
+(h ≥ 4) cuts starvation roughly in half (335..339), because the
+routing tax slows down food consumption enough that the pool can
+keep up. **This is the "small hazard helps tight" signal v0.32
+quarantined as a separate independent claim — it reproduces here at
+n=24** (h=0: 743 total_births vs h=4: 543; h=0: 291 b>50 vs h=4:
+312). The h=0 quarantine is reaffirmed: this pooled observation does
+NOT promote the v0.32-quarantined "small hazard helps" claim within
+v0.33's scope, but it is now visible at 24 seeds and the per-PR
+discipline closes the loop on whether the pooled stream-2 + stream-3
+non-replication of the source observation was contingent. **It was
+not contingent at the b>50 level: B(h=0)=291 < B(h=4)=312 holds at
+n=24**, matching the v0.25 source direction. (Total_births is a
+distinct observable; per the v0.32 quarantine, h=0 questions live
+on their own audit trail outside this PR.)
+
+Injury deaths = 0 across all four hazards (tight geometry protects
+against single-visit lethality regardless of hazard damage; same
+pattern v0.25 / v0.32 saw). The routing-channel response to hazard is
+the part of the substrate that is reliable; the productivity channel
+(b>50 totals) responds only weakly, and the per-seed shape is the
+true characterisation.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `V0_33_TIGHT_H_ARMS` is a literal subset of `V0_25_ARMS` (instance identity) | **HOLDS.** `test_v0_33_tight_h_arms_are_literal_v0_25_subset`. |
+| H1b | Arm-object identity to `V0_32_TIGHT_H_ARMS` at matched labels | **HOLDS.** `test_v0_33_tight_h_arms_share_arm_objects_with_v0_32` + `_match_v0_32_element_wise`. |
+| H2 | Sweep produces 32 events.jsonl files (artifact pre-flight) | **HOLDS.** `assert_artifacts_present` passes for all three streams (8 v0.25 + 8 v0.32 + 8 v0.33 = 24 seed dirs × 4 arms each = 96 events.jsonl files). |
+| H3 | v0.27..v0.32 prior tests pass after v0.33 additions | **HOLDS.** Suite 828 → 856 (+28 v0.33 tests); all green. |
+| H4 | Pre-v0.33 arm tuples unchanged | **HOLDS.** Pinned in `tests/test_comparison_grid_v0_33.py`. |
+| H5_pool | ROBUST: Δ_low ≥ 15 AND Δ_high ≥ 15 AND n_favoring ≥ 15 | **FAILS** on Δ_low_pool=+9 and Δ_high_pool=+9 (need ≥ 15 each). |
+| H6_pool | WEAK: Δ_low ≥ 3 AND Δ_high ≥ 3, NOT H5 | **FIRES.** Δ_low=+9 ≥ 3 ✓; Δ_high=+9 ≥ 3 ✓; H5 fails. |
+| H7_pool | FAILURE: none of H5_pool / H6_pool / H8_pool | **FAILS** (H6_pool fired). |
+| H8_pool | REVERSAL: max(B(4), B(12)) − B(8) ≥ 15 | **FAILS.** Lead = −9 (no neighbour beats h=8 in pool aggregate). |
+
+Pre-committed observation (v0.33 pre-reg): the existing 1..16 pool
+fires the equivalent of H6_16 under 16-seed-scaled thresholds
+(B_16=(204, 212, 208), Δ_low_16=+8 ≥ 2 ✓, Δ_high_16=+4 ≥ 2 ✓). **The
+v0.33 fresh stream contributed Δ_low_3=+1 and Δ_high_3=+5, raising
+the pooled Δ_low from +8 to +9 and the pooled Δ_high from +4 to +9.**
+Both pooled deltas remain in H6_pool territory (Δ ≥ 3, < 15) — the
+verdict-reachability analysis ("stream 3 Δ_high ≤ −2 could tip pooled
+Δ_high below +3") was identified as the live H6 ↔ H7 boundary; stream
+3's Δ_high_3=+5 was strongly on the H6 side of that boundary.
+
+### What this means for the v0.25 tight h*=8 claim
+
+**Not promoted; not demoted. Locked at "directionally persistent, not
+mechanistically robust."** Under the v0.29 methodological rule and the
+v0.33 pre-committed pooled thresholds:
+
+- The directional signal **does** compound across three independent
+  8-seed streams. Three of three streams agree weakly at the
+  single-stream classifier level.
+- The pooled Δ_low and Δ_high both land at exactly +9 over 24 seeds —
+  well above the H6_pool weak-reproduction threshold (+3) but well
+  below the H5_pool robust threshold (+15).
+- Per-seed strict preference is non-zero but small
+  (`n_strict_favoring_pool = 2/24`).
+- ~58% of seeds (14/24) are byte-identical on b>50 across the three
+  classifier-slice hazards. The productivity channel is mostly
+  hazard-insensitive at this cell, with single-seed swings
+  concentrated in a minority of seeds.
+- The aggregate-level appearance of an "interior optimum at h=8" in
+  the 1..24 pool is residual of opposing single-seed swings (seeds
+  6 / 7 / 8 / 9 / 13 / 14 / 17 / 18 / 19), not a broad shift.
+
+**Forward-reference phrasing** for v0.25 / v0.32 / v0.33 forward-mention
+sites:
+
+> At 8 seeds per stream, tight_gradient productivity in
+> h ∈ {4, 8, 12} at influx=1.0 shows a small interior peak at h=8 that
+> is **directionally persistent, not mechanistically robust**. Three
+> independent seed streams (v0.25 1..8, v0.32 9..16, v0.33 17..24)
+> produce single-stream verdicts of H6, H6, H6; the pooled 24-seed
+> verdict under linearly-scaled thresholds (15/15/3/15) is **H6_pool
+> WEAK** (Δ_low_pool=+9, Δ_high_pool=+9, n_favoring_pool=21/24,
+> n_strict_favoring_pool=2/24, n_hazard_insensitive_pool=14/24).
+> The signal compounds weakly across three streams but does not reach
+> robust-reproduction magnitude. The routing channel (hazard entries)
+> responds reliably to hazard damage; the productivity channel
+> (b>50) responds only at the aggregate margin.
+
+### Calibration phase closed
+
+v0.33 closes the methodological calibration arc. The aggregate-optimum
+audit phase that began with v0.27 (weight axis interior optimum claim)
+and v0.25 (hazard axis interior optimum claim) and ran through
+v0.28 → v0.29 → v0.30 → v0.31 (weight axis: H7_pool FAILURE, demoted)
+and v0.32 → v0.33 (hazard axis: H6_pool WEAK, locked at "directionally
+persistent, not mechanistically robust") is **closed by design**.
+
+**The remaining catalog of small-margin v0.21..v0.27 aggregate optima
+is demoted in this Conclusion** to "not promoted to mechanism without
+a new motivating observation." Future work that re-surfaces any of
+those claims must produce a fresh hypothesis with a fresh-stream
+expectation, not a re-audit of stale aggregate noise.
+
+### v0.34+ candidates
+
+Per the v0.33 pre-reg's "v0.34+ candidates" decision rules (mirrored
+across all four pooled outcomes), v0.34 begins the per-agent / lineage
+/ lifespan / heritability observability arc, starting with a minimum
+viable lens:
+
+- **v0.34 — lineage and life-history telemetry foundation.** Minimum
+  viable lens: parent_id → child_id edges, lifespan, offspring count,
+  cause-of-death. Build a `lineage_replay.py` style post-hoc reducer
+  over existing events.jsonl artifacts (no in-sim instrumentation
+  required for the minimum lens; `AgentBorn` and `AgentDied` events
+  already carry the necessary fields). Pre-reg should commit to a
+  concrete success criterion: by the end of v0.34, re-pose at least
+  one prior aggregate-optimum question in lineage terms (e.g., "is
+  the +9/+9 h=8 signal driven by 1–2 dynasties or distributed across
+  many small lineages?").
+- **v0.35 — heritability lens.** Conditional on v0.34's lineage
+  foundation. Adds inherited-trait and mutation-delta observables.
+  May require introducing per-agent heritable parameters (substrate
+  change, distinct from observability).
+- **HedonismPolicy comparisons.** Deferred until lineage observability
+  matures. Roadmap-visible, not roadmap-deprioritised.
+
+**Do NOT** introduce a finer hazard grid (gated behind H5_pool ROBUST,
+which did not fire — and is deprioritised regardless).
+**Do NOT** sweep seeds 25..32 on this cell. The pooled rule has
+delivered a definitive H6_pool WEAK verdict with the locked phrase;
+further seed streams on the same cell would be confirmation theater.
+**Do NOT** promote the v0.32-quarantined "small hazard helps tight"
+h=0 observation within v0.33's scope. The pooled stream-1 + stream-2
++ stream-3 b>50 evidence (B(h=0)=291 < B(h=4)=312 = B(h=12)) is now
+visible but lives on its own audit trail.
+
+### Implementation summary
+
+- **Library extension (additive only):** `V0_33_TIGHT_H_ARMS = tuple(
+  arm for arm in V0_25_ARMS if arm.label.endswith("-influx-1.0"))` in
+  `experiments/comparison_grid.py`. Element-wise identical to
+  `V0_32_TIGHT_H_ARMS` by construction. Substrate-byte-identity to
+  V0_25_ARMS guarded by H1 / H1b.
+- **No `evaluate_audit` modification.** v0.31's `thresholds` parameter
+  and v0.32's `candidate_label` parameter are reused verbatim. v0.33
+  is purely additive at the script + arm-tuple level.
+- **Sweep:** `scripts/v0.33_sweep.py` mirrors the v0.32 sweep
+  line-for-line with `SEEDS = tuple(range(17, 25))`,
+  `BATCH_ID = "fear-hunger-v0.33-tight_gradient"`,
+  `arms = V0_33_TIGHT_H_ARMS`. 32 runs in **8.6s**.
+- **Audit driver:** `scripts/v0.33_audit.py` — loads three streams
+  via three `DiagnosticConfig` instances against three runs roots
+  (v0.25 / v0.32 / v0.33), reuses the v0.32 `SLOT_TO_LABEL` weight_labels
+  override, merges per-seed dicts, computes single-stream verdicts
+  (default thresholds, `candidate_label="h=8"`) for each stream,
+  computes pooled verdict (`POOLED_THRESHOLDS=AuditThresholds(15, 15,
+  3, 15)`) on the 24-seed union, computes
+  `n_hazard_insensitive_pool` and other descriptive observables.
+  Writes audit.md with explicit "Pooled 24-seed verdict (v0.33
+  HEADLINE)" + "Single-stream diagnostic verdicts" section labels.
+- **Tests:** `tests/test_comparison_grid_v0_33.py` (18 tests — shape /
+  pinning / H1 literal-subset / H1b cross-version arm-object identity
+  to V0_32_TIGHT_H_ARMS / H4 invariants);
+  `tests/test_v0_33_audit.py` (10 tests — pooled threshold pinning,
+  candidate_label="h=8" propagation through pooled H7/H8 labels, H5/H6
+  positive fixtures with h=8 label, priority H8 > H5 with h=8 label,
+  16-seed-scaled hazard-axis pre-committed observation B_16=(204,
+  212, 208), v0.25 stream-1 source-data fixture, 4-slot cross-stream
+  merge, classifier-slice extraction). Suite: **828 → 856** (+28
+  v0.33 tests); all green.
+- **No simulation-mechanics changes; no `core/` / `model.py` /
+  `experiments/fear_hunger_chamber.py` /
+  `experiments/population_dynamics.py` /
+  `policies/gradient_policy.py` / `policies/hedonism_policy.py` /
+  `scripts/v0.28_*.py` / `scripts/v0.29_*.py` / `scripts/v0.30_audit.py`
+  / `scripts/v0.31_*.py` / `scripts/v0.32_*.py` changes.** Source
+  modifications outside `comparison_grid.py` are zero.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                           ok
+  uv run ruff format --check .                  ok
+  uv run pytest                                 856 passed
+  uv run python scripts/core_smoke_test.py      ok
+  uv run python scripts/v0.33_sweep.py          done in 8.6s
+  uv run python scripts/v0.33_audit.py          H6_pool WEAK (locked phrase fires)
+  ```
+
+## Conclusion
+
+v0.33 fires **H6_pool WEAK** on the 24-seed pool of three independent
+8-seed streams (v0.25 1..8, v0.32 9..16, v0.33 17..24) at the v0.25
+tight h*=8 hazard-axis cell. The pre-committed locked phrase is the
+verdict:
+
+> **"Directionally persistent, not mechanistically robust."**
+
+All three streams fire H6 single-stream — a clean directional
+persistence pattern. Pooled Δ_low and Δ_high both land at exactly +9,
+above the H6_pool threshold (+3) but well below the H5_pool robust
+threshold (+15). 14/24 seeds (~58%) are byte-identical on b>50 across
+the {h=4, h=8, h=12} classifier slice; only 2/24 seeds strictly prefer
+h=8 over both classifier-slice neighbours. The aggregate +9/+9
+appearance is residual of single-seed swings concentrated in a
+minority of seeds, with different seeds driving Δ_low and Δ_high.
+
+This outcome contrasts directly with v0.31 on the weight axis, where
+stream 3 collapsed the direction (Δ_high_3 = −2) and the pooled verdict
+was H7_pool FAILURE. On the hazard axis, stream 3 strengthened the
+direction (Δ_high_3 = +5) and the pool fires H6_pool WEAK.
+
+Decision:
+- The v0.25 tight h*=8 interior-hazard claim is **locked** at
+  "directionally persistent, not mechanistically robust." It is not
+  promoted to a mechanism, and it is not demoted to sample-noise-
+  consistent. The locked phrase is the public framing.
+- **The aggregate-optimum audit phase (v0.27..v0.33) is closed by
+  design.** The remaining catalog of small-margin v0.21..v0.27
+  aggregate optima is demoted to "not promoted to mechanism without a
+  new motivating observation."
+- **v0.34 begins the per-agent / lineage / lifespan / heritability
+  observability arc**, starting with a minimum viable lens (parent →
+  child edges, lifespan, offspring count, cause-of-death) over
+  existing events.jsonl artifacts.
