@@ -648,27 +648,33 @@ contributing 0. **Same statistical-debris pattern as v0.30 on the
 weight axis**: aggregate signal carried by 1–2 outlier seeds, balanced
 against 1 reversing seed, with most seeds flat.
 
-### h=0 baseline — "small hazard helps" effect (descriptive)
+### h=0 secondary observation — "small hazard helps tight" does NOT reproduce (quarantined)
 
-The v0.25 doc's "small hazard helps tight" claim (h=0 b50 < h=4 b50 by
-~+13 at influx=1.0 on seeds 1..8) is **largely confirmed on the fresh
-stream** but with a sharply reduced magnitude:
+**This is a separate claim from the h=8 local-interior question and
+must be demoted independently.** The local classifier claim (h=8 vs
+h=4 / h=12) survives as H6 WEAK; the no-hazard baseline contrast
+(h=0 vs h=4) does not.
+
+The v0.25 doc reported "small hazard helps tight": h=0 b50 < h=4 b50 by
+~+13 at influx=1.0 on seeds 1..8. The fresh stream collapses the
+effect to zero:
 
 | stream       | seeds | B(h=0) | B(h=4) | h=4 advantage |
 |--------------|------:|-------:|-------:|--------------:|
 | v0.25 source | 1..8  | 100    | 113    | +13           |
 | v0.32 fresh  | 9..16 |  91    |  91    | **+0**        |
 
-On v0.32, h=0 and h=4 *tie* in aggregate b>50 — the "small hazard
-helps" effect collapses to zero on this fresh seed stream. The h=0
-baseline is also dramatically more chaotic: 245 total births / 205
-starvation deaths at h=0 vs 169 / 85 at h=4 (per-arm 8-seed totals).
-**Hazard absence does not help productivity on this stream** —
-suggesting the h=0 advantage in v0.25 may itself be sample-noise-
-consistent (a single-stream observation). This is a tertiary
-observation; v0.32 audits the interior-optimum claim, not the small-
-hazard-helps claim. Forward references to the small-hazard-helps
-finding should note v0.32's negative replication.
+On v0.32, h=0 and h=4 *tie* in aggregate b>50. The h=0 baseline is
+also dramatically more chaotic on the fresh stream: 245 total births
+/ 205 starvation deaths at h=0 vs 169 / 85 at h=4 (per-arm 8-seed
+totals). **Quarantine ruling:** the "small hazard helps tight"
+finding from v0.25 does NOT ride along with the h*=8 interior-optimum
+finding. The latter is the v0.32 / v0.33 audit target; the former is
+its own independent claim that this fresh-stream observation
+demotes to "single-stream-only at n=8". Forward references to v0.25's
+small-hazard-helps claim should treat it as quarantined-pending-its-
+own-fresh-stream-replication; v0.33+ should NOT bundle it with the
+h=8 local-interior audit.
 
 ### Routing-channel — flat-then-drop, consistent with v0.25 / v0.30
 
@@ -804,6 +810,11 @@ non-replication.
   ```
 
 ## Conclusion
+
+> **v0.32 gives fresh-stream H6 reproduction of the v0.25 tight h*=8
+> local interior-hazard signal, but the result remains directionally
+> persistent rather than mechanistically robust. Mechanism declaration
+> remains locked pending v0.33 pooled calibration.**
 
 v0.32 reports a fresh-stream H6 WEAK reproduction of the v0.25 tight
 h*=8 small-margin interior-hazard optimum.
