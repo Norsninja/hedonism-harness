@@ -27,13 +27,15 @@ _LR = Path(__file__).parent / "lineage_replay.py"
 _LS = Path(__file__).parent / "lineage_survival_replay.py"
 
 _lr_spec = importlib.util.spec_from_file_location("lineage_replay", _LR)
-assert _lr_spec is not None and _lr_spec.loader is not None
+assert _lr_spec is not None
+assert _lr_spec.loader is not None
 lr = importlib.util.module_from_spec(_lr_spec)
 sys.modules["lineage_replay"] = lr
 _lr_spec.loader.exec_module(lr)
 
 _ls_spec = importlib.util.spec_from_file_location("lineage_survival_replay", _LS)
-assert _ls_spec is not None and _ls_spec.loader is not None
+assert _ls_spec is not None
+assert _ls_spec.loader is not None
 ls = importlib.util.module_from_spec(_ls_spec)
 sys.modules["lineage_survival_replay"] = ls
 _ls_spec.loader.exec_module(ls)
@@ -53,10 +55,7 @@ def leader_lineage_at_tick(agent_rows: list, tick: int) -> int:
 
 
 def winner_ever_leads(agent_rows: list, winner_id: int, n_ticks: int) -> bool:
-    for t in range(n_ticks):
-        if leader_lineage_at_tick(agent_rows, t) == winner_id:
-            return True
-    return False
+    return any(leader_lineage_at_tick(agent_rows, t) == winner_id for t in range(n_ticks))
 
 
 def main() -> None:
@@ -65,9 +64,7 @@ def main() -> None:
     by_hazard_never: dict[int, int] = {h: 0 for h in lr.HAZARDS}
     by_hazard_no_winner: dict[int, int] = {h: 0 for h in lr.HAZARDS}
     for source_version, arm_label, hazard, seed, run_dir in runs:
-        agent_rows, n_ticks = ls.load_run_agents(
-            source_version, arm_label, hazard, seed, run_dir
-        )
+        agent_rows, n_ticks = ls.load_run_agents(source_version, arm_label, hazard, seed, run_dir)
         winner_id, _ = ls.compute_eventual_top_lineage(agent_rows)
         if winner_id is None:
             by_hazard_no_winner[hazard] += 1

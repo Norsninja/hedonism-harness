@@ -34,13 +34,15 @@ _LR = Path(__file__).parent / "lineage_replay.py"
 _LS = Path(__file__).parent / "lineage_survival_replay.py"
 
 _lr_spec = importlib.util.spec_from_file_location("lineage_replay", _LR)
-assert _lr_spec is not None and _lr_spec.loader is not None
+assert _lr_spec is not None
+assert _lr_spec.loader is not None
 lr = importlib.util.module_from_spec(_lr_spec)
 sys.modules["lineage_replay"] = lr
 _lr_spec.loader.exec_module(lr)
 
 _ls_spec = importlib.util.spec_from_file_location("lineage_survival_replay", _LS)
-assert _ls_spec is not None and _ls_spec.loader is not None
+assert _ls_spec is not None
+assert _ls_spec.loader is not None
 ls = importlib.util.module_from_spec(_ls_spec)
 sys.modules["lineage_survival_replay"] = ls
 _ls_spec.loader.exec_module(ls)
@@ -109,9 +111,7 @@ def main() -> None:
     for hazard in HAZARDS_INVENTORY:
         arm_label = lr.ARM_LABEL_FMT.format(hazard)
         run_dir = RUNS_ROOT / arm_label / f"seed-{SEED}"
-        agent_rows, n_ticks = ls.load_run_agents(
-            SOURCE_VERSION, arm_label, hazard, SEED, run_dir
-        )
+        agent_rows, n_ticks = ls.load_run_agents(SOURCE_VERSION, arm_label, hazard, SEED, run_dir)
         winner_id, _ = ls.compute_eventual_top_lineage(agent_rows)
         if winner_id is None:
             print(f"  hazard={hazard}: total_b50 == 0; winner is None — SKIP")
@@ -124,7 +124,7 @@ def main() -> None:
             f"{SOURCE_VERSION:>6} {arm_label:>30} {hazard:>3d} {SEED:>4d} "
             f"{n_ticks:>7d} {winner_id:>6d} "
             f"{o1:>4d} {o2:>3d} {o3_r1:>5d} {o3_r2:>5d} "
-            f"{str(never_leads):>11} {str(rank2_zero):>10}",
+            f"{never_leads!s:>11} {rank2_zero!s:>10}",
             flush=True,
         )
 
