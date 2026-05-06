@@ -117,10 +117,13 @@ v0.36 framing but does not reroute it:
   heritability lens asks whether *which* founders survive at high
   hazard correlates with a heritable trait (e.g., hazard avoidance
   proclivity).
-- **If EXPANSION-SUPPORTED fires.** Headline: hazard concentrates
-  late-window dominance by amplifying the early leader. v0.36
-  heritability lens asks whether the eventual winner's lineage carries
-  a heritable trait that explains the post-50 expansion advantage.
+- **If EXPANSION-SUPPORTED fires (= EARLY-LEADER CONTINUITY).**
+  Headline: higher hazard increases the probability that the pre-50
+  leader remains the late-window dominant lineage. (Note: this is
+  early-leader continuity, NOT a measured post-50 expansion-rate
+  differential.) v0.36 heritability lens asks whether the eventual
+  winner's lineage carries a heritable trait associated with carrying
+  an early lead through to the post-50 window.
 - **If MIXED-OR-UNRESOLVED fires.** No directional headline. v0.36
   heritability lens proceeds as the canonical follow-up regardless,
   but with framing "lineage observability identified concentration but
@@ -432,7 +435,7 @@ expansion rate differential.
 | verdict | indicator state | what it tells us | v0.36+ candidate |
 |---|---|---|---|
 | H5 PRUNING-SUPPORTED | pruning passes; expansion fails | hazard kills founder lines pre-50 (some lineages absent from late-window competition entirely); winner emerges from surviving pool | v0.36 heritability: do *which* founders survive correlate with a heritable trait? |
-| H6 EXPANSION-SUPPORTED | expansion passes; pruning fails | all/most founders persist past tick 50; one lineage out-reproduces others post-50; pre-50 leader predicts eventual winner | v0.36 heritability: does the winner's lineage carry a heritable trait explaining post-50 expansion? |
+| H6 EXPANSION-SUPPORTED (= EARLY-LEADER CONTINUITY) | expansion passes; pruning fails | all/most founders persist past tick 50; the pre-50 leader becomes the post-50 winner more often as hazard rises (early-leader continuity is *consistent with* a post-50 expansion-rate differential but does NOT directly measure one) | v0.36 heritability: does the winner's lineage carry a heritable trait associated with carrying an early lead through? |
 | H7 MIXED (both pass) | pruning + expansion both pass | severe pruning AND survivors decided early; mechanisms compound | v0.36 heritability proceeds; framing "concentration is multi-stage" |
 | H7 UNRESOLVED (neither passes) | pruning + expansion both fail | dominance-rises-with-hazard at the aggregate level is not cleanly explained by either timing-locus story | v0.36 heritability proceeds with neutral framing |
 
