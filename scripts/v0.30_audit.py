@@ -118,6 +118,7 @@ def evaluate_audit(
     seeds: Sequence[int],
     *,
     thresholds: AuditThresholds = DEFAULT_THRESHOLDS,
+    candidate_label: str = "w=0.75",
 ) -> AuditOutcome:
     """Apply the 4-tier robustness partition to per-seed b50.
 
@@ -125,6 +126,12 @@ def evaluate_audit(
     weights are fixed at {0.5, 0.75, 1.0}. ``thresholds`` defaults to
     the v0.30 8-seed rule; v0.31 calls with the pooled 24-seed
     thresholds.
+
+    ``candidate_label`` is interpolated into the human-readable H7 / H8
+    labels. Default ``"w=0.75"`` preserves v0.30 / v0.31 audit-report
+    output byte-identical. v0.32 passes ``"h=8"`` because the slot
+    keys (0.50, 0.75, 1.00) are positional placeholders for hazards
+    {4, 8, 12} on the hazard-axis audit, not literal weight values.
     """
     b_low = sum(b50_at[(s, 0.50)] for s in seeds)
     b_med = sum(b50_at[(s, 0.75)] for s in seeds)
@@ -156,7 +163,7 @@ def evaluate_audit(
         return AuditOutcome(
             hypothesis="H8",
             label=(
-                f"REVERSAL — a neighbour beats w=0.75 by "
+                f"REVERSAL — a neighbour beats {candidate_label} by "
                 f">= {thresholds.h8_neighbor_lead_min} births"
             ),
             summary=summary,
@@ -207,8 +214,8 @@ def evaluate_audit(
     return AuditOutcome(
         hypothesis="H7",
         label=(
-            "FAILURE / SAMPLE NOISE — w=0.75 does not clear the weak "
-            "two-neighbour threshold and no reversal threshold fires"
+            f"FAILURE / SAMPLE NOISE — {candidate_label} does not clear "
+            f"the weak two-neighbour threshold and no reversal threshold fires"
         ),
         summary=summary,
         b_low=b_low,

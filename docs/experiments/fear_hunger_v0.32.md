@@ -546,5 +546,282 @@ from 805 to ~825 (+~20).
 
 ## Results
 
-*(Pending sweep + audit execution. To be appended once
-`scripts/v0.32_audit.py` produces a verdict.)*
+**Status:** executed 2026-05-06. 32 fresh runs on tight_gradient × seeds
+9..16 × `V0_32_TIGHT_H_ARMS` written to
+`runs/fear-hunger-v0.32-tight_gradient/`. Audit driver
+(`scripts/v0.32_audit.py`) verified the H1c semantic determinism anchor
+(passed) and applied the v0.30 4-tier classifier with default 8-seed
+thresholds and `candidate_label="h=8"` to the {h=4, h=8, h=12}
+classifier slice. Full per-seed report:
+`runs/fear-hunger-v0.32-tight_gradient/audit.md`.
+
+### Headline
+
+**Single-stream verdict: H6 — WEAK REPRODUCTION fires** on tight_gradient
+× influx=1.0 × h ∈ {4, 8, 12}, seeds 9..16:
+
+| hazard | B(h) = Σ b>50 |
+|-------:|--------------:|
+| 0  | 91 *(descriptive baseline)* |
+| 4  | 91 |
+| 8  | **96** |
+| 12 | 94 |
+
+- Δ_low  = B(h=8) − B(h=4)  = **+5**  (= H5 lower-side threshold).
+- Δ_high = B(h=8) − B(h=12) = **+2**  (sub-threshold for H5; meets H6 ≥1).
+- Neighbour lead = max(91, 94) − 96 = −2 (no neighbour leads → H8 fails).
+- `n_favoring`        = **7/8**  (ties allowed).
+- `n_strict_favoring` = **0/8**  (descriptive only).
+- `n_hazard_insensitive` = **4/8**  (half the seeds byte-identical
+  across {h=4, h=8, h=12}; below the 6/8 candidate-finding bar).
+
+The v0.25 small-margin tight interior-hazard optimum reproduces
+directionally on the fresh stream, but the high-side margin (Δ_high=+2)
+falls short of the H5 ROBUST ≥5 threshold. **Per the pre-committed
+decision rule, v0.32 H6 → v0.33 third-stream-style calibration on seeds
+17..24 with a pre-committed pooled 24-seed rule (linearly-scaled
+thresholds 15/15/3/15, mirrors the v0.30→v0.31 trajectory on the weight
+axis).** Mechanism declaration remains locked.
+
+### H1c semantic determinism anchor — PASSED
+
+`B(h=8, seeds 9..16) = 96`, exactly matching v0.30 stream 2's
+explicit-w=1.0 column. **V0_25_ARMS substrate (`hazard_avoidance_weight
+= None`) and the v0.27+ explicit-w=1.0 path are observationally
+equivalent at the audit cell.** The v0.32 audit's substrate-byte-
+identity-by-construction to V0_25_ARMS is therefore not just literal-
+slice identity but also semantic equivalence to the v0.27+ wrapper
+path. Future hazard-axis audits can reuse this equivalence with
+confidence.
+
+### Cross-stream agreement: both streams fire H6 under the same partition
+
+| stream       | seeds | B(h=4) | B(h=8) | B(h=12) | Δ_low | Δ_high | n_fav | n_strict | verdict |
+|--------------|------:|-------:|-------:|--------:|------:|-------:|------:|---------:|---|
+| v0.25 source | 1..8  | 113    | 116    | 114     | +3    | +2     | —     | —        | H6 WEAK |
+| v0.32 fresh  | 9..16 |  91    |  96    |  94     | +5    | +2     | 7/8   | 0/8      | **H6 WEAK** |
+
+Both streams place h=8 at the maximum; both have Δ_low in the +3..+5
+range and Δ_high at exactly +2; **both fire H6 WEAK under the same
+partition**. The hazard-axis trajectory at this cell (single-stream
+audits 1..8 → 9..16) now mirrors the weight-axis trajectory at the
+parallel cell (v0.27 1..8 → v0.30 9..16): two streams, both H6, on a
+weak directional signal that does not meet the ROBUST bar.
+
+### The per-seed structure echoes v0.30 — aggregate signal is residual of single-seed swings
+
+The descriptive `n_strict_favoring = 0/8` exposes what the aggregate
+B(h) hides. **Not a single seed in the fresh stream prefers h=8
+strictly over both neighbours.** Per-seed b>50 (classifier slice
+{h=4, h=8, h=12}; h=0 baseline shown for context):
+
+| seed | h=0 | h=4 | h=8 | h=12 | Δ_low(seed) | Δ_high(seed) | hazard_insensitive |
+|-----:|----:|----:|----:|-----:|------------:|-------------:|:------------------:|
+| 9  | 15 | 15 |  9 | 11 | **−6**  | **−2**  | no  |
+| 10 | 12 | 14 | 14 | 13 |  +0     |  +1     | no  |
+| 11 |  7 | 11 | 11 | 11 |  +0     |  +0     | yes |
+| 12 | 16 | 11 | 11 | 11 |  +0     |  +0     | yes |
+| 13 | 15 |  8 | 19 | 19 | **+11** |  +0     | no  |
+| 14 |  8 | 14 | 14 | 11 |  +0     |  +3     | no  |
+| 15 |  8 |  8 |  8 |  8 |  +0     |  +0     | yes |
+| 16 | 10 | 10 | 10 | 10 |  +0     |  +0     | yes |
+
+Three observations:
+
+1. **Half the seeds (11, 12, 15, 16) are byte-identical on b>50 across
+   {h=4, h=8, h=12}.** On these 4/8 seeds the hazard level has *no*
+   effect on late-window productivity in this range. Below the 6/8
+   pre-committed candidate-finding bar but still half the sample.
+2. **Seed 13 carries the entire +11 Δ_low contribution** (8/19/19) —
+   *and* ties on Δ_high (h=8 = h=12 = 19). Seed 13 alone explains how
+   Δ_low cleared the H5 ≥5 threshold; without it, Δ_low_aggregate
+   would be 0 − 6 = −6 (driven by seed 9's reversal).
+3. **Seed 9 is a single-seed reversal** (15/9/11): on this seed h=8
+   actively loses to *both* neighbours by 6 / 2. Single-seed H8.
+   Without seed 9 the aggregate Δ_low would be even larger (+11) and
+   Δ_high would be +4.
+
+The aggregate Δ_low = +5 is **the residual of seed 13 (+11) and seed 9
+(−6)**, with the other 6 seeds contributing 0. Δ_high = +2 is the
+residual of seed 14 (+3) + seed 10 (+1) − seed 9 (−2), other 5 seeds
+contributing 0. **Same statistical-debris pattern as v0.30 on the
+weight axis**: aggregate signal carried by 1–2 outlier seeds, balanced
+against 1 reversing seed, with most seeds flat.
+
+### h=0 baseline — "small hazard helps" effect (descriptive)
+
+The v0.25 doc's "small hazard helps tight" claim (h=0 b50 < h=4 b50 by
+~+13 at influx=1.0 on seeds 1..8) is **largely confirmed on the fresh
+stream** but with a sharply reduced magnitude:
+
+| stream       | seeds | B(h=0) | B(h=4) | h=4 advantage |
+|--------------|------:|-------:|-------:|--------------:|
+| v0.25 source | 1..8  | 100    | 113    | +13           |
+| v0.32 fresh  | 9..16 |  91    |  91    | **+0**        |
+
+On v0.32, h=0 and h=4 *tie* in aggregate b>50 — the "small hazard
+helps" effect collapses to zero on this fresh seed stream. The h=0
+baseline is also dramatically more chaotic: 245 total births / 205
+starvation deaths at h=0 vs 169 / 85 at h=4 (per-arm 8-seed totals).
+**Hazard absence does not help productivity on this stream** —
+suggesting the h=0 advantage in v0.25 may itself be sample-noise-
+consistent (a single-stream observation). This is a tertiary
+observation; v0.32 audits the interior-optimum claim, not the small-
+hazard-helps claim. Forward references to the small-hazard-helps
+finding should note v0.32's negative replication.
+
+### Routing-channel — flat-then-drop, consistent with v0.25 / v0.30
+
+| hazard | total_births | b>50 | total_food | hazard_entries | starvation | injury |
+|-------:|-------------:|-----:|-----------:|---------------:|-----------:|-------:|
+| 0  | 245 | 91 | 673 | 40 | 205 | 0 |
+| 4  | 169 | 91 | 733 |  40 |  85 | 0 |
+| 8  | 172 | 96 | 731 |  36 |  85 | 0 |
+| 12 | 172 | 94 | 731 |  30 |  87 | 0 |
+
+Hazard entries: 40 → 40 → 36 → 30 (monotone non-increasing in hazard
+across {0, 4, 8, 12}; same shape as v0.25 / v0.30). Injury deaths = 0
+across all four hazards — tight geometry protects against single-visit
+lethality regardless of hazard level, holding through the fresh
+stream. **The routing channel responds reliably to hazard level at
+the aggregate; the productivity channel does not.**
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `V0_32_TIGHT_H_ARMS` is a literal subset of `V0_25_ARMS` (instance identity) | **HOLDS.** `test_v0_32_tight_h_arms_are_literal_v0_25_subset`. |
+| H1c | Semantic determinism anchor: B(h=8, seeds 9..16) = 96 | **HOLDS.** Computed value 96 == target 96 ✓; substrate equivalence between V0_25_ARMS (w=None) and V0_27+ (w=1.0) confirmed at this cell. |
+| H2 | Sweep produces 32 events.jsonl files (artifact pre-flight) | **HOLDS.** `assert_artifacts_present` passes. |
+| H3 | v0.27..v0.31 prior tests pass after v0.32 additions | **HOLDS.** Suite 805 → 828 (+23 v0.32 tests); all green. |
+| H4 | Pre-v0.32 arm tuples unchanged | **HOLDS.** Pinned in `tests/test_comparison_grid_v0_32.py`. |
+| H4b | `evaluate_audit` `candidate_label` default-preserving refactor | **HOLDS.** `tests/test_v0_30_audit.py` 12/12 + `tests/test_v0_31_audit.py` 19/19 green; `test_evaluate_audit_default_candidate_label_matches_pre_refactor` anchors equivalence. |
+| H5 | ROBUST: Δ_low ≥ 5 AND Δ_high ≥ 5 AND n_favoring ≥ 5 | **FAILS** on Δ_high = +2 (need ≥ 5). |
+| H6 | WEAK: Δ_low ≥ 1 AND Δ_high ≥ 1, NOT H5 | **FIRES.** Δ_low=+5, Δ_high=+2, both ≥ 1; H5 fails on Δ_high. |
+| H7 | FAILURE: none of H5 / H6 / H8 | N/A — H6 fires. |
+| H8 | REVERSAL: max(B(h=4), B(h=12)) − B(h=8) ≥ 5 | **FAILS.** max(91, 94) − 96 = −2 (no neighbour leads). |
+
+Pre-committed observation (v0.32 pre-reg): the v0.25 (1..8) source data
+itself fires H6 WEAK under the same classifier (Δ_low=+3 ≥1 ✓;
+Δ_high=+2 ≥1 ✓; H5 fails on Δ_low). **The v0.32 fresh stream
+reproduces H6 WEAK** — direction-consistent with the source, magnitude
+slightly larger on Δ_low (+5 vs +3) and identical on Δ_high (+2 vs
++2).
+
+### What this means for the v0.25 tight h*=8 claim
+
+**Not yet demoted, not yet confirmed — calibration phase.** Per the
+pre-committed decision rule:
+
+> H6 WEAK fires on seeds 9..16 → v0.33 should be a third-stream-style
+> calibration on seeds 17..24 with a pre-committed pooled 24-seed
+> rule.
+
+This is the exact v0.30 → v0.31 trajectory on the weight axis,
+reproduced on the hazard axis. The methodological discipline:
+
+- Two streams agree on direction (h=8 is the maximum at this cell).
+- Neither stream meets the H5 ROBUST bar (both Δ_high = +2, sub-
+  threshold).
+- Per-seed strict preference is absent on the fresh stream
+  (n_strict_favoring = 0/8); same load-bearing observable as v0.30.
+- Half the seeds (4/8) are hazard-insensitive in the {h=4, h=8, h=12}
+  range; the aggregate signal is carried by 1–2 outlier seeds
+  balanced against 1 reversing seed.
+
+### v0.33 candidates (per pre-reg decision rules)
+
+The v0.32 pre-reg's H6 decision rule names the canonical next step:
+
+> Third stream on the same cell — tight_gradient × influx=1.0 × h ∈
+> {0, 4, 8, 12} × seeds 17..24 (32 runs). Apply the pre-committed
+> pooled 24-seed rule (linearly-scaled thresholds 15/15/3/15) to the
+> {h=4, h=8, h=12} pool of streams 1..8 ∪ 9..16 ∪ 17..24. Single-
+> stream verdict on stream 3 is diagnostic only; pooled verdict is
+> the v0.33 headline.
+
+The v0.33 implementation is essentially structural — copy the
+v0.31 audit driver pattern (three-stream load via `v028.load_all`,
+merge to 24-seed dict, single-stream diagnostic + pooled headline)
+substituting hazard slots for weight slots. The pre-reg's H6_pool
+phrase ("Directionally persistent, not mechanistically robust.")
+is reusable verbatim if H6_pool fires on the hazard axis.
+
+**Do NOT** introduce a finer hazard grid (h ∈ {2, 6, 10, 14}) — the
+H5 ROBUST condition is the gate for that, and it didn't fire.
+
+**Do NOT** sweep influx ∈ {0.5, 1.5} on this cell. Cross-influx
+support remains gated to v0.34+ if the pooled hazard-axis verdict
+warrants it.
+
+The pre-committed observation that v0.25 also reported the h=0 baseline
+"small hazard helps" effect (h=4 advantage of +13 over h=0) does NOT
+reproduce on the v0.32 fresh stream (h=0 vs h=4 ties at 91/91).
+Forward references to that secondary v0.25 finding should note the
+non-replication.
+
+### Implementation summary
+
+- **Library extension (additive only):** `V0_32_TIGHT_H_ARMS = tuple(
+  arm for arm in V0_25_ARMS if arm.label.endswith("-influx-1.0"))` in
+  `experiments/comparison_grid.py`. Substrate-byte-identity to
+  V0_25_ARMS by-construction; semantic equivalence to V0_27+ explicit
+  w=1.0 confirmed by H1c.
+- **Additive default-preserving refactor:** `scripts/v0.30_audit.py`
+  `evaluate_audit(..., *, candidate_label="w=0.75")`. Default
+  preserves byte-identity of v0.30 / v0.31 audit-report output. v0.32
+  passes `candidate_label="h=8"`. v0.30 12 fixtures + v0.31 19
+  fixtures pass unchanged.
+- **Sweep:** `scripts/v0.32_sweep.py` mirrors the v0.31 sweep with
+  `arms = V0_32_TIGHT_H_ARMS`. 32 runs in 9.2s.
+- **Audit driver:** `scripts/v0.32_audit.py` — three-step audit (H1c
+  semantic anchor, classifier slice verdict on {h=4, h=8, h=12},
+  4-arm descriptive report). The v0.28 `weight_labels` map is
+  overridden to point at the four `transfer-1500-hzd{0,4,8,12}-
+  influx-1.0` arm directories; the (0.50, 0.75, 1.00) classifier
+  slot keys are positional placeholders for hazards. ~310 LOC.
+- **Tests:** `tests/test_comparison_grid_v0_32.py` (15 tests —
+  shape / pinning / H1 / H4 invariants); `tests/test_v0_32_audit.py`
+  (8 tests — default-preserving refactor anchor, candidate_label
+  parameterisation, hazard slot mapping, v0.25 source-data fixture
+  firing H6 WEAK). Suite: **805 → 828** (+23 v0.32 tests); all green.
+- **No simulation-mechanics changes; no `core/` / `model.py` /
+  `experiments/fear_hunger_chamber.py` /
+  `experiments/population_dynamics.py` /
+  `policies/gradient_policy.py` / `policies/hedonism_policy.py` /
+  `scripts/v0.28_*.py` / `scripts/v0.29_*.py` / `scripts/v0.31_*.py`
+  changes.** Source modifications outside `comparison_grid.py` are
+  limited to the additive `candidate_label` refactor of
+  `scripts/v0.30_audit.py:evaluate_audit`.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                           ok
+  uv run ruff format --check .                  ok
+  uv run pytest                                 828 passed
+  uv run python scripts/core_smoke_test.py      ok
+  uv run python scripts/v0.32_sweep.py          done in 9.2s
+  uv run python scripts/v0.32_audit.py          H6 WEAK
+  ```
+
+## Conclusion
+
+v0.32 reports a fresh-stream H6 WEAK reproduction of the v0.25 tight
+h*=8 small-margin interior-hazard optimum.
+
+The cell B values on seeds 9..16 are 91 / 91 / **96** / 94 across
+hazards {0, 4, 8, 12}. On the classifier slice {h=4, h=8, h=12},
+Δ_low=+5 just meets the H5 lower-side threshold but Δ_high=+2 falls
+below the ≥5 robust bar. The single-stream verdict is H6 WEAK —
+direction-consistent with v0.25, magnitude small. n_strict_favoring=0/8
+(no seed strictly prefers h=8); n_hazard_insensitive=4/8.
+
+The H1c semantic determinism anchor (B(h=8, seeds 9..16) = 96) holds,
+confirming behavioural equivalence between V0_25_ARMS substrate
+(w=None) and V0_27+ explicit-w=1.0 at this cell.
+
+Decision: **v0.33 is the third-stream-style calibration** on seeds
+17..24 with a pre-committed pooled 24-seed rule (linearly-scaled
+thresholds 15/15/3/15, mirrors v0.31). Mechanism declaration remains
+locked. The v0.30 → v0.31 weight-axis trajectory now plays out on the
+hazard axis: two streams agree weakly; the third determines whether
+the direction compounds across 24 seeds or collapses.
