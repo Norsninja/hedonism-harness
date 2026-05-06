@@ -1,6 +1,6 @@
 # v0.29 — food_ladder w=0.75 dip reproducibility on a fresh seed stream
 
-**Status:** pre-registration draft; not yet executed.
+**Status:** executed 2026-05-06; H9 fired — no strict-valley reproduction on seeds 9..16.
 **Date:** 2026-05-06
 **Branch:** `claude/v0.29-w075-reproducibility-fresh-seeds`
 **Predecessors:** v0.21 (chamber-asymmetric influx frontier at hzd=8),
@@ -439,7 +439,7 @@ the per-seed report to `runs/fear-hunger-v0.29-food_ladder/diagnostic.md`.
 All determinism / invariant hypotheses hold (H1–H8b: substrate
 identity to V0_27_ARMS pinned by the literal-subset construction;
 prior arms unchanged; v0.28 H9 anchor against v0.27 artifacts still
-green; artifact pre-flight passes; suite 716 → 748 → still green).
+green; artifact pre-flight passes; suite 737 → 748 (+11 v0.29 tests); all green).
 
 **Headline:** **H9 fires — Outcome α (sample artefact, no dip).** The
 (1..8) dip does not reproduce on seeds 9..16: aggregate b>50 at
