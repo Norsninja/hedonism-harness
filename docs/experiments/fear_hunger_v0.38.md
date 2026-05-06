@@ -702,8 +702,312 @@ no test files.)
 
 ## Results
 
-**Status:** not yet executed. Reducer
-(`scripts/leader_advantage_replay.py`) will run over the same 96-run
+**Status:** executed 2026-05-06. Reducer
+([[scripts/leader_advantage_replay.py]]) ran over the same 96-run
 corpus v0.34 / v0.35 / v0.37 reduced. Outputs under
-`runs/lineage-v0.38/` (gitignored). Results section appended after
-reducer execution, with the locked verdict phrase fired verbatim.
+`runs/lineage-v0.38/` (gitignored). Re-anchor (H2a + H2b) against
+v0.34's `run_summary.csv:top_lineage_id` AND v0.35's
+`pre_post_dominance.csv:(leader_lineage_id_at_tick_50,
+eventual_top_lineage_id)` passed for all 96 runs (no mismatch). All
+invariants (H1, H1b, H2c, H2d, H3, H4) held.
+
+### Headline
+
+**Verdict: H5 — LEADER-ADVANTAGE-AMPLIFIED.** Firing direction:
+**O1_up** (`mean_O1` strictly monotone non-decreasing across hazards
+with spread well above the locked 1.5 threshold).
+
+> **Locked H5 phrase:** "Tick-50 leadership's post-50 birth advantage
+> rises with hazard on the v0.34 corpus; v0.37's
+> stabler-early-leadership signal cashes out as a hazard-amplified
+> post-50 reproductive advantage. Correlational; not a mechanism
+> declaration."
+
+### Per-hazard summary
+
+| hazard | n_runs | n_wad_true | n_wad_false | n_no_winner | mean_O1 | mean_O1_wT | mean_O1_wF | mean_overt_wF |
+|-------:|------:|-----------:|------------:|------------:|--------:|-----------:|-----------:|--------------:|
+| 0      | 24    | 11         | 13          | 0           | **3.948** | 8.182    | 0.365      | 4.000         |
+| 4      | 24    | 17         | 7           | 0           | 7.375   | 10.221     | 0.464      | 4.143         |
+| 8      | 24    | 18         | 6           | 0           | 8.531   | 11.097     | 0.833      | 3.667         |
+| 12     | 24    | 19         | 5           | 0           | **8.990** | 11.079   | 1.050      | 3.400         |
+
+`mean_O1` is the all-runs (24 per hazard) mean of `leader_advantage`
+= `b50(tick50_leader) - mean(b50(non_leaders))`. `mean_O1_wT` and
+`mean_O1_wF` are the same observable computed within the
+wad=True / wad=False subsets respectively. `mean_overt_wF` is the
+mean `winner_overtake = b50(eventual_winner) - b50(tick50_leader)`
+within the wad=False subset; meaningful only when eventual winner ≠
+tick-50 leader.
+
+### Indicator (O1 driver)
+
+| condition | result |
+|---|---|
+| monotone non-decreasing across hazards | **True** (3.948 ≤ 7.375 ≤ 8.531 ≤ 8.990) |
+| monotone non-increasing across hazards | False |
+| spread `mean_O1(12) - mean_O1(0)` | **+5.042** |
+| spread threshold | 1.5 |
+| `O1_passes_up` | **True** |
+| `O1_passes_down` | False |
+| verdict_direction | **up** |
+
+### Internal consistency check (not a verdict input)
+
+`n_wad_true` per hazard matches v0.35's
+`winner_already_dominant_at_tick_50_rate × 24` byte-identical:
+- h=0: 11/24 = 0.458 (v0.35: 0.458) ✓
+- h=4: 17/24 = 0.708 (v0.35: 0.708) ✓
+- h=8: 18/24 = 0.750 (v0.35: 0.750) ✓
+- h=12: 19/24 = 0.792 (v0.35: 0.792) ✓
+
+This is a structural sanity check, not a separate anchor — both
+v0.35 and v0.38 derive `wad` from the same v0.34 helpers
+(`compute_leader_at_tick_50`, `compute_eventual_top_lineage`). The
+match confirms that v0.38's per-run wad classification is
+byte-identical to v0.35's.
+
+### Why H5 fires (not H6 or H7)
+
+For H7 LEADER-ADVANTAGE-INVERTED to fire, `mean_O1` would need to
+decline monotonically with hazard with reverse-spread ≥ 1.5. The
+observed sequence (3.948 → 7.375 → 8.531 → 8.990) is strictly
+non-decreasing with positive spread of +5.042; H7 is excluded.
+
+For H6 LEADER-ADVANTAGE-FLAT to fire, neither directional rule may
+fire. `O1_passes_up` fires (monotone non-decreasing AND spread
++5.042 ≥ 1.5); H6 is excluded.
+
+H5 fires unambiguously by the locked rule.
+
+### Decomposition of the verdict-firing signal (descriptive)
+
+The pooled `mean_O1` rise from 3.948 (h=0) to 8.990 (h=12) is a
+spread of +5.042, ~3.4× the locked threshold. Two structural
+contributors decompose this:
+
+1. **Within-bucket effect (wad=True):** `mean_O1_wT` rises 8.182 →
+   10.221 → 11.097 → 11.079 (spread +2.897 from h=0 to h=12;
+   monotone for the first three steps, slight noise at h=12). Even
+   when leader IS winner, the post-50 advantage grows with hazard.
+2. **Bucket-shift effect (wad_rate):** the fraction of runs in the
+   `wad=True` bucket rises 11/24 → 17/24 → 18/24 → 19/24 with
+   hazard. Since `mean_O1_wT >> mean_O1_wF` (~10 vs ~0.7), more runs
+   shifting into the high-advantage bucket as hazard rises pushes
+   the pooled mean up.
+3. **Within-bucket effect (wad=False):** `mean_O1_wF` rises 0.365
+   → 0.464 → 0.833 → 1.050 (spread +0.685; monotone). Even when
+   leader is NOT eventual winner, the leader's small advantage over
+   non-leaders grows modestly with hazard.
+
+A non-pre-committed counterfactual: holding the wad-rate fixed at
+the h=0 value (11/24) for all hazards, the projected `mean_O1(12)`
+would be `(11/24) × 11.079 + (13/24) × 1.050 = 5.646`. The implied
+"within-bucket-only" spread would be `5.646 − 3.948 = +1.698`,
+which still clears the locked 1.5 bar. The H5 firing is **not**
+purely an artifact of wad-rate-shift; the within-bucket advantage
+also rises. (Decomposition is descriptive only and does not change
+the locked verdict.)
+
+### Why the H5 reading is timing-locus level only (locked caveat)
+
+- **Correlational, not mechanistic.** v0.38 identifies that
+  tick-50 leadership and post-50 reproductive advantage are
+  positively correlated and that the correlation strengthens with
+  hazard. It does NOT declare that hazard *causes* leaders to
+  reproduce more or that leadership *causes* reproductive
+  advantage. Both observables are measured on the same
+  end-of-window snapshot (b50 = post-tick-50 birth count) reduced
+  from the same 96-run corpus.
+- **No fresh-stream calibration.** Promotion to a robust mechanism
+  requires fresh-stream replay (analogous to v0.30..v0.33 for the
+  hazard-axis aggregate finding). v0.38 closes this single
+  question on the v0.34 corpus only.
+- **Compound interpretation across v0.34 / v0.35 / v0.36 / v0.37 /
+  v0.38** (cautious, locked):
+  - v0.34: late-window dominance share rises with hazard.
+  - v0.35: pre-50 leader more often equals post-50 winner with
+    hazard (wad_rate 0.46 → 0.79).
+  - v0.36: founder-trait predictors of winning are large but
+    hazard-flat.
+  - v0.37: early-leadership turnover drops AND tick-50 margin
+    widens with hazard (H6 + supporting O3); eventual-winner
+    timing fails clean monotone (O1).
+  - v0.38: the tick-50 leader's post-50 birth advantage rises with
+    hazard (H5). Decomposition shows both within-bucket
+    amplification AND bucket-shift contribution.
+
+  Together, this points to: **hazard amplifies the post-50
+  reproductive payoff of holding the early lead, and amplifies the
+  probability that the early leader becomes the eventual winner**,
+  on the v0.34 corpus.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | v0.34 + v0.35 helpers imported additively; no modification | **HOLDS.** Imports succeed; constants byte-match. |
+| H1b | `B_POOL_ANCHORS = {4: 312, 8: 321, 12: 312}` and `EXPECTED_FOUNDERS = 5` re-asserted | **HOLDS.** |
+| H2a | Re-derived `top_lineage_id` byte-identical to v0.34 `run_summary.csv` | **HOLDS.** All 96 runs match. |
+| H2b | Re-derived `(leader_lineage_id_at_tick_50, eventual_top_lineage_id)` byte-identical to v0.35 `pre_post_dominance.csv` | **HOLDS.** All 96 runs match both columns. |
+| H2c | Every run has exactly 5 founders | **HOLDS.** Inherited from v0.34's `assign_founder_lineages`. |
+| H2d | `n_ticks == 200` for every run | **HOLDS.** All 96 runs pass. |
+| H3 | v0.21..v0.37 prior tests pass after v0.38 additions | **HOLDS.** Suite **1005 → 1039** (+34 v0.38 tests; 6 skips remain v0.23 / v0.27 corpus-dependent, non-regression); all green. |
+| H4 | Pre-v0.38 surface byte-unchanged | **HOLDS.** Zero edits to `lineage_replay.py`, `lineage_survival_replay.py`, `trait_replay.py`, `lock_in_timing_replay.py`, prior `v0.NN_*.py`, `comparison_grid.py`, `core/`, `model.py`, chamber / population / policy modules. |
+| H5 | LEADER-ADVANTAGE-AMPLIFIED | **FIRES.** O1 strictly monotone non-decreasing 3.948 → 7.375 → 8.531 → 8.990; spread +5.042 well above 1.5. |
+| H6 | LEADER-ADVANTAGE-FLAT | **FAILS** (H5 fires). |
+| H7 | LEADER-ADVANTAGE-INVERTED | **FAILS** (H5 fires). |
+
+### Secondary observations (NOT pre-committed; descriptive only)
+
+These are striking but explicitly outside the verdict logic. They
+must not be promoted to mechanism claims without fresh-stream
+calibration.
+
+**1. Within-bucket advantage at wad=True is essentially saturated by
+h=8.** `mean_O1_wT` is 8.182 / 10.221 / 11.097 / 11.079 — the h=8
+to h=12 step is essentially flat (+−0.018). When the tick-50
+leader IS the eventual winner, the advantage size plateaus around
+~11 b50 by h=8 and does not grow further. The pooled mean_O1
+continues to rise at h=12 only because of bucket-shift (more runs
+falling into the wad=True bucket).
+
+**2. Winner-overtake in wad=False runs is hazard-flat or slightly
+declining.** `mean_overt_wF` is 4.00 / 4.14 / 3.67 / 3.40 — the
+late-emerging winner overtakes the early leader by about 3–4 b50,
+roughly independent of hazard (and slightly *declining* at high
+hazard). When the eventual winner emerges from non-leadership at
+tick 50, their post-50 reproductive margin over the early leader
+does not grow with hazard; what changes with hazard is the *rate*
+at which this scenario occurs (1 − wad_rate), not the magnitude
+when it does.
+
+**3. Leader advantage in wad=False is small but rising.** 0.365
+→ 0.464 → 0.833 → 1.050. The early leader, even when they are
+not the eventual winner, still has a small post-50 advantage over
+the average non-leader, and that small advantage grows with
+hazard. Combined with v0.37's wider tick-50 margin (O3) and
+stabler turnover (O2), this is consistent with the early
+leader's structural position predicting near-top-of-pack post-50
+reproduction even when they don't ultimately win.
+
+**4. Combined, the v0.34 → v0.38 arc presents a coherent
+correlational story.** Hazard does multiple things in concert on
+this corpus: it makes the early-leadership contest stabler
+(v0.37), increases the rate at which the early leader becomes the
+eventual winner (v0.35), and amplifies the post-50 reproductive
+payoff of leadership status (v0.38). Founder traits (v0.36) are
+robust but hazard-flat — they appear to set who can compete, not
+how strongly hazard amplifies the winner's payoff. None of this
+is a mechanism declaration; all of it is correlational on the
+single 96-run corpus.
+
+### Cautious forward-reference phrasing
+
+For v0.34 / v0.35 / v0.36 / v0.37 / v0.38 forward-mention sites:
+
+> v0.37's stabler-early-leadership signal cashes out as a
+> hazard-amplified post-50 reproductive advantage on the v0.34
+> corpus (v0.38 H5: `mean_leader_advantage` rises 3.948 → 8.990
+> across hazards, spread +5.042 ≥ locked 1.5 bar). Decomposition
+> shows the rise has two components: (a) within the wad=True
+> bucket (leader == eventual winner), advantage rises 8.18 → 11.08
+> (saturating around h=8); (b) the wad-rate itself rises with
+> hazard per v0.35 (11/24 → 19/24 of 24 runs). Within wad=False
+> runs, the late-emerging winner's overtake magnitude over the
+> early leader is hazard-flat (~3–4 b50). Cautious framing locked:
+> consistent with hazard-amplified post-50 reproductive payoff of
+> early-leadership on the v0.34 corpus; promotion to a robust
+> mechanism would require fresh-stream calibration not yet
+> performed.
+
+### Implementation summary
+
+- **New script:** `scripts/leader_advantage_replay.py` (~485 LOC).
+  Imports `lineage_replay.py` + `lineage_survival_replay.py` via
+  `importlib.util`; no modification to v0.34 / v0.35 surface.
+  Pure-function pipeline producing four output CSVs.
+- **New tests:** `tests/test_leader_advantage_replay.py` (~520 LOC,
+  **34 tests**). Suite **1005 → 1039** (+34); all green. Six
+  skips remain v0.23 / v0.27 corpus artifacts (non-regression).
+- **Pre-reg-locked constants in code:** `LEADER_TICK = 50`,
+  `O1_SPREAD_THRESHOLD = 1.5`, `N_NON_LEADERS = 4`,
+  `EXPECTED_N_TICKS = 200`.
+- **Double re-anchor (with v0.35 two-column anchor):** v0.34
+  `run_summary.csv:top_lineage_id` AND v0.35
+  `pre_post_dominance.csv:(leader_lineage_id_at_tick_50,
+  eventual_top_lineage_id)`. All 96 runs match all three columns
+  byte-identical.
+- **Zero edits** to `scripts/lineage_replay.py`,
+  `scripts/lineage_survival_replay.py`,
+  `scripts/trait_replay.py`,
+  `scripts/lock_in_timing_replay.py`, prior `scripts/v0.NN_*.py`,
+  `src/`, or any pre-v0.38 module.
+- **Pre-pre-reg scratch removed:**
+  `scripts/v0_38_inventory_scratch.py` (committed during the
+  inventory phase as audit artifact; removed before the v0.38 PR
+  per the locked cleanup convention).
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                                   ok
+  uv run ruff format --check .                          ok
+  uv run pytest                                         1039 passed, 6 skipped
+                                                        (skips: v0.23/v0.27 corpus
+                                                        artifacts; non-regression)
+  uv run python scripts/core_smoke_test.py              ok
+  uv run python scripts/leader_advantage_replay.py      H5 LEADER-ADVANTAGE-AMPLIFIED
+                                                        (O1_up firing)
+  ```
+
+## Conclusion
+
+v0.38 fires **H5 — LEADER-ADVANTAGE-AMPLIFIED** on the 96-run
+v0.34 corpus. The mean leader_advantage = `b50(tick50_leader) -
+mean(b50(non_leaders))` rises strictly monotonically across hazards
+{0, 4, 8, 12}: **3.948 → 7.375 → 8.531 → 8.990**, with a total
+spread of +5.042 (~3.4× the locked +1.5 bar). The locked
+conjunctive rule (monotone non-decreasing AND spread ≥ 1.5) fires
+unambiguously in the up direction.
+
+The locked H5 phrase is the verdict:
+
+> **"Tick-50 leadership's post-50 birth advantage rises with hazard
+> on the v0.34 corpus; v0.37's stabler-early-leadership signal
+> cashes out as a hazard-amplified post-50 reproductive advantage.
+> Correlational; not a mechanism declaration."**
+
+Decision:
+- **v0.37 H6 cashes out as measurable post-50 reproductive
+  advantage that strengthens with hazard.** The "stabler early
+  leadership" structural signal v0.37 identified is not just
+  topology — it maps to actual b50 differentials that grow with
+  hazard.
+- **The hazard-amplified effect decomposes into two components:**
+  within-bucket amplification (when leader == winner, advantage
+  size grows with hazard, plateauing by h=8) AND bucket-shift
+  (more runs fall into the wad=True bucket as hazard rises). A
+  descriptive counterfactual holding wad-rate fixed at h=0 still
+  yields a within-bucket spread above the threshold (+1.698 ≥
+  1.5), so the H5 firing is not purely an artifact of v0.35's
+  wad_rate-with-hazard trend.
+- **Winner-overtake in wad=False runs is hazard-flat.** When the
+  late-emerging winner overtakes the early leader, they do so by
+  ~3–4 b50 regardless of hazard. The hazard-axis effect is on the
+  *rate* of the wad=False scenario (which decreases with hazard
+  per v0.35), not on the overtake magnitude.
+- **No mechanism declaration.** The five-slice arc (v0.34..v0.38)
+  builds a coherent correlational story on the v0.34 corpus, but
+  promotion to a robust mechanism requires fresh-stream
+  calibration analogous to v0.30..v0.33.
+- **v0.39+ candidates (per the pre-reg's deferred-list):**
+  - **If H5 fires (this slice).** v0.39 candidate: fresh-stream
+    calibration on H5 — replay the locked verdict against a fresh
+    seed range to test whether the hazard-amplified-leader-
+    advantage effect compounds across streams. This is the most
+    direct path to mechanism promotion.
+  - **Alternative v0.39 candidates** (if user direction shifts):
+    per-lineage post-50 mortality / extinction-tick analysis (to
+    disentangle "leader reproduces more" vs "non-leaders die more"
+    as the source of leader_advantage); descendant-trait drift
+    lens (the original v0.37 deferred branch, still live as a
+    later slice).
