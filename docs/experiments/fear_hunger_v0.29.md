@@ -432,5 +432,226 @@ Tests should bring the suite from 737 to ~745–750.
 
 ## Results
 
-**Status:** not yet executed. Sweep + diagnostic + results to be
-appended after the implementation phase.
+**Status:** executed 2026-05-06. 24 runs (3 weights × 8 seeds × 1
+chamber, food_ladder), 6.7s wall time. v0.29 sweep wrote artifacts
+to `runs/fear-hunger-v0.29-food_ladder/`; v0.29 diagnostic wrote
+the per-seed report to `runs/fear-hunger-v0.29-food_ladder/diagnostic.md`.
+All determinism / invariant hypotheses hold (H1–H8b: substrate
+identity to V0_27_ARMS pinned by the literal-subset construction;
+prior arms unchanged; v0.28 H9 anchor against v0.27 artifacts still
+green; artifact pre-flight passes; suite 716 → 748 → still green).
+
+**Headline:** **H9 fires — Outcome α (sample artefact, no dip).** The
+(1..8) dip does not reproduce on seeds 9..16: aggregate b>50 at
+w=0.75 is **not** a strict valley with the pre-committed ≥5-birth
+margin against both neighbors (Δ(0.75−0.50)=−2; Δ(0.75−1.00)=−8;
+need both ≤ −5). The v0.28 classifier returns
+**STATISTICAL NOISE (H8 fallback)** on the new seeds — none of
+H5 / H6 / H7 fires.
+
+**Secondary finding (not pre-registered): the v0.27 food_ladder
+"interior optimum at w=0.5" claim reverses sign on seeds 9..16.**
+v0.27 reported food_ladder w*=0.5 as a "decisive" interior optimum
+(+6 b>50 vs w=1.0; 98 vs 92, 1..8 seeds). v0.29 reports
+**w*=1.0 as the optimum** on seeds 9..16, with **the same +6
+magnitude** in the opposite direction (98 vs 92, 9..16 seeds). The
+location of the food_ladder interior optimum is itself
+sample-stream-dependent at the 8-seed sample size — a methodological
+finding about the resolution power of the historical convention as
+much as a scientific finding about the avoidance-weight curve.
+
+### Aggregate b>50 — paired against the v0.27 / v0.28 (1..8) result
+
+| weight | (1..8) b>50 | (9..16) b>50 | Δ | (9..16) − (1..8) location |
+|-------:|------------:|-------------:|----:|------------------------:|
+| 0.50   | **98** (max) | 92          | −6 | optimum **moves away** |
+| 0.75   | 89 (min)     | 90          | +1 | dip **does not reproduce** |
+| 1.00   | 92           | **98** (max) | +6 | optimum **moves here** |
+| sum    | 279          | 280         | +1 | total productivity ≈ equal |
+
+Total productivity across the three weights is essentially identical
+(279 vs 280); the **distribution across weights inverts**.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | influx conservation | **HOLDS** (24 runs at 1.0/tick × 200 ticks; in_influx=1600 per arm). |
+| H2 | transfer-mode contract | **HOLDS** (xfer = births × 15 across all cells). |
+| H3 | reproduction_heat_loss == 0 | **HOLDS**. |
+| H4 | births_blocked_by_parent_energy == 0 | **HOLDS**. |
+| H5 | food_ladder injury_deaths > 0 at every weight | **HOLDS** (34 / 30 / 30 across w=0.5 / 0.75 / 1.0). |
+| H6 | V0_29_ARMS substrate identity to V0_27_ARMS subset | **HOLDS** (literal-subset construction; tested in `test_v0_29_arms_are_literal_v0_27_subset`). |
+| H7 | prior arms unchanged | **HOLDS** (suite 737 → 748; pure addition). |
+| H8 | v0.28 H9 byte-identity against v0.27 artifacts still passes | **HOLDS** (re-running v0.28 driver on seeds 1..8 produces byte-identical diagnostic.md). |
+| H8b | v0.29 artifact pre-flight | **HOLDS** (24 events.jsonl files present, non-empty; `assert_artifacts_present` succeeds). |
+| H9 | NOT dip_present | **FIRES.** Δ(0.75−0.50)=−2; Δ(0.75−1.00)=−8; only one of the two ≤−5 thresholds met. **dip_present is False**. **Outcome α: sample artefact, no dip.** |
+| H10 | dip_present AND v0.28 H6 fires | does not fire (dip_present is False). |
+| H11 | dip_present AND v0.28 H7 fires | does not fire (dip_present is False; v0.28 H7 also fails on these seeds: 2 of 8 seeds with negative delta vs ≥6 required). |
+| H12 | dip_present AND v0.28 H8/H5-alone | does not fire (dip_present is False). |
+
+Exactly one outcome partition member fires (H9), as required by the
+pre-reg. Halt conditions hold across the full hypothesis suite.
+
+### v0.28 classifier verdicts on seeds 9..16
+
+For completeness — what the v0.28 classifier saw:
+
+- **H5 (routing flip):** 0 flipped seeds (need ≥ 2). Bimodality
+  utterly fails — the maximum-magnitude single-seed delta is −2,
+  well above the −5 flipped threshold.
+- **H6 (tail crash):** Tail seeds [9, 16] carry 100% of the
+  aggregate (small) negative deficit. But no crash signatures fire
+  (no late-population drop ≥30%, no `PoolBirthDenied`-earlier-by-30
+  signature on the tail seeds), and the safe-at-neighbors check
+  fails — seed 9 has b50=7 at w=0.5 vs the (9..16) median of 12,
+  flagging seed 9 as a low-productivity seed across all weights
+  rather than a w=0.75-specific crasher.
+- **H7 (uniform):** Only 2 of 8 seeds have negative
+  Δ(0.75−0.50) (need ≥6). The shape is neither a tail-concentration
+  (H6) nor a uniform shift (H7); the deltas are very nearly zero
+  for most seeds.
+
+### Per-seed b>50 — strong cross-seed-stream pattern: weight-insensitivity
+
+The (1..8) result had **5 of 8 seeds** with b>50 byte-identical
+across all three weights. The (9..16) result has **6 of 8 seeds**
+with `|Δ(0.75−0.50)| ≤ 1`:
+
+| seed | w=0.50 | w=0.75 | w=1.00 | Δ(0.75−0.50) | Δ(0.75−1.00) |
+|-----:|-------:|-------:|-------:|-------------:|-------------:|
+| 9    | 7      | 5      | 14     | −2           | **−9**       |
+| 10   | 12     | 13     | 11     | +1           | +2           |
+| 11   | 11     | 12     | 15     | +1           | −3           |
+| 12   | 14     | 14     | 14     | +0           | +0           |
+| 13   | 14     | 14     | 11     | +0           | +3           |
+| 14   | 11     | 11     | 12     | +0           | −1           |
+| 15   | 12     | 12     | 12     | +0           | +0           |
+| 16   | 11     | 9      | 9      | −2           | +0           |
+
+The cross-stream observation: **most food_ladder seeds at the
+v0.21 substrate are nearly insensitive to avoidance weight in
+[0.5, 1.0]**. Both seed sets show this. The dip / interior-optimum
+debate is being driven by the 2-3 weight-sensitive seeds in each
+sample, whose specific direction of sensitivity is not stable
+across RNG streams.
+
+Worth flagging at the seed level: **seed 9 has b>50=14 at w=1.0 but
+only 7 at w=0.5 (Δ=−9 against w=1.0)** — the largest single-seed
+weight-sensitivity in the (9..16) set. Seed 9 alone accounts for
+most of the +6 aggregate advantage of w=1.0 over w=0.5 on this seed
+stream. Symmetric with how seed 5 alone drove most of the (1..8)
++6 advantage of w=0.5 over w=1.0.
+
+### Routing channel: monotone in weight, robustly across seed streams
+
+The v0.27 framing of "monotone routing, non-monotone productivity"
+**survives on seeds 9..16**:
+
+| observable        | w=0.50 | w=0.75 | w=1.00 | shape (vs weight) |
+|-------------------|-------:|-------:|-------:|-------------------|
+| hazard_entries    | 218    | 189    | 170    | **strict monotone non-increasing** |
+| injury_deaths     | 34     | 30     | 30     | non-increasing |
+| starvation_deaths | 65     | 62     | 55     | monotone non-increasing |
+| food_events       | 764    | 759    | 752    | weakly non-increasing |
+| in_death_residual | 1256.4 | 1032.2 | 1161.1 | non-monotone (small) |
+
+The routing channel responds to avoidance weight as expected; the
+productivity (b>50) channel does not. Same pattern as v0.27 on
+(1..8).
+
+### What v0.29 changes about prior framings
+
+- **v0.27 / v0.28 cautious framing of the w=0.75 dip is fully
+  vindicated.** "Aggregate large enough to flag, not a stable
+  regime" was the right call. The dip is sample-specific.
+- **v0.27 "food_ladder interior optimum at w=0.5 (+6 b>50 vs w=1.0)"
+  finding is also sample-specific.** The +6 reverses sign on seeds
+  9..16. The qualitative observation "food_ladder b>50 is
+  non-monotone in w" survives across both streams; the **location**
+  of the optimum does not. 8 seeds is at the limit of what can
+  resolve a stable interior optimum at this signal magnitude.
+- **v0.27 "monotone routing" finding survives** on the new seed
+  stream (hazard entries, injury deaths, starvation deaths all
+  non-increasing in weight). The routing channel is robustly
+  weight-responsive across both samples.
+- **The v0.26 "Reading A confirmed" finding remains intact**
+  (perception is purely damage-derived; v0.29 does not test it).
+- **The v0.25 "tight interior optimum at h=8" hazard-axis finding
+  remains intact** (v0.29 does not test it; tight is out of scope).
+
+### v0.30 candidates
+
+In rough priority order, conditional on the v0.29 result:
+
+1. **(Highest priority — methodological)** Larger seed sample on
+   food_ladder × w ∈ {0.5, 0.75, 1.0} to characterise the actual
+   shape of the avoidance-weight curve at this productivity range,
+   given that the 8-seed sample size cannot resolve a stable
+   interior optimum. A 24-seed pool (combining seeds 1..16 plus
+   17..24, 72 runs, ≤ 20s) would tighten the standard error by
+   ~√3 and either confirm a flat curve (in which case v0.27's
+   non-monotonicity finding is downgraded to sample noise) or
+   surface whichever direction of asymmetry is actually robust.
+2. **Per-seed lifespan / lineage / trait-distribution inspection**
+   on the cross-stream "weight-sensitive" seeds (5 and 1 from
+   (1..8); 9 and 16 from (9..16)) at w ∈ {0.5, 0.75, 1.0}.
+   Originally a v0.30 candidate from v0.28 conditional on
+   Outcome β firing in v0.29. Outcome β did not fire — so this
+   slice is now less motivated; do it only after (1) clarifies
+   whether the per-seed sensitivity has a stable substrate.
+3. **No expansion of the (hazard, weight, influx) parameter grid.**
+   The v0.27 / v0.28 / v0.29 watch-out continues: do not expand the
+   grid until a stable mechanism is identified. v0.29 demonstrates
+   the food_ladder avoidance-weight finding is not stable at the
+   current sample size; expanding the grid would multiply the
+   sample-size problem.
+4. **Re-examine v0.21..v0.27 conventions on 8 seeds.** The
+   methodological finding (8 seeds is at the limit of resolving
+   ±6-birth interior optima) has implications for prior slices
+   that reported small-magnitude interior optima with similar
+   aggregate margins (v0.25 tight h*=8 cull-tax interactions;
+   v0.27 tight w*=0.75 +2-birth boundary). v0.30+ candidate:
+   re-run those v0.25 / v0.27 cells on a fresh seed stream as a
+   sanity check before treating those small-margin findings as
+   robust.
+
+### Implementation summary
+
+- **Configuration:** ~20 LOC `V0_29_ARMS` in
+  `experiments/comparison_grid.py` — a literal 3-tuple slice of
+  V0_27_ARMS. Substrate-byte-identity by construction.
+- **Diagnostic refactor:** ~100 LOC additive change to
+  `scripts/v0.28_trajectory_diagnostic.py` — extracted
+  `DiagnosticConfig`, `run_diagnostic`, `assert_artifacts_present`,
+  `DiagnosticOutcome`. **v0.28 byte-identity confirmed**: re-running
+  the v0.28 entrypoint produces byte-identical diagnostic.md
+  against the pre-refactor baseline. The H5 / H6 / H7 classifier
+  is unchanged.
+- **Sweep driver:** ~85 LOC `scripts/v0.29_sweep.py`.
+- **Diagnostic wrapper:** ~130 LOC `scripts/v0.29_diagnostic.py` —
+  thin caller that reuses the v0.28 module via a spec-based import,
+  applies the v0.29 H9 / H10 / H11 / H12 outcome partition over
+  the shared `dip_present` predicate.
+- **Tests:** ~190 LOC `tests/test_comparison_grid_v0_29.py`
+  (11 new tests; suite 737 → 748). Pinning V0_29_ARMS shape /
+  literal-subset identity / equality-fallback substrate identity /
+  prior-arms-unchanged / H5 mechanical sanity at one seed.
+- **Wall time:** sweep 6.7s on 24 runs; diagnostic < 1s.
+- **No simulation-mechanics changes; no `core/` / `model.py` /
+  `experiments/fear_hunger_chamber.py` /
+  `policies/gradient_policy.py` /
+  `policies/hedonism_policy.py` changes.** Source additions are
+  limited to a configuration cut (V0_29_ARMS) + the additive
+  refactor of the v0.28 diagnostic + the v0.29 sweep / diagnostic
+  drivers + tests.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                          ok
+  uv run ruff format --check .                 ok
+  uv run pytest                                748 passed
+  uv run python scripts/core_smoke_test.py     ok
+  uv run python scripts/v0.28_trajectory_diagnostic.py  TAIL-SEED CRASH (H6); byte-identical
+  uv run python scripts/v0.29_sweep.py         6.7s; 24 runs
+  uv run python scripts/v0.29_diagnostic.py    Outcome α (H9) — sample artefact, no dip
+  ```
