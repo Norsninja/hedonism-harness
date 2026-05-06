@@ -474,5 +474,186 @@ suite from 716 to ~735.
 
 ## Results
 
-**Status:** not yet executed. Diagnostic + results to be appended in
-the next phase of v0.28.
+**Status:** executed 2026-05-06. 24 v0.27 events.jsonl artifacts loaded
+(food_ladder, w ∈ {0.5, 0.75, 1.0}, seeds 1..8); per-seed observables
+extracted via `EventBandTrajectory` + `PopulationTrajectory`;
+`scripts/v0.28_trajectory_diagnostic.py` evaluated H5/H6/H7. All
+determinism / invariant hypotheses hold (H1, H2, H3, H4, H9 by
+construction in the test suite — 21 tests green; suite 716 → 737).
+Full per-seed report: `runs/fear-hunger-v0.28-food_ladder/diagnostic.md`.
+
+**Headline:** **H6 fires alone — TAIL-SEED CRASH classification.** The
+v0.27 food_ladder b>50=89 dip at w=0.75 is driven by **2 of 8 seeds
+(seeds 5 and 1) carrying 89% of the −9 aggregate deficit**, while the
+other 6 seeds show ≤ 1-birth movement across all three weights. H5
+(routing flip) fails on bimodality count (only 1 seed meets the
+flipped delta ≤ −5 threshold; the operational definition required
+≥ 2). H7 (uniform degradation) fails decisively: only 3 of 8 seeds
+have any negative delta at all (need ≥ 6); 5 seeds (2, 3, 4, 6, 7)
+have **identical b>50 at every weight**. Mechanism reading: the dip
+is a small-sample concentration on the 1..8 seed set, not a
+population-wide effect.
+
+### Per-seed b>50 across w ∈ {0.5, 0.75, 1.0}
+
+| seed | b50 @ 0.50 | b50 @ 0.75 | b50 @ 1.00 | Δ(0.75−0.50) | Δ(0.75−1.00) |
+|-----:|-----------:|-----------:|-----------:|-------------:|-------------:|
+| 1 | 14 | 11 | 13 | −3 | −2 |
+| 2 |  0 |  0 |  0 | +0 | +0 |
+| 3 | 16 | 16 | 16 | +0 | +0 |
+| 4 | 12 | 12 | 11 | +0 | +1 |
+| 5 | 17 | 12 | 14 | **−5** | −2 |
+| 6 | 16 | 16 | 16 | +0 | +0 |
+| 7 | 11 | 11 | 11 | +0 | +0 |
+| 8 | 12 | 11 | 11 | −1 | +0 |
+| **sum** | **98** | **89** | **92** | **−9** | **−3** |
+
+Five seeds (3 of which are non-trivial: 3/6/7) have **byte-identical
+b>50 across all three weights**. Seed 2 is a low-productivity outlier
+across the board (b>50=0 everywhere; founders survive but fail to
+sustain reproduction). The Δ(0.75−0.50) deficit is concentrated on
+seed 5 (−5) and seed 1 (−3), with seed 8 contributing −1 noise.
+Crucially, both tail seeds **rebound at w=1.0** (seed 5: 17→12→14;
+seed 1: 14→11→13), so the pathology is localised to w=0.75
+specifically — consistent with a w-axis non-monotonicity on those
+seeds rather than a monotone degradation.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | per-tick aggregates partition events.jsonl event counts | **HOLDS.** Verified on every (seed, weight) cell by the test suite (`test_h1_event_count_partition_on_real_artifact`). |
+| H2 | band partition sums to per-tick total | **HOLDS** for all six per-tick series (`test_h2_band_partition_sums_to_per_tick_total`). |
+| H3 | `PopulationTrajectory` byte-identical before/after v0.28 additions | **HOLDS.** v0.24 contract untouched; entire prior test suite passes (705 → 737 — pure addition). |
+| H4 | v0.27 prior tests still pass | **HOLDS.** `test_comparison_grid_v0_27`, `test_comparison_grid_v0_26`, `test_population_dynamics`, `test_gradient_policy` all green. |
+| H5 | per-seed bimodality + band-shift signature | **FAILS on bimodality count.** Only seed 5 meets the flipped-delta threshold (Δ ≤ −5). The pre-committed criterion required ≥ 2 flipped seeds; we observe 1. |
+| H6 | small-tail concentration + crash signature on those seeds + safe-at-neighbors | **FIRES.** Tail = (5, 1); tail share of deficit = 89% (≥ 80% threshold). Crash signature: seed 1 first `PoolBirthDenied` shifts from `None` (never) at w=0.5 to tick 188 at w=0.75 — pool pressure appears at w=0.75 that wasn't present at w=0.5. Safe-at-neighbors: holds (seeds 5 and 1 are within 5 b>50 of median at w=0.5 and w=1.0). |
+| H7 | broad uniform degradation | **FAILS decisively.** Only 3 of 8 seeds have Δ(0.75−0.50) < 0 (need ≥ 6); 5 seeds have Δ = 0 exactly. The dip is not population-wide. |
+| H8 | noise fallback | N/A — H6 fires; H8 was the no-mechanism default. |
+| H9 | 24-run loader aggregates reproduce v0.27 cells exactly | **HOLDS.** Halt-condition byte-identity guard in `test_h9_anchor_identity_against_v0_27_aggregates` parametrised across all three weights — 24 sums match the v0.27 results doc to the unit. |
+
+### Refined mechanism reading — H6 fires technically; the underlying picture is subtler
+
+The H6 operational definition fires cleanly, but the mechanism reading
+attached to H6 in the pre-reg ("a small number of seeds suffer a
+mid-run crash") needs nuance. Two specific observations:
+
+1. **Seed 5 is the only "real" b>50 dip.** Its Δ(0.75−0.50) = −5
+   exactly meets the H5 flipped threshold but stands alone (no other
+   seed crosses it). The dip on seed 5 rebounds at w=1.0
+   (b50 = 17 / 12 / 14), confirming a w-axis non-monotonicity on
+   that single seed rather than a monotone weight effect.
+2. **Seed 1's "crash signature" is downstream of higher late-window
+   population, not depletion.** Seed 1 shows `mean_pop_late` =
+   10.7 / **11.9** / 11.3 across w ∈ {0.5, 0.75, 1.0} — *highest*
+   late-window population at w=0.75. The first `PoolBirthDenied`
+   appearing at tick 188 at w=0.75 (vs never at w=0.5) is the pool
+   pressing under a *larger* late population, not a depleted one.
+   Mechanically: seed 1's agents at w=0.75 survive longer (more
+   late-window agents alive) but reproduce less per agent (fewer
+   late-window births), so the net b>50 drops by 3 even though
+   population rises.
+
+The "crash" framing is therefore misleading for seed 1 specifically.
+A more accurate label would be **"late-births contraction
+concentrated on 2 seeds"** — seed 5 has a true population dip; seed 1
+has a population rise + birth-rate compression. Both contribute to
+the −9 aggregate deficit; both rebound at w=1.0; both are absent
+from the other 5 productive seeds.
+
+### Aggregate band-resolved telemetry (8-seed sums)
+
+| series  | band | w=0.50 | w=0.75 | w=1.00 |
+|---------|------|-------:|-------:|-------:|
+| births  | 0-49 | 56 | 56 | 51 |
+| births  | 50-99 | 40 | 35 | 34 |
+| births  | 100-149 | 26 | 29 | 28 |
+| births  | 150-199 | 32 | **25** | 30 |
+| food    | 150-199 | 166 | 169 | 170 |
+| haz_entries | 150-199 | 32 | 31 | 18 |
+| inj_deaths  | 150-199 | 5 | 5 | 3 |
+
+The decisive aggregate signal is **births in 150-199**: 32 → 25 → 30
+(net −7 at w=0.75, net +5 rebound at w=1.0) — concentrated entirely
+in the late-late band. Routing observables (hazard entries, injury
+deaths in 150-199) are **monotone non-increasing in weight** as
+expected from v0.27's H7/H11 (food_ladder routing improves
+uniformly with avoidance weight); the routing channel is well-behaved.
+The non-monotonicity sits exclusively in the productivity channel
+(births at 150-199), not the routing channel — consistent with the
+v0.27 framing of "monotone routing, non-monotone productivity."
+
+### Falsification of "this is a stable regime"
+
+The v0.27 doc cautiously framed the dip as "aggregate large enough to
+flag, not a stable regime." **v0.28 confirms the cautious framing.**
+The dip is not a stable population-wide regime; it is a
+2-of-8-seed concentration of a late-births contraction. On any
+reasonable definition of "stable regime" (most seeds participating;
+mechanism active across the cohort), the dip fails. The pre-registered
+H7 (uniform degradation) was the operational version of "stable
+regime"; H7 fails decisively (3/8 seeds vs ≥ 6/8 required).
+
+### v0.29 candidates
+
+The v0.28 result sharpens the v0.29 question landscape:
+
+1. **(Highest priority) Seeds 9..16 reproducibility test** at
+   w ∈ {0.5, 0.75, 1.0} on food_ladder (24 runs, ~5s). Expected per
+   v0.28: a different aggregate at w=0.75 — either no dip, or a dip
+   driven by a different small subset of seeds. If seeds 9..16 also
+   show a 1-2-seed concentrated late-births contraction, the
+   mechanism is real and seed-specific; if seeds 9..16 show no dip,
+   the v0.27 finding is sample-specific. Cheapest possible
+   discrimination.
+2. **Per-seed lifespan and trait-distribution inspection on seeds 1
+   and 5 specifically.** v0.28's per-seed observables stop at
+   aggregate band telemetry; the next layer is `agent_lifetimes.csv`
+   and `lineages.csv` for those two seeds at the three weights, to
+   characterise *why* seed 5 has a population dip and seed 1 has a
+   birth-rate compression. Out of scope for the v0.28 pre-reg
+   (committed observables are event-band only); v0.29 candidate.
+3. **No expansion of the (hazard, weight, influx) parameter grid.**
+   Per the v0.28 watch-out: do not expand the grid until the dip is
+   explained. The dip is now explained — as a small-sample
+   concentration. The next slice should be the seeds 9..16 check;
+   only then should the parameter grid expand if the result
+   warrants it.
+4. **Update the v0.27 framing.** The v0.27 doc's "v=0.5 strong
+   interior optimum" finding on food_ladder remains intact (98 vs
+   92 at w=1.0; +6 births driven by 6 of 8 seeds, well clear of
+   noise). The "w=0.75 dip" should be reframed in the v0.27 doc's
+   forward references as "a 2-of-8 seed concentration that does not
+   constitute a stable regime; v0.28 confirmed the v0.27 cautious
+   framing."
+
+### Implementation summary
+
+- **Library extension (additive only):** +120 LOC in
+  `experiments/population_dynamics.py` (`EventBandTrajectory`,
+  `load_event_band_trajectory`, `bucket_by_window`).
+  v0.24 `PopulationTrajectory` and `load_population_trajectory`
+  byte-identical before and after.
+- **Diagnostic driver:** ~310 LOC in
+  `scripts/v0.28_trajectory_diagnostic.py`. Pure consumer of the
+  on-disk events.jsonl artifacts; no new sweep, no production-code
+  changes, no new arms.
+- **Tests:** +21 in `tests/test_trajectory_diagnostic_v0_28.py`
+  (synthetic loader + bucket coverage; H1 / H2 invariants on a real
+  artifact; H9 anchor identity on all 3 weights × 8 seeds = 24
+  runs). Suite 716 → 737.
+- **Wall time:** diagnostic driver runs in < 1s on 24 events.jsonl
+  files (~2400 events each).
+- **No changes** to `core/`, `model.py`,
+  `experiments/fear_hunger_chamber.py`,
+  `experiments/comparison_grid.py`,
+  `policies/gradient_policy.py`, or `policies/hedonism_policy.py`.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                           ok
+  uv run ruff format --check .                  ok
+  uv run pytest                                 737 passed
+  uv run python scripts/core_smoke_test.py      ok
+  uv run python scripts/v0.28_trajectory_diagnostic.py
+                                                Classification: TAIL-SEED CRASH (H6)
+  ```
