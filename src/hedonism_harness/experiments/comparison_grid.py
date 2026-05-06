@@ -1239,6 +1239,18 @@ V0_32_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
 )
 
 
+# v0.33 — tight h*=8 hazard-axis third-stream calibration on seeds 17..24.
+# Literal 4-arm slice of V0_25_ARMS at influx=1.0 across hazards {0, 4, 8, 12}
+# — element-wise identical to V0_32_TIGHT_H_ARMS by construction. The
+# distinct binding name pins the v0.33 audit's intent (third-stream
+# calibration mirroring v0.31's weight-axis pattern); substrate-byte-identity
+# is guarded by H1 / H1b literal-subset and arm-object-identity tests.
+# Pre-reg: [[docs/experiments/fear_hunger_v0.33.md]].
+V0_33_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
+    arm for arm in V0_25_ARMS if arm.label.endswith("-influx-1.0")
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
