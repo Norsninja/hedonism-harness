@@ -722,8 +722,324 @@ have no test files.)
 
 ## Results
 
-**Status:** not yet executed. Reducer
-(`scripts/lock_in_timing_replay.py`) will run over the same 96-run
-corpus v0.34 / v0.35 / v0.36 reduced. Outputs under
-`runs/lineage-v0.37/` (gitignored). Results section appended after
-reducer execution, with the locked verdict phrase fired verbatim.
+**Status:** executed 2026-05-06. Reducer
+([[scripts/lock_in_timing_replay.py]]) ran over the same 96-run corpus
+v0.34 / v0.35 / v0.36 reduced. Outputs under `runs/lineage-v0.37/`
+(gitignored). Re-anchor (H2a + H2b) against v0.34's
+`run_summary.csv:top_lineage_id` AND v0.35's
+`pre_post_dominance.csv:eventual_top_lineage_id` passed for all 96
+runs (no mismatch). All invariants (H1, H1b, H2c, H2d, H3, H4) held.
+
+### Headline
+
+**Verdict: H6 — STABLER-EARLY-LEADERSHIP.** Firing indicator: **O2**
+(`leader_turnover_count_25_to_100`).
+
+> **Locked H6 phrase:** "Early-leadership turnover drops with hazard
+> on the v0.34 corpus; eventual-winner timing does not separate.
+> This supports a stabler-early-competition timing locus rather than
+> earlier winner emergence. Correlational; not a mechanism
+> declaration."
+
+The verdict fires because **O2** clears both the monotone-non-
+increasing rule and the locked 0.25 spread bar exactly, while **O1**
+fails the monotone rule despite clearing its 25-tick spread bar with
+room to spare. Per the locked rule (and the leader-centric vs
+winner-centric semantic split locked in the pre-reg), v0.37 cannot
+declare H5 EARLIER-WINNER-LOCK-IN or H7 COMPOUND-LOCK-IN on this
+corpus. **O3** passes its supporting indicator (`mean_O3` rises
+3.167 → 4.667 → 4.917 → 5.417 across hazards, spread 2.250 well above
+the 1.0 threshold), giving confirmatory texture to the H6 reading.
+
+### Per-hazard summary
+
+| hazard | n_runs | n_never_leads | n_no_winner | mean_O1 | mean_O2 | mean_O3 |
+|-------:|------:|--------------:|------------:|--------:|--------:|--------:|
+| 0      | 24    | 2             | 0           | **52.542** | **0.333** | **3.167** |
+| 4      | 24    | 1             | 0           | 26.458  | 0.292   | 4.667   |
+| 8      | 24    | 1             | 0           | 29.042  | 0.167   | 4.917   |
+| 12     | 24    | 1             | 0           | **24.667** | **0.083** | **5.417** |
+
+`n_never_leads` = runs where the eventual winner never becomes the
+(tie-break-inclusive) birth-count leader at any tick t in [0, n_ticks);
+sentinel value 200 contributes to `mean_O1` for those runs. Total
+sentinel rate 5/96 ≈ 5.2% on the locked corpus.
+
+### Indicator summary
+
+| observable | role       | mono_pass | spread | threshold | threshold_pass | indicator_pass |
+|------------|-----------:|:---------:|-------:|----------:|:--------------:|:--------------:|
+| O1         | driver     | **False** | 27.875 | 25.000    | True           | **False**      |
+| O2         | driver     | **True**  | 0.250  | 0.250     | True           | **True**       |
+| O3         | supporting | True      | 2.250  | 1.000     | True           | True           |
+
+### Why H6 STABLER-EARLY-LEADERSHIP fires (not H5 / H7 / H8)
+
+For H7 COMPOUND-LOCK-IN to fire, *both* O1 and O2 must pass under
+the locked rule (monotone + spread-threshold). For H5
+EARLIER-WINNER-LOCK-IN to fire, O1 alone must pass and O2 must fail.
+
+- **O1 fails on monotonicity.** `mean_O1` is 52.542 → 26.458 →
+  **29.042** → 24.667 across hazards {0, 4, 8, 12}. The h=4 → h=8
+  step reverses (26.458 → 29.042; +2.584 ticks, an *increase* in
+  mean time-to-leadership for the eventual winner). The locked rule
+  requires weak non-increasing monotonicity; the h=8 reversal
+  violates it. The total spread (52.542 − 24.667 = **+27.875** ticks)
+  is well above the locked 25-tick bar — but the locked rule is
+  conjunctive (monotone AND spread); spread alone cannot fire the
+  indicator. Per the locked threshold-design, this is the rule
+  doing its job: it ruled out winner-lock-in as a *clean*
+  monotone-with-hazard story even though the magnitude is large.
+- **O2 passes by exactly the locked bar.** `mean_O2` is 0.333 →
+  0.292 → 0.167 → 0.083 across hazards. Strict monotone non-
+  increasing across all four hazards. Spread `0.333 − 0.083 =
+  0.250` equals the locked threshold exactly. The verdict-edge
+  is tight but well-defined: an early-leadership contest with
+  about one-third of a turnover event per run at h=0 drops to
+  about one-twelfth at h=12.
+- **O3 passes (supporting only).** `mean_O3` is 3.167 → 4.667 →
+  4.917 → 5.417. Strict monotone non-decreasing; spread 2.250 (well
+  above 1.0). The tick-50 margin between rank-1 and rank-2 lineages
+  widens by about 2.25 births between h=0 and h=12 — consistent with
+  stabler early-leadership being more *decisive* at h=12 than at
+  h=0 (a wider lead at the snapshot tick is harder to overturn).
+
+H8 UNRESOLVED is also excluded: O2 passes.
+
+### Why this is leader-centric, NOT eventual-winner-centric
+
+Per the locked semantic split (and the locked H6 phrase wording):
+
+- **H6 claims that the early-leadership contest is less churny
+  under hazard.** It does NOT claim that the eventual winner locks
+  in earlier. The eventual-winner timing observable (O1) failed
+  its monotonicity rule on this corpus.
+- **The non-monotonicity in O1 is mechanistically interesting.**
+  The h=4 → h=8 reversal (+2.584 ticks of late-lock-in at h=8)
+  suggests the eventual-winner timing axis is not a simple
+  monotone function of hazard at the scales we sample. Whether
+  this is genuine non-monotonicity or sampling noise (n=24 per
+  hazard) cannot be decided here. v0.38+ candidate: variance
+  decomposition of O1 within-hazard.
+- **The strong O3 result reinforces the leader-centric reading.**
+  The tick-50 margin widens substantially with hazard (3.17 → 5.42
+  births), even as the *which* of the top-2 lineages is the
+  eventual winner becomes more locked-in (per v0.35's
+  wad_rate-with-hazard rise). Together, H6 + O3 paint a picture:
+  by tick 50, hazard amplifies the lead of whatever lineage has
+  pulled ahead, and that lineage is increasingly likely to BE the
+  eventual winner (v0.35 result), but there is no clean
+  monotone-with-hazard story for *when* the eventual winner first
+  takes the lead (O1 failure here).
+
+### Cautious framing — locked dual phrasing preserved
+
+> **The v0.37 verdict is timing-locus level only.** It does NOT
+> declare a mechanism. v0.37 identifies that hazard's rising
+> early-leader continuity (v0.35's H6) is consistent with the
+> early-leadership contest being less churny under hazard, and with
+> the rank-1 vs rank-2 margin at tick 50 widening with hazard. It
+> explicitly does NOT find that the eventual winner locks in
+> earlier under hazard in a clean monotone-with-hazard sense.
+
+> **The v0.35 early-leader-continuity finding is now consistent
+> with two compatible observables on the v0.34 corpus: stabler
+> early-leadership turnover (O2) and a wider tick-50 margin (O3),
+> not with cleanly earlier eventual-winner emergence (O1).** This
+> narrows the timing-locus story but does not promote it to a
+> mechanism. Promotion requires fresh-stream calibration analogous
+> to v0.30..v0.33.
+
+### Sentinel transparency
+
+The 5/96 ≈ 5.2% sentinel rate (winner never leads pre-end) is
+distributed h=0: 2/24, h=4: 1/24, h=8: 1/24, h=12: 1/24. The
+sentinel value (200) contributes to `mean_O1` proportionally to the
+sentinel rate. At h=0 with 2 sentinels, the contribution is 2 ×
+200 / 24 = 16.67 ticks — a meaningful fraction of `mean_O1(0) =
+52.542`. If sentinels were excluded, `mean_O1(0)` would be
+(52.542 × 24 − 2 × 200) / 22 = (1261 − 400) / 22 ≈ 39.1 ticks. The
+locked rule includes sentinels in the mean (the pre-reg's locked
+treatment); this alternate reading is reported descriptively here
+but does NOT change the verdict.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | v0.34 + v0.35 helpers imported additively; no modification | **HOLDS.** Imports succeed; constants byte-match. |
+| H1b | `B_POOL_ANCHORS = {4: 312, 8: 321, 12: 312}` and `EXPECTED_FOUNDERS = 5` re-asserted | **HOLDS.** |
+| H2a | Re-derived `top_lineage_id` byte-identical to v0.34 `run_summary.csv` | **HOLDS.** All 96 runs match. |
+| H2b | Re-derived `eventual_top_lineage_id` byte-identical to v0.35 `pre_post_dominance.csv` | **HOLDS.** All 96 runs match. |
+| H2c | Every run has exactly 5 founders | **HOLDS.** Inherited from v0.34's `assign_founder_lineages`. |
+| H2d | `n_ticks == 200` for every run | **HOLDS.** All 96 runs pass. |
+| H3 | v0.21..v0.36 prior tests pass after v0.37 additions | **HOLDS.** Suite **966 → 1005** (+39 v0.37 tests; 6 skips are v0.23 / v0.27 corpus-dependent, non-regression); all green. |
+| H4 | Pre-v0.37 surface byte-unchanged | **HOLDS.** Zero edits to `lineage_replay.py`, `lineage_survival_replay.py`, `trait_replay.py`, prior `v0.NN_*.py`, `comparison_grid.py`, `core/`, `model.py`, chamber / population / policy modules. |
+| H5 | EARLIER-WINNER-LOCK-IN | **FAILS.** O1 has spread 27.875 ≥ 25 but is non-monotonic (h=4 → h=8 reverses by 2.584 ticks). |
+| H6 | STABLER-EARLY-LEADERSHIP | **FIRES.** O2 is strictly monotone non-increasing 0.333 → 0.292 → 0.167 → 0.083; spread 0.250 = threshold exactly. |
+| H7 | COMPOUND-LOCK-IN | **FAILS** (O1 fails). |
+| H8 | UNRESOLVED | **FAILS** (O2 passes). |
+
+### Secondary observations (NOT pre-committed; descriptive only)
+
+These are striking but explicitly outside the verdict logic. They
+must not be promoted to mechanism claims without fresh-stream
+calibration.
+
+**1. O1's non-monotonicity is small in absolute terms (≈ 2.6 ticks)
+relative to its spread (≈ 28 ticks).** The h=4 → h=8 reversal
+(26.458 → 29.042) is well within plausible sampling noise at n=24
+per hazard. The locked rule treats it as a hard failure, which
+yields H6. A weaker rule (e.g., spread-only) would have fired
+H7 COMPOUND-LOCK-IN. The pre-reg's locked rule prefers H6 over a
+spread-only-but-non-monotonic H7 because monotonicity is the
+mechanistic backbone of "tightens with hazard."
+
+**2. O1's largest single-step decline is h=0 → h=4 (52.542 →
+26.458; −26.084 ticks).** Most of the eventual-winner-timing-shift
+is in the h=0 → h=4 step. The h=4 / h=8 / h=12 means cluster around
+24–29 ticks, suggesting a step-function-like response rather than
+a graded dose-response — but with n=24 per hazard, this is
+suggestive only.
+
+**3. O2's plain-language interpretation.** At h=0, the average run
+has 0.333 leader changes across {(25,50), (50,75), (75,100)} — i.e.,
+roughly 1 in 3 runs has a single turnover; the rest are stable.
+At h=12, that drops to 0.083 — roughly 1 in 12 runs has a single
+turnover. The leader-contest at the locked snapshot pairs is
+nearly always stable at h=12.
+
+**4. Compound interpretation (cautious).** Combining v0.34, v0.35,
+v0.36, and v0.37 on this corpus:
+- v0.34: late-window dominance share rises with hazard.
+- v0.35: pre-50 leader more often equals post-50 winner with hazard.
+- v0.36: founder-trait differences (sensor_radius dominant)
+  are large but flat with hazard.
+- v0.37: early-leadership turnover drops with hazard, AND tick-50
+  margin widens with hazard, but eventual-winner-timing does NOT
+  show a clean monotone-with-hazard pattern.
+
+This points toward a **"selection saturated by chamber geometry +
+hazard-amplified post-emergence dominance"** reading: high
+sensor_radius founders win regardless of hazard (v0.36); WHO ends
+up in the lead at tick 25–50 doesn't shift much with hazard (O1
+failure); but ONCE someone is in the lead, hazard amplifies their
+ability to hold and widen that lead (O2, O3, plus v0.35 wad_rate).
+This is consistent with hazard acting on
+*post-emergence-competition*, not on
+*emergence-of-the-eventual-winner*. v0.38+ candidate: per-lineage
+post-50 birth-rate differentials conditional on tick-50 leadership
+status.
+
+### What this means for v0.35's H6 / v0.36's H6
+
+- **v0.35's early-leader continuity** is now narrowed at one more
+  step: the rate rises with hazard not because winners emerge
+  earlier (O1 fails clean monotone), but because the early-leader
+  contest is less churny (O2 passes) and the early-lead margin is
+  wider (O3 passes).
+- **v0.36's `sensor_radius` finding** remains the strongest
+  founder-trait predictor of winning, and it remains hazard-
+  independent. v0.37 does not contradict it; it adds that
+  hazard-amplified dynamics happen *after* the founder-trait
+  selection has already done its work.
+
+### Cautious forward-reference phrasing
+
+For v0.34 / v0.35 / v0.36 / v0.37 forward-mention sites:
+
+> v0.35's early-leader-continuity rise with hazard
+> (`winner_already_dominant_at_tick_50_rate` 0.458 → 0.792 across
+> hazards) is consistent with **stabler early-leadership turnover**
+> (v0.37 H6: O2 leader-turnover count drops 0.333 → 0.083 across
+> the {25→50, 50→75, 75→100} snapshot pairs) and a **wider
+> rank-1-to-rank-2 margin at tick 50** (O3: +2.25 birth spread).
+> Eventual-winner-timing (O1) shows a large total spread (≈28
+> ticks) but is non-monotone with hazard (h=4 → h=8 reverses by
+> ≈2.6 ticks); H5 EARLIER-WINNER-LOCK-IN does NOT fire on this
+> corpus. The compound timing-locus story (H7) does not fire.
+> Cautious framing locked: timing-locus consistent with stabler
+> early-leadership on the v0.34 corpus; promotion to a robust
+> mechanism would require fresh-stream calibration not yet
+> performed.
+
+### Implementation summary
+
+- **New script:** `scripts/lock_in_timing_replay.py` (~530 LOC).
+  Imports `lineage_replay.py` + `lineage_survival_replay.py` via
+  `importlib.util`; no modification to v0.34 / v0.35 surface.
+  Pure-function pipeline producing four output CSVs.
+- **New tests:** `tests/test_lock_in_timing_replay.py` (~530 LOC,
+  **39 tests**). Suite **966 → 1005** (+39); all green. (6 skips
+  remain from prior versions due to v0.23 / v0.27 corpus not being
+  on disk in this environment; non-regression.)
+- **Pre-reg-locked constants in code:** `LEADER_TICK_O3 = 50`,
+  `O2_SNAPSHOT_TICKS = (25, 50, 75, 100)`, `O1_SPREAD_THRESHOLD =
+  25`, `O2_SPREAD_THRESHOLD = 0.25`, `O3_SPREAD_THRESHOLD = 1.0`,
+  `EXPECTED_N_TICKS = 200`.
+- **Double re-anchor:** v0.34 `run_summary.csv:top_lineage_id` AND
+  v0.35 `pre_post_dominance.csv:eventual_top_lineage_id`. All 96
+  runs match both anchors byte-identical.
+- **Zero edits** to `scripts/lineage_replay.py`,
+  `scripts/lineage_survival_replay.py`, `scripts/trait_replay.py`,
+  prior `scripts/v0.NN_*.py`, `src/`, or any pre-v0.37 module.
+- **Pre-pre-reg scratch scripts removed:**
+  `scripts/v0_37_inventory_scratch.py` and
+  `scripts/v0_37_sentinel_scan.py` (both committed during the
+  inventory phase as audit artifacts; removed before the v0.37
+  PR per the locked cleanup convention).
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                                   ok
+  uv run ruff format --check .                          ok
+  uv run pytest                                         1005 passed, 6 skipped
+                                                        (skips: v0.23/v0.27 corpus
+                                                        artifacts; non-regression)
+  uv run python scripts/core_smoke_test.py              ok
+  uv run python scripts/lock_in_timing_replay.py        H6 STABLER-EARLY-LEADERSHIP
+                                                        (O2 firing)
+  ```
+
+## Conclusion
+
+v0.37 fires **H6 — STABLER-EARLY-LEADERSHIP** on the 96-run v0.34
+corpus. Early-leadership turnover at the {(25→50), (50→75),
+(75→100)} snapshot pairs drops monotonically with hazard
+(`mean_O2`: 0.333 → 0.292 → 0.167 → 0.083 across hazards
+{0, 4, 8, 12}; spread 0.250 = locked 0.25 threshold exactly).
+Eventual-winner timing (`mean_O1`) shows a large total spread
+(27.875 ticks ≥ locked 25-tick bar) but is **non-monotone with
+hazard** (h=4 → h=8 reverses by 2.584 ticks); the locked
+conjunctive rule (monotone AND spread) excludes H5
+EARLIER-WINNER-LOCK-IN and H7 COMPOUND-LOCK-IN. The supporting O3
+indicator (tick-50 margin) passes its monotone + spread bar with
+room to spare (2.25 vs 1.0 threshold).
+
+The locked H6 phrase is the verdict:
+
+> **"Early-leadership turnover drops with hazard on the v0.34
+> corpus; eventual-winner timing does not separate. This supports
+> a stabler-early-competition timing locus rather than earlier
+> winner emergence. Correlational; not a mechanism declaration."**
+
+Decision:
+- **The v0.35 early-leader-continuity rise with hazard is now
+  consistent with stabler-early-leadership-turnover and wider
+  tick-50 margin** on this corpus. It is NOT cleanly explained
+  by earlier eventual-winner emergence (O1 monotonicity fails).
+- **The compound timing-locus story does not fire.** The locked
+  rule preferred H6 over a spread-only-but-non-monotonic H7
+  reading because monotonicity is the mechanistic backbone of
+  "tightens with hazard."
+- **Sentinel transparency:** 5/96 ≈ 5.2% of runs have sentinel-
+  valued O1 (winner never leads pre-end). The sentinel inflates
+  `mean_O1(0)` by ≈ 16.7 ticks; reported descriptively but does
+  not change the verdict.
+- **v0.38 candidates (per the pre-reg's deferred-list):**
+  per-lineage post-50 birth-rate differentials conditional on
+  tick-50 leadership status (the most direct follow-up given
+  H6 fires). Variance decomposition of O1 within-hazard is a
+  secondary candidate to characterise the h=4 → h=8 reversal.
+  Descendant-trait drift remains the H8-conditional fallback,
+  but H8 did not fire so it is no longer the canonical next
+  slice.
