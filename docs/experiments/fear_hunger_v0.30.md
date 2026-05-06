@@ -179,6 +179,16 @@ Per-seed favoring (primary):
 - `n_favoring := |{s ∈ 9..16 : seed_favors_w075(s)}|`.
 
 Supporting (descriptive only — not used by the classifier):
+- `n_strict_favoring := |{s ∈ 9..16 :
+                          b50(s, 0.75) > b50(s, 0.5)
+                          AND b50(s, 0.75) > b50(s, 1.0)}|`.
+  Strict per-seed preference (no ties). Does **not** affect the
+  classifier; reported alongside `n_favoring` so the reader can see
+  whether H5 / H6 support is flat-consistency (many ties) or strict
+  per-seed preference. Especially valuable if H5 fires with many
+  ties: a high `n_favoring` with low `n_strict_favoring` means the
+  aggregate margin is carried by a few seeds while several
+  "favouring" seeds are actually ties.
 - `total_births(w)`, `total_food_events(w)`,
   `total_hazard_entries(w)`, `total_starvation_deaths(w)`,
   `total_injury_deaths(w)` (8-seed sums per arm).
@@ -197,12 +207,14 @@ Supporting (descriptive only — not used by the classifier):
   is a literal subset of `V0_27_ARMS` — every member is the **same**
   `Arm` instance as the matched-label member of V0_27_ARMS (identity,
   not equality). Mirrors v0.29's H6. Halt condition.
-- **H1b (cross-version equivalence).** Each `V0_30_TIGHT_W_ARMS`
-  member is also the same `Arm` instance as the matched-label
-  member of `V0_29_ARMS` (since both v0.29 and v0.30 are 3-arm
-  subsets of V0_27_ARMS at the same labels, by symmetry the two
-  tuples must be element-wise identical). Tested for explicitness;
-  acts as a tripwire if either tuple drifts.
+- **H1b (cross-version arm-object equivalence).** H1b checks
+  **arm-object identity only, not chamber identity**:
+  `V0_29_ARMS` and `V0_30_TIGHT_W_ARMS` should reference the same
+  underlying `V0_27_ARMS` instances for the shared labels
+  `{hzd8-avd0.50, hzd8-avd0.75, hzd8-avd1.00}`. The chamber differs
+  at run time (v0.29 ran the same arms on food_ladder; v0.30 runs
+  them on tight_gradient); the substrate arm objects do not. Tested
+  for explicitness; acts as a tripwire if either tuple drifts.
 - **H2 (artifact pre-flight).** After the sweep,
   `runs/fear-hunger-v0.30-tight_gradient/arms/hzd8-avd0.{50,75,1.00}/seed-{9..16}/events.jsonl`
   exists and is non-empty for every (seed, weight). Halt condition.
