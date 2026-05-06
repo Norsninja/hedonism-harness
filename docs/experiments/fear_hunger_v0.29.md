@@ -238,46 +238,78 @@ Two-tier structure: **strong-form** for invariants + determinism,
 - **H8 (v0.28 loader byte-identity).** Re-running the v0.28 H9
   parametrised test against the on-disk v0.27 artifacts continues to
   pass after the v0.29 additions. Pure-additive guard.
+- **H8b (v0.29 artifact pre-flight).** After the sweep, every
+  expected per-seed events.jsonl exists at
+  `runs/fear-hunger-v0.29-food_ladder/arms/{label}/seed-{N}/events.jsonl`
+  for `label ∈ {hzd8-avd0.50, hzd8-avd0.75, hzd8-avd1.00}` and
+  `N ∈ {9..16}` (24 files), each non-empty. The diagnostic driver
+  asserts this before computing observables. Not a scientific anchor
+  — protects against path / labeling errors.
 
-### Cautious form (outcome discrimination)
+### Operational definitions — pre-committed
 
 The decision is made on the **paired-seed b>50 vector** at
 w ∈ {0.5, 0.75, 1.0} for seeds 9..16, plus the v0.28
-H5 / H6 / H7 mechanism classification re-run on those seeds.
+H5 / H6 / H7 / H8 mechanism classification re-run on those seeds.
 
 Define `B(w)` = aggregate b>50 across seeds 9..16 at weight w.
-Define the v0.27 / v0.28 dip threshold as `B(0.75) < B(0.5) − 4`
-(strict deficit clear of single-seed noise; the v0.27 / v0.28
-deficit was 9, well above this threshold).
+
+Define the **shared `dip_present` predicate** (used by every cautious
+hypothesis below):
+
+```
+dip_present := B(0.75) <= B(0.5) − 5  AND  B(0.75) <= B(1.0) − 5
+```
+
+I.e., w=0.75 is a strict valley with at least a 5-birth aggregate
+margin against both neighbors. Rationale:
+
+- A 5-birth aggregate deficit across 8 seeds is the cleanest single-
+  digit threshold above plausible single-seed noise (the v0.28
+  per-seed deltas had max magnitude 5 on a single seed; a 5-birth
+  *aggregate* requires either two seeds dropping by ~3 each or a
+  broader pattern).
+- Requiring the deficit against **both** neighbors (not just w=0.5)
+  ensures the dip is a true valley shape rather than the asymmetric
+  shoulder observed on (1..8) (where the deficit was 9 against w=0.5
+  but only 3 against w=1.0). On the (1..8) seed set this stricter
+  predicate would *not* fire — `B(0.75) − B(1.0) = 89 − 92 = −3 > −5`.
+  v0.29 is therefore deliberately set up to require a cleaner
+  reproduction than the v0.28 result itself satisfied.
+- Integer-valued thresholds: `≤ B(neighbor) − 5` avoids the off-by-one
+  ambiguity of `< B(neighbor) − 4` (the two are equivalent for
+  integers but the former is clearer).
+
+### Cautious form (outcome discrimination)
+
+H9 / H10 / H11 / H12 partition the outcome space by construction
+(the conjuncts on `dip_present` and on the v0.28 classifier verdict
+are mutually exclusive given v0.28's tie-break rules):
 
 - **H9 (Outcome α — sample artefact, no dip).** **FIRES iff**
-  **NOT** `B(0.75) < B(0.5) − 4` AND **NOT** `B(0.75) < B(1.0) − 4`.
-  I.e., w=0.75 is not the strict aggregate minimum on seeds 9..16
-  (within noise tolerance). Reading: 1..8 dip was sample-specific.
+  **NOT** `dip_present`. I.e., w=0.75 is not a strict valley on
+  seeds 9..16. Reading: the (1..8) dip was sample-specific; the
+  question closes.
 - **H10 (Outcome β — stochastic seed-concentrated mechanism).**
-  **FIRES iff** `B(0.75) < B(0.5) − 4` AND the v0.28 driver
-  classification on seeds 9..16 returns either "TAIL-SEED CRASH (H6)"
-  or "ROUTING-LINKED TAIL CRASH" (i.e., v0.28's H6 fires). Reading:
-  the dip is real but stochastically concentrated on a small subset
-  of seeds; the specific seeds differ from (1, 5).
+  **FIRES iff** `dip_present` AND the v0.28 driver classification
+  on seeds 9..16 returns either "TAIL-SEED CRASH (H6)" or
+  "ROUTING-LINKED TAIL CRASH (H5+H6)" (i.e., v0.28's H6 fires).
+  Reading: the dip is real but stochastically concentrated on a
+  small subset of seeds; the specific seeds differ from (1, 5).
 - **H11 (Outcome γ — broad uniform regime).** **FIRES iff**
-  `B(0.75) < B(0.5) − 4` AND the v0.28 driver classification on seeds
-  9..16 returns "UNIFORM POPULATION-WIDE DEGRADATION (H7)". Reading:
-  the broad-population reading the (1..8) set was unable to support is
+  `dip_present` AND the v0.28 driver classification on seeds 9..16
+  returns "UNIFORM POPULATION-WIDE DEGRADATION (H7)". Reading: the
+  broad-population reading the (1..8) set was unable to support is
   real; the (hazard, weight, influx) grid expansion deferred since
   v0.27 is warranted.
 - **H12 (Outcome δ — ambiguous / mixed).** **FIRES iff**
-  `B(0.75) < B(0.5) − 4` AND none of v0.28's H5 / H6 / H7 fires (i.e.,
-  v0.28 returns "STATISTICAL NOISE (H8 fallback)"), OR the
-  classification fires "ROUTING-THRESHOLD FLIP (H5)" alone (a
-  signature distinct from the (1..8) result). Reading: the dip is
-  real on this seed stream but the mechanism signature is different
-  from the (1..8) set; the dip is more sample-noisy than v0.28
-  framed it.
+  `dip_present` AND the v0.28 driver returns either
+  "STATISTICAL NOISE (H8 fallback)" or "ROUTING-THRESHOLD FLIP (H5)"
+  alone. Reading: the dip is real on this seed stream but the
+  mechanism signature is different from the (1..8) set; the dip is
+  more sample-noisy than v0.28 framed it.
 
-H9 / H10 / H11 / H12 are designed to **partition the outcome space**:
-exactly one fires by construction (the conjuncts are mutually
-exclusive given the v0.28 classifier's tie-break rules). If none
+By construction exactly one of H9 / H10 / H11 / H12 fires. If none
 fires the operational definitions are at fault and the diagnostic
 must be re-evaluated — halt.
 
