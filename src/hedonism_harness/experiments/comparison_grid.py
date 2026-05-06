@@ -1226,6 +1226,19 @@ V0_31_TIGHT_W_ARMS: tuple[Arm, ...] = tuple(
 )
 
 
+# v0.32 — tight h*=8 hazard-axis reproducibility audit on seeds 9..16. Literal
+# 4-arm slice of V0_25_ARMS at influx=1.0 across hazards {0, 4, 8, 12}.
+# Substrate: hazard_avoidance_weight=None (true v0.25 substrate, pre-v0.26
+# default avoidance behaviour). The H1c semantic determinism anchor pins
+# hzd=8/seeds 9..16/B=96 against v0.30 stream 2 explicit-w=1.0; failure halts
+# the audit. Classifier slice {h=4, h=8, h=12} maps to (0.50, 0.75, 1.00)
+# slots; h=0 is descriptive baseline only.
+# Pre-reg: [[docs/experiments/fear_hunger_v0.32.md]].
+V0_32_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
+    arm for arm in V0_25_ARMS if arm.label.endswith("-influx-1.0")
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
