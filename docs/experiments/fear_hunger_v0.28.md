@@ -636,18 +636,20 @@ The v0.28 result sharpens the v0.29 question landscape:
   byte-identical before and after.
 - **Diagnostic driver:** ~310 LOC in
   `scripts/v0.28_trajectory_diagnostic.py`. Pure consumer of the
-  on-disk events.jsonl artifacts; no new sweep, no production-code
-  changes, no new arms.
+  on-disk events.jsonl artifacts; no new sweep, no new arms, no
+  simulation-mechanics changes.
 - **Tests:** +21 in `tests/test_trajectory_diagnostic_v0_28.py`
   (synthetic loader + bucket coverage; H1 / H2 invariants on a real
   artifact; H9 anchor identity on all 3 weights × 8 seeds = 24
   runs). Suite 716 → 737.
 - **Wall time:** diagnostic driver runs in < 1s on 24 events.jsonl
   files (~2400 events each).
-- **No changes** to `core/`, `model.py`,
-  `experiments/fear_hunger_chamber.py`,
-  `experiments/comparison_grid.py`,
-  `policies/gradient_policy.py`, or `policies/hedonism_policy.py`.
+- **No simulation-mechanics changes; no `core/` / `model.py` /
+  `experiments/fear_hunger_chamber.py` / `experiments/comparison_grid.py` /
+  `policies/gradient_policy.py` / `policies/hedonism_policy.py`
+  changes.** Source additions are limited to analysis helpers in
+  `experiments/population_dynamics.py` plus the diagnostic script
+  and tests.
 - **CI gate at handoff time:**
   ```
   uv run ruff check .                           ok
