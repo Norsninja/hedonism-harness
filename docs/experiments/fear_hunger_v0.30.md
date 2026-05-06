@@ -1,6 +1,7 @@
 # v0.30 — tight w*=0.75 small-margin robustness audit (single target)
 
-**Status:** pre-registration; not yet executed.
+**Status:** executed 2026-05-06; **H6 WEAK REPRODUCTION fires.**
+Aggregate Δ_low=+6, Δ_high=+1; `n_favoring=7/8`, `n_strict_favoring=0/8`.
 **Date:** 2026-05-06
 **Branch:** `claude/v0.30-small-margin-robustness-audit`
 **Predecessors:** v0.21..v0.27 (chamber × hazard × influx × weight
@@ -415,3 +416,228 @@ from 748 to ~770.
 - [[scripts/v0.28_trajectory_diagnostic.py]] — `DiagnosticConfig` /
   `load_all` / `_band_aggregate_table` reused by v0.30 audit.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework".
+
+---
+
+## Results
+
+**Status:** executed 2026-05-06. 24 fresh runs on tight_gradient × seeds
+9..16 × `V0_30_TIGHT_W_ARMS` written to
+`runs/fear-hunger-v0.30-tight_gradient/`. Audit driver
+(`scripts/v0.30_audit.py`) consumed the artifacts and applied the
+4-tier robustness partition. Full per-seed report:
+`runs/fear-hunger-v0.30-tight_gradient/audit.md`.
+
+### Headline
+
+**H6 — WEAK REPRODUCTION fires** on tight_gradient at w ∈ {0.5, 0.75, 1.0},
+seeds 9..16:
+
+| weight | B(w) = Σ b>50 |
+|-------:|--------------:|
+| 0.50 | 91 |
+| 0.75 | **97** |
+| 1.00 | 96 |
+
+- Δ_low  = B(0.75) − B(0.5)  = **+6**  (≥ 5; meets the H5 lower-side
+  threshold).
+- Δ_high = B(0.75) − B(1.0)  = **+1**  (sub-threshold for H5; meets
+  the H6 ≥ 1 minimum).
+- `n_favoring`        = **7/8**  (ties allowed).
+- `n_strict_favoring` = **0/8**  (descriptive only — see below).
+
+w=0.75 beats both neighbours on the fresh stream by directionally
+non-trivial margins, but the 0.75-vs-1.0 axis falls well short of the
+H5 ROBUST ≥ 5 threshold. **The methodological rule from v0.29
+explicitly prohibits promotion of the tight w*=0.75 finding to a
+mechanism on this verdict.**
+
+### Cross-stream agreement: both streams fire H6 WEAK under the v0.30 partition
+
+| stream      | seeds | B(0.5) | B(0.75) | B(1.0) | Δ_low | Δ_high |
+|-------------|------:|-------:|--------:|-------:|------:|-------:|
+| v0.27 source | 1..8 | 113 | 118 | 116 | +5 | +2 |
+| v0.30 fresh  | 9..16 | 91 | 97 | 96 | +6 | +1 |
+
+Both streams place the maximum at w=0.75; both have Δ_low in the
++5..+6 range and Δ_high in the +1..+2 range; **both fire H6 WEAK
+under the same 4-tier classifier**. Direction-consistent across two
+independent seed streams. But: in **neither stream** does the
+0.75-vs-1.0 advantage reach the H5 ≥ 5-birth bar that the
+methodological rule treats as "robust." The replication is honest
+and reassuring at the directional level; the magnitude is not.
+
+### The per-seed structure undermines even the WEAK aggregate reading
+
+The descriptive `n_strict_favoring = 0/8` exposes what the aggregate
+B(w) hides. Per-seed b>50 across the three weights:
+
+| seed | b50 @ 0.50 | b50 @ 0.75 | b50 @ 1.00 | Δ_low(seed) | Δ_high(seed) |
+|-----:|-----------:|-----------:|-----------:|------------:|-------------:|
+| 9 | 15 | 15 | 9 | +0 | **+6** |
+| 10 | 14 | 14 | 14 | +0 | +0 |
+| 11 | 11 | 11 | 11 | +0 | +0 |
+| 12 | 11 | 11 | 11 | +0 | +0 |
+| 13 | 8 | 14 | 19 | **+6** | **−5** |
+| 14 | 14 | 14 | 14 | +0 | +0 |
+| 15 |  8 |  8 |  8 | +0 | +0 |
+| 16 | 10 | 10 | 10 | +0 | +0 |
+
+Three observations:
+
+1. **Six of eight seeds (10, 11, 12, 14, 15, 16) are byte-identical
+   on b>50 across all three weights.** On these seeds the avoidance
+   weight has *no* effect on late-window productivity. They contribute
+   exactly 0 to every per-seed delta.
+2. **Seed 13 carries the entire +6 Δ_low advantage** (b50 = 8 / 14 /
+   19) — and *also* carries a −5 Δ_high deficit at the same time. On
+   seed 13, w=1.0 beats w=0.75 by 5 births, the H5 lower-side
+   threshold; under a single-seed view, seed 13 is closer to a
+   monotone-with-weight pattern than an interior-optimum pattern.
+3. **Seed 9 carries the entire +6 Δ_high advantage** (b50 = 15 / 15 /
+   9). On seed 9 the optimum sits at w ∈ {0.5, 0.75} (tie), not at a
+   true interior optimum at w=0.75.
+
+The aggregate Δ_high = +1 is therefore **the residual of two
+single-seed swings going in opposite directions**: seed 9 (+6 for
+w=0.75 over w=1.0) and seed 13 (−5 for w=0.75 vs w=1.0), with the
+other six seeds contributing exactly 0. The +1 net is statistical
+debris, not a stable signal.
+
+`n_strict_favoring = 0/8` was the exact case the descriptive
+observable was pre-committed to expose: high `n_favoring` (7 of 8)
+masks complete absence of strict per-seed preference. **Not a single
+seed in the fresh stream prefers w=0.75 strictly over both its
+neighbours.** The interior-optimum pattern is an aggregate-only
+phenomenon at this cell on this stream.
+
+### Routing channel — flat-then-drop, consistent with v0.27
+
+| weight | total_births | b>50 | hazard_entries | starvation | injury |
+|-------:|-------------:|-----:|---------------:|-----------:|-------:|
+| 0.50 | 169 | 91 | 40 | 85 | 0 |
+| 0.75 | 175 | 97 | 40 | 91 | 0 |
+| 1.00 | 172 | 96 | 36 | 85 | 0 |
+
+Hazard entries: 40 → 40 → 36 — flat at w ∈ {0.5, 0.75}, then a
+3-step drop at w=1.0. Same shape as v0.27 (40 → 40 → 34 → 32 → 30 in
+the 5-arm v0.27 fan). Injury deaths = 0 across all three weights —
+tight geometry protects against single-visit lethality regardless of
+weight, preserving the v0.26 / v0.27 finding. The tight chamber's
+band-resolved hazard exposure is concentrated entirely in band 0-49
+(40 / 40 / 36) and is zero in every later band; agents avoid the
+hazard zone after the founder generation.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `V0_30_TIGHT_W_ARMS` is a literal subset of `V0_27_ARMS` (instance identity) | **HOLDS.** `test_v0_30_tight_w_arms_are_literal_v0_27_subset`. |
+| H1b | Arm-object identity to `V0_29_ARMS` at the matched labels | **HOLDS.** `test_v0_30_tight_w_arms_share_arm_objects_with_v0_29_arms`. |
+| H2 | Sweep produces 24 events.jsonl files (artifact pre-flight) | **HOLDS.** `assert_artifacts_present` passes; audit driver loaded all 24. |
+| H3 | v0.27 / v0.28 / v0.29 prior tests pass after v0.30 additions | **HOLDS.** Suite 748 → 772 (+24 v0.30 tests); all green. |
+| H4 | Pre-v0.30 arm tuples unchanged | **HOLDS.** Pinned in `tests/test_comparison_grid_v0_30.py`. |
+| H5 | ROBUST: Δ_low ≥ 5 AND Δ_high ≥ 5 AND n_favoring ≥ 5 | **FAILS** on Δ_high = +1 (need ≥ 5). |
+| H6 | WEAK: Δ_low ≥ 1 AND Δ_high ≥ 1, NOT H5 | **FIRES.** Δ_low=+6, Δ_high=+1, both ≥ 1; H5 fails on Δ_high. |
+| H7 | FAILURE: none of H5 / H6 / H8 | N/A — H6 fires. |
+| H8 | REVERSAL: max(B(0.5), B(1.0)) − B(0.75) ≥ 5 | **FAILS.** max(91, 96) − 97 = −1; no neighbour beats w=0.75. |
+
+Pre-committed observation (v0.30 pre-reg): the v0.27 (1..8) source
+data itself fires H6 WEAK under the 4-tier classifier (Δ_low=+5
+just-meets, Δ_high=+2 sub-threshold). **The v0.30 fresh stream
+reproduces the WEAK verdict, not the ROBUST one.** This is the most
+honest possible reading of the audit: two streams agree the dip
+isn't a dip and the optimum sits at w=0.75 directionally, but
+neither stream produces a margin or per-seed pattern strong enough
+to call a mechanism.
+
+### What this means for the v0.27 tight w*=0.75 claim
+
+**Demoted, but not falsified.** Under the v0.29 methodological rule:
+
+- The v0.27 doc's H8 fired **at the boundary** with no margin. The
+  v0.30 audit replicates that boundary-firing pattern on a fresh
+  stream — and now we have two independent streams both firing WEAK
+  under the same partition.
+- The directional signal is real: in both streams, w=0.75 ≥ both
+  neighbours in aggregate b>50.
+- The magnitude is bounded: in neither stream does Δ_high reach the
+  ROBUST ≥ 5 threshold; in v0.30, Δ_high = +1 is residual noise from
+  two single-seed swings cancelling.
+- Per-seed preference is absent in both streams: v0.30 has
+  `n_strict_favoring = 0/8`; the v0.27 (1..8) data, by analogous
+  inspection of its source-doc per-seed table, also lacks strict
+  cross-weight preference on most seeds.
+
+**Safer phrasing for forward references** (to be applied to v0.27's
+"tight w*=0.75 +2-birth interior optimum" claim in v0.27 / v0.28 /
+v0.29 forward-mention sites if those docs are next-touched):
+
+> At 8 seeds per stream, tight_gradient productivity in
+> w ∈ {0.5, 0.75, 1.0} is mostly weight-insensitive at hazard=8: ≥
+> 6 of 8 seeds in the v0.30 fresh stream are byte-identical on b>50
+> across the three weights. Two independent seed streams (v0.27
+> 1..8 and v0.30 9..16) place w=0.75 at the aggregate maximum but
+> with sub-ROBUST margins (Δ_high=+2 and +1, both below the +5
+> threshold) and zero strict per-seed preference. The interior-
+> optimum claim is directionally reproducible but does NOT meet the
+> v0.29 robustness rule for promotion to a mechanism.
+
+### v0.31 candidates (per pre-reg decision rules)
+
+The v0.30 pre-reg's H6 → "third independent seed stream" suggestion
+is the canonical next step:
+
+- **(Highest priority)** Third stream on the same cell —
+  tight_gradient, h=8, w ∈ {0.5, 0.75, 1.0}, seeds 17..24 (24 runs,
+  ~5–7s). Question: does the small-margin directional signal compound
+  across three independent streams? Even if the per-seed pattern stays
+  weight-insensitive, three-stream directional agreement at the
+  aggregate would be more compelling than two-stream agreement. **The
+  methodological rule still does not promote a Weak verdict from a
+  single additional stream; this is calibration, not promotion.**
+- **(Lower priority)** Move to the v0.25 tight h*=8 hazard-axis audit
+  (the original v0.31 plan from the v0.30 handoff). Cell:
+  tight_gradient, h ∈ {0, 4, 8, 12}, influx=1.0, w=1.0, seeds 9..16
+  (32 runs).
+- **Do NOT** introduce a finer weight grid (w ∈ {0.6, 0.7, 0.75, 0.8,
+  0.9}) — the H5 ROBUST condition is the gate for that, and it didn't
+  fire.
+
+### Implementation summary
+
+- **Library extension (additive only):** `V0_30_TIGHT_W_ARMS = tuple(
+  arm for arm in V0_27_ARMS if arm.label in (...))` in
+  `experiments/comparison_grid.py`. Substrate-byte-identity to
+  V0_27_ARMS / V0_29_ARMS by-construction.
+- **Sweep:** `scripts/v0.30_sweep.py` mirrors the v0.29 sweep
+  line-for-line with `chamber="tight_gradient"`,
+  `batch_id="fear-hunger-v0.30-tight_gradient"`,
+  `arms=V0_30_TIGHT_W_ARMS`. 24 runs in ~8.5s.
+- **Audit driver:** `scripts/v0.30_audit.py` — pure-function
+  `evaluate_audit(b50_at, seeds) -> AuditOutcome` 4-tier classifier;
+  reuses v0.28 `load_all`, `assert_artifacts_present`, and
+  `_band_aggregate_table` for supporting trajectory tables. The v0.28
+  H5/H6/H7 dip-classifier is **not** invoked. ~340 LOC.
+- **Tests:** `tests/test_comparison_grid_v0_30.py` (12 tests —
+  shape / pinning / H1 / H1b / H4 invariants);
+  `tests/test_v0_30_audit.py` (12 tests — synthetic fixtures for
+  each of H5 / H6 / H7 / H8, threshold boundaries, priority ordering,
+  and the v0.27-source-data → H6 WEAK pre-committed observation).
+  Suite: **748 → 772** (+24 v0.30 tests); all green.
+- **No simulation-mechanics changes; no `core/` / `model.py` /
+  `experiments/fear_hunger_chamber.py` /
+  `experiments/population_dynamics.py` /
+  `policies/gradient_policy.py` / `policies/hedonism_policy.py` /
+  `scripts/v0.28_*.py` / `scripts/v0.29_*.py` changes.** Source
+  additions are limited to one literal-subset arm tuple plus the
+  v0.30 sweep / audit / tests.
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                           ok
+  uv run ruff format --check .                  ok
+  uv run pytest                                 772 passed
+  uv run python scripts/core_smoke_test.py      ok
+  uv run python scripts/v0.30_sweep.py          done in 8.5s
+  uv run python scripts/v0.30_audit.py          H6 WEAK REPRODUCTION
+  ```

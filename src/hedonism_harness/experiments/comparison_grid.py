@@ -1203,6 +1203,17 @@ V0_29_ARMS: tuple[Arm, ...] = tuple(
 )
 
 
+# v0.30 — tight w*=0.75 small-margin robustness audit on a fresh seed stream.
+# Same 3-arm literal slice of V0_27_ARMS as V0_29_ARMS at the same labels
+# (the substrate arm objects are shared); the sweep differs from v0.29 in
+# the chamber (tight_gradient instead of food_ladder) and from v0.27 in
+# the seed set (9..16 instead of 1..8). Pre-reg:
+# [[docs/experiments/fear_hunger_v0.30.md]].
+V0_30_TIGHT_W_ARMS: tuple[Arm, ...] = tuple(
+    arm for arm in V0_27_ARMS if arm.label in ("hzd8-avd0.50", "hzd8-avd0.75", "hzd8-avd1.00")
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
