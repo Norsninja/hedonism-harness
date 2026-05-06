@@ -312,7 +312,7 @@ Tie-break for all "lineage selection by maximum count" operations:
 - Extension reducer 1 (`lineage_replay_v0_39_extension.py`): ~2s.
 - Extension reducer 2
   (`lineage_survival_replay_v0_39_extension.py`): ~2s.
-- v0.39 reducer (`leader_advantage_fresh_replay.py`): ~3s.
+- v0.39 reducer (`v0_39_leader_advantage_fresh_replay.py`): ~3s.
 - Total v0.39 wall time: **~37s** end-to-end on a fresh corpus.
 
 ## Observables — pre-committed before reading the data
@@ -692,7 +692,7 @@ Halt conditions:
   - `scripts/lineage_survival_replay_v0_39_extension.py` (~120 LOC)
     — thin wrapper importing v0.35 helpers; runs over v0.39-only
     STREAM_CONFIGS; writes to `runs/lineage-v0.35-fresh/`.
-  - `scripts/leader_advantage_fresh_replay.py` (~450 LOC) — v0.39
+  - `scripts/v0_39_leader_advantage_fresh_replay.py` (~450 LOC) — v0.39
     reducer; imports v0.34 + v0.35 + v0.38 helpers; computes fresh
     + pooled `mean_leader_advantage`; evaluates two-layer verdict.
 - **New (tests/):**
@@ -703,7 +703,7 @@ Halt conditions:
     schema match, halt-on-missing-corpus.
   - `tests/test_lineage_survival_replay_v0_39_extension.py` (~150
     LOC, ~12 tests) — same structure.
-  - `tests/test_leader_advantage_fresh_replay.py` (~500 LOC, ~30
+  - `tests/test_v0_39_leader_advantage_fresh_replay.py` (~500 LOC, ~30
     tests) — per-run computation, fresh-vs-pooled aggregation,
     indicator pass logic, three-way fresh verdict, three-way
     pooled verdict, combined classification lookup, all locked
@@ -740,11 +740,11 @@ Halt conditions:
 - `scripts/v0.39_sweep.py`: ~80 LOC.
 - `scripts/lineage_replay_v0_39_extension.py`: ~120 LOC.
 - `scripts/lineage_survival_replay_v0_39_extension.py`: ~120 LOC.
-- `scripts/leader_advantage_fresh_replay.py`: ~450 LOC.
+- `scripts/v0_39_leader_advantage_fresh_replay.py`: ~450 LOC.
 - `tests/test_v0_39_sweep.py`: ~80 LOC.
 - `tests/test_lineage_replay_v0_39_extension.py`: ~150 LOC.
 - `tests/test_lineage_survival_replay_v0_39_extension.py`: ~150 LOC.
-- `tests/test_leader_advantage_fresh_replay.py`: ~500 LOC.
+- `tests/test_v0_39_leader_advantage_fresh_replay.py`: ~500 LOC.
 - This doc: ~700 LOC.
 
 Total v0.39: ~2,350 LOC. Tests should bring the suite from 1039 to
@@ -786,7 +786,7 @@ uv run python scripts/core_smoke_test.py  ok
 - [[scripts/lineage_survival_replay.py]] — v0.35 reducer;
   **imported by v0.39 extension wrapper without modification**.
 - [[scripts/leader_advantage_replay.py]] — v0.38 reducer;
-  **imported by v0.39 leader_advantage_fresh_replay.py without
+  **imported by v0.39 v0_39_leader_advantage_fresh_replay.py without
   modification**. Locked driver observable comes from this module.
 - [[docs/specs/v0.2_reflex_cell_spec.md]] §"Comparison framework".
 
@@ -794,6 +794,354 @@ uv run python scripts/core_smoke_test.py  ok
 
 ## Results
 
-_To be appended after the v0.39 sweep + extension reducers + reducer
-have executed. Locked phrases above will fire verbatim on the
-combined classification's row._
+**Status:** executed 2026-05-06. Sweep + extension reducers + v0.39
+reducer ran end-to-end on the fresh corpus (32 runs at seeds 25..32).
+Outputs under `runs/lineage-v0.39/` (gitignored). Sealed v0.34 +
+v0.35 OLD outputs (96 rows each) byte-readable; fresh extension
+outputs (32 rows each) re-anchored against derived per-run values
+without halts. All invariants (H1, H1b, H2a, H2b, H2c, H2d, H2e,
+H2f, H3, H4) held.
+
+### Headline
+
+**Combined classification: H5_POOLED_ONLY.** Fresh stream verdict:
+**H6_FRESH** (neither monotone-up nor monotone-down with spread≥1.5).
+Pooled (128-run) verdict: **H5_POOLED**.
+
+> **Locked H5_POOLED_ONLY phrase:** "The fresh seed stream (25..32)
+> does not show monotone-up + spread->=1.5 on mean_leader_advantage.
+> The pooled 128-run effect persists on the strength of the 96 old
+> runs alone. v0.38's H5 LEADER-ADVANTAGE-AMPLIFIED is not reproduced
+> on the fresh stream; it remains a same-corpus correlational finding
+> pending further calibration."
+
+The fresh-stream verdict is the PRIMARY headline per the pre-reg's
+locked rule. Pooled persistence is reported as supporting context but
+does NOT override the fresh failure: the larger old corpus does not
+"drown" the new test under the locked combined-classification logic.
+
+### Per-hazard fresh stream (n=8 each, seeds 25..32)
+
+| hazard | n_runs | n_wad_true | mean_leader_advantage |
+|-------:|------:|----------:|---------------------:|
+| 0      | 8     | 5         | **6.375**            |
+| 4      | 8     | 3         | 5.781                |
+| 8      | 8     | 3         | 5.906                |
+| 12     | 8     | 3         | 5.500                |
+
+Signed spread (`mean(12) − mean(0)`) = **−0.875 ticks** (NEGATIVE).
+Not monotone non-decreasing (h=0 to h=4 declines). Not monotone
+non-increasing (h=4 to h=8 rises). Locked rule excludes both
+H5_FRESH and H7_FRESH; H6_FRESH fires by default.
+
+### Per-hazard pooled corpus (n=32 each = 24 old + 8 fresh)
+
+| hazard | n_old | n_fresh | n_runs | mean_leader_advantage |
+|-------:|------:|-------:|------:|---------------------:|
+| 0      | 24    | 8      | 32    | **4.555**            |
+| 4      | 24    | 8      | 32    | 6.977                |
+| 8      | 24    | 8      | 32    | 7.875                |
+| 12     | 24    | 8      | 32    | **8.117**            |
+
+Signed spread = **+3.562**. Strict monotone non-decreasing across all
+four hazards. Spread clears the locked 1.5 bar by 2.4×. Pooled
+verdict fires H5_POOLED.
+
+### Why H5_POOLED_ONLY fires (not H5_FRESH_AND_POOLED)
+
+- **Fresh stream's mean_leader_advantage is highest at h=0** (6.375),
+  not at h=12 (5.500). The hazard-amplification pattern v0.38 observed
+  on the v0.34 corpus does NOT reproduce on this fresh stream. h=0's
+  fresh mean (6.375) is also notably ABOVE the pooled-h=0 mean (4.555),
+  reflecting that the fresh stream's hazard=0 runs are more
+  leader-favoured than v0.38's old hazard=0 runs.
+- **The pooled verdict still fires** because adding 8 fresh runs at
+  each hazard to the 24 old runs preserves the underlying old-corpus
+  monotone structure: the fresh signal does not invert the pattern
+  strongly enough to drag the pooled means out of monotone-up
+  ordering. Pooled spread shrinks (5.042 → 3.562) but remains well
+  above the 1.5 bar.
+- **The locked combined-classification rule prefers fresh failure as
+  the headline.** Per the pre-reg, "fresh-stream verdict is the
+  PRIMARY headline regardless of pooled outcome." This prevents the
+  larger old corpus from drowning the new test.
+
+### Indicator details
+
+| layer    | monotone_up | monotone_down | signed_spread | spread≥1.5 | reverse_spread≥1.5 | verdict     |
+|----------|:-----------:|:-------------:|--------------:|:-----------:|:-------------------:|-------------|
+| Fresh    | False       | False         | -0.875        | False       | False               | **H6_FRESH** |
+| Pooled   | True        | False         | +3.562        | True        | False               | **H5_POOLED** |
+
+### Cross-stream observation: v0.35 / v0.34 patterns also do NOT replicate
+
+The v0.39 fresh extension reducers wrote
+`runs/lineage-v0.34-fresh/pool_summary.csv` and
+`runs/lineage-v0.35-fresh/pruning_summary.csv`. These are NOT v0.39
+verdict inputs (out of pre-reg scope) but they are descriptively
+important for interpreting the H5_POOLED_ONLY result:
+
+**v0.34 lens on fresh stream (from `lineage-v0.34-fresh/pool_summary.csv`):**
+
+| hazard | n_runs | total_b50 | mean_top_lineage_b50_share |
+|-------:|------:|---------:|---------------------------:|
+| 0      | 8     | 106      | 0.666                      |
+| 4      | 8     | 105      | 0.632                      |
+| 8      | 8     | 106      | 0.669                      |
+| 12     | 8     | 104      | 0.683                      |
+
+Compare to v0.34 OLD (24 seeds): 0.635 → 0.728 → 0.759 → 0.785
+(monotone up). Fresh stream's `mean_share` is **non-monotone**
+(0.666 / 0.632 / 0.669 / 0.683) and the spread is much smaller
+(+0.017 vs +0.150 OLD). The "lineage concentration tightens with
+hazard" pattern from v0.34 does not cleanly reproduce on the fresh
+stream either.
+
+**v0.35 lens on fresh stream (from `lineage-v0.35-fresh/pruning_summary.csv`):**
+
+| hazard | n_runs | wad_rate | mean_n_lineages_with_post50_birth |
+|-------:|------:|--------:|----------------------------------:|
+| 0      | 8     | **0.625** | 2.625                           |
+| 4      | 8     | 0.375   | 2.375                             |
+| 8      | 8     | 0.375   | 2.250                             |
+| 12     | 8     | 0.375   | 2.250                             |
+
+Compare to v0.35 OLD: wad_rate 0.458 / 0.708 / 0.750 / 0.792
+(monotone up). The fresh stream **inverts** this: h=0 has the
+HIGHEST wad-rate (0.625), and h=4/h=8/h=12 are all 0.375 (flat). The
+v0.35 H6 EXPANSION-SUPPORTED ≡ EARLY-LEADER CONTINUITY pattern does
+not reproduce on the fresh stream.
+
+This is a striking cross-observable consistency: the lineage-axis
+hazard-amplification patterns we observed across v0.34 / v0.35 / v0.38
+all weaken or vanish on this fresh stream (n=8 per hazard). The
+v0.39 verdict only adjudicates v0.38's H5 driver, but the
+descriptive cross-observable picture is consistent: fresh-stream
+calibration does not reproduce the old-corpus lineage-axis
+hazard-effects in general, not just v0.38's specific driver.
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | v0.34 + v0.35 + v0.38 helpers imported additively; no modification | **HOLDS.** Imports succeed; constants byte-match. |
+| H1b | V0_39_TIGHT_H_ARMS additive constant; existing arm tuples unchanged | **HOLDS.** Tests assert element-wise identity to V0_32_TIGHT_H_ARMS / V0_33_TIGHT_H_ARMS / V0_25_ARMS literal slice. |
+| H2a | Per-fresh-run derived top_lineage_id matches v0.34-fresh anchor | **HOLDS.** All 32 fresh runs match. |
+| H2b | Per-fresh-run derived (leader_lineage_id_at_tick_50, eventual_top_lineage_id) match v0.35-fresh anchors | **HOLDS.** All 32 fresh runs match both columns. |
+| H2c | runs/lineage-v0.34/run_summary.csv exists with 96 rows | **HOLDS.** |
+| H2d | runs/lineage-v0.35/pre_post_dominance.csv exists with 96 rows | **HOLDS.** |
+| H2e | Fresh runs have exactly 5 founders | **HOLDS.** Inherited from v0.34's `assign_founder_lineages`. |
+| H2f | Fresh runs have n_ticks == 200 | **HOLDS.** All 32 fresh runs pass. |
+| H3 | v0.21..v0.38 prior tests pass after v0.39 additions | **HOLDS.** Suite **1039 → 1101** (+62 v0.39 tests; 6 skips are v0.23 / v0.27 corpus-dependent, non-regression); all green. |
+| H4 | Pre-v0.39 surface byte-unchanged | **HOLDS.** Zero edits to `lineage_replay.py`, `lineage_survival_replay.py`, `trait_replay.py`, `lock_in_timing_replay.py`, `leader_advantage_replay.py`, prior `v0.NN_*.py`, prior arm tuples in `comparison_grid.py`, `core/`, `model.py`, chamber / population / policy modules. Only `V0_39_TIGHT_H_ARMS` constant added. |
+| Layer-1 (fresh) verdict | H5_FRESH / H6_FRESH / H7_FRESH | **H6_FRESH FIRES.** Spread −0.875; not monotone in either direction. |
+| Layer-2 (pooled) verdict | H5_POOLED / H6_POOLED / H7_POOLED | **H5_POOLED FIRES.** Spread +3.562 ≥ 1.5; strict monotone up. |
+| Combined classification | one of 7 cells | **H5_POOLED_ONLY FIRES.** Fresh failure with pooled persistence. |
+
+### Secondary observations (NOT pre-committed; descriptive only)
+
+These are striking but explicitly outside the verdict logic. They
+must not be promoted to mechanism claims without further
+calibration.
+
+**1. Fresh-stream h=0 is the leader-advantage outlier.** The fresh
+stream's mean_leader_advantage at h=0 (6.375) is meaningfully higher
+than the old-corpus h=0 (3.948). The h=4..h=12 fresh means cluster
+tightly around 5.5–5.9. This suggests the fresh stream's hazard=0
+runs happened to have unusually leader-favoured early dynamics —
+possibly a sampling-noise artifact at n=8, possibly a real
+seed-dependent structural feature. With 5/8 of the h=0 fresh runs
+having `wad=True` (vs 3/8 at higher hazards), this is consistent
+with the fresh-stream h=0 sample favouring early-leader-becomes-
+winner outcomes.
+
+**2. wad_rate inversion on fresh stream.** v0.35's locked observation
+(wad_rate 0.458 → 0.792 on the OLD corpus) inverts on the fresh
+stream (0.625 → 0.375). This is the most striking single deviation
+across the lineage-axis arc on this fresh stream. The v0.35 H6
+verdict (early-leader continuity) does NOT reproduce here.
+
+**3. Pooled corpus retains the old-corpus signal direction.** Adding
+8 fresh runs per hazard to the 24 old runs shifts pooled means but
+does not flip the monotone direction. Old-corpus h=0 (mean 3.948)
+plus fresh h=0 (6.375) gives pooled h=0 (4.555) — pulled UP by the
+fresh sample. Old-corpus h=12 (8.990) plus fresh h=12 (5.500) gives
+pooled h=12 (8.117) — pulled DOWN. The pooled spread shrinks from
++5.042 (old alone) to +3.562 (pooled), still clearing the 1.5 bar.
+
+**4. Cross-stream cautious reading.** Combining the descriptive v0.34
++ v0.35 + v0.38 fresh-extension observations with v0.39's primary
+verdict, the lineage-axis correlational story we built across
+v0.34..v0.38 is **single-stream-specific** on the OLD 96-run corpus.
+The fresh n=8/hazard stream does not reproduce the monotone-up
+hazard-effects on `top_lineage_b50_share`, on `wad_rate`, or on
+`leader_advantage`. The strong monotone signals appear to depend
+on the specific seed stream OR the n=24 sample size dampening
+sampling noise. v0.40+ candidates: a SECOND fresh stream
+(seeds 33..40), and / or per-stream variance decomposition on the
+existing four streams (v0.25 1..8, v0.32 9..16, v0.33 17..24, v0.39
+25..32).
+
+### Caveats — locked, fired
+
+- **Fresh stream is n=8 per hazard, conservative.** The 1.5 spread
+  threshold reused from v0.38 (n=24 per hazard) is a more demanding
+  bar. A null fresh-stream result does NOT prove the v0.38 effect is
+  spurious. With 1.5 spread translating to roughly half a standard
+  error of the mean at typical observed run-level variance, a real
+  underlying effect of magnitude +5 (v0.38) would still likely fire
+  H5_FRESH on n=8 — the fresh-stream's failure to fire is therefore
+  evidence against the effect being homogeneous across seed streams,
+  not just against its absolute magnitude. **The fresh stream's
+  signed spread is NEGATIVE (−0.875)** — even noise-only would fire
+  H5_FRESH ~50% of the time on a real positive effect. The fresh
+  stream's failure is more striking than a marginal noise-driven
+  null.
+- **Pooled spread re-uses the 1.5 bar without scaling.** Confirmed:
+  the pooled verdict fires at +3.562, well clear of the 1.5 bar.
+- **No mechanism promotion** even in the H5_POOLED-fires layer. The
+  pooled effect remains correlational on a single 96-run-dominated
+  corpus. The fresh-stream non-reproduction REMOVES the path to a
+  cross-stream-reproducible-correlational tier; mechanism promotion
+  would require fresh-stream replication, which v0.39 has now ruled
+  out at this scale.
+- **Single fresh stream is not sufficient for definitive
+  non-reproduction either.** The fresh stream is n=8 per hazard,
+  small. A v0.40 SECOND fresh stream (seeds 33..40) would help
+  adjudicate noise-vs-absence as the explanation for v0.39's null.
+  Until then, the headline is "**not reproduced on the fresh
+  stream**" — not "**effect ruled out**."
+
+### Cautious framing — locked dual phrasing
+
+> **The v0.39 fresh-stream calibration failed to reproduce v0.38's
+> H5 LEADER-ADVANTAGE-AMPLIFIED.** v0.38's same-corpus correlational
+> finding does NOT survive an independent n=8/hazard fresh stream.
+> The pooled 128-run effect persists on the strength of the OLD 96
+> runs alone.
+
+> **The lineage-axis arc (v0.34..v0.38) is now flagged as
+> single-stream-correlational.** Cross-stream reproducibility is NOT
+> demonstrated for any of the v0.34, v0.35, or v0.38 monotone
+> observables on this fresh stream (descriptive cross-anchor
+> observations from the v0.34 / v0.35 fresh extensions). v0.36's
+> founder-trait finding (sensor_radius dominant, hazard-flat) was
+> NOT tested on the fresh stream and remains unaffected by v0.39.
+> v0.37's stabler-early-leadership finding was likewise not tested.
+
+### Implementation summary
+
+- **New (src/, +1 constant):** `V0_39_TIGHT_H_ARMS` added to
+  `src/hedonism_harness/experiments/comparison_grid.py` (mirrors
+  v0.32 / v0.33 binding pattern; element-wise identical to
+  V0_32_TIGHT_H_ARMS by construction).
+- **New scripts:**
+  - `scripts/v0.39_sweep.py` (~85 LOC) — sweep driver; 32 runs at
+    seeds 25..32; ~10s wall time.
+  - `scripts/lineage_replay_v0_39_extension.py` (~150 LOC) — v0.34
+    extension; writes to `runs/lineage-v0.34-fresh/`.
+  - `scripts/lineage_survival_replay_v0_39_extension.py` (~180 LOC)
+    — v0.35 extension; anchors against fresh v0.34 output; writes
+    to `runs/lineage-v0.35-fresh/`.
+  - `scripts/v0_39_leader_advantage_fresh_replay.py` (~600 LOC) —
+    v0.39 reducer; computes fresh + pooled `mean_leader_advantage`;
+    evaluates two-layer verdict + 7-cell combined classification.
+- **New tests:**
+  - `tests/test_v0_39_sweep.py` (~80 LOC, 8 tests).
+  - `tests/test_lineage_replay_v0_39_extension.py` (~160 LOC,
+    12 tests).
+  - `tests/test_lineage_survival_replay_v0_39_extension.py`
+    (~150 LOC, 12 tests).
+  - `tests/test_v0_39_leader_advantage_fresh_replay.py` (~410 LOC,
+    30 tests).
+- **Pre-reg-locked constants in code:** `LEADER_TICK = 50`,
+  `N_NON_LEADERS = 4`, `EXPECTED_N_TICKS = 200`,
+  `SPREAD_THRESHOLD = 1.5`, `FRESH_SEEDS = (25..32)`,
+  `EXPECTED_OLD_ROW_COUNT = 96`, `EXPECTED_FRESH_ROW_COUNT = 32`.
+- **Two-tier re-anchor stack:** sealed v0.34 + v0.35 OLD outputs
+  (96 rows; halt on missing or row-count drift) + fresh-extension
+  v0.34 + v0.35 outputs (32 rows; per-run cross-check on three
+  columns).
+- **v0.38 sealed per_run.csv** read for pooled aggregation; row
+  count asserted to be 96.
+- **Zero edits** to `scripts/lineage_replay.py`,
+  `scripts/lineage_survival_replay.py`, `scripts/trait_replay.py`,
+  `scripts/lock_in_timing_replay.py`,
+  `scripts/leader_advantage_replay.py`, prior `v0.NN_*.py`, prior
+  arm tuples (V0_25_ARMS, V0_27_ARMS, V0_31_TIGHT_W_ARMS,
+  V0_32_TIGHT_H_ARMS, V0_33_TIGHT_H_ARMS), `src/` runtime, or any
+  pre-v0.39 module.
+- **CI gate at handoff time:**
+
+  ```
+  uv run ruff check .                                              ok
+  uv run ruff format --check .                                     ok
+  uv run pytest                                                    1101 passed,
+                                                                   6 skipped
+                                                                   (skips:
+                                                                   v0.23/v0.27
+                                                                   corpus
+                                                                   artifacts;
+                                                                   non-regression)
+  uv run python scripts/core_smoke_test.py                         ok
+  uv run python scripts/v0.39_sweep.py                             32 runs / 10.3s
+  uv run python scripts/lineage_replay_v0_39_extension.py          ok
+  uv run python scripts/lineage_survival_replay_v0_39_extension.py ok
+  uv run python scripts/v0_39_leader_advantage_fresh_replay.py     H5_POOLED_ONLY
+  ```
+
+## Conclusion
+
+v0.39 fires **H5_POOLED_ONLY** on the fresh seed stream (25..32) +
+pooled (128-run) corpus. The fresh-stream verdict is **H6_FRESH**:
+`mean_leader_advantage` per hazard on the fresh stream
+(6.375 → 5.781 → 5.906 → 5.500) is non-monotone with a NEGATIVE
+signed spread (−0.875), failing both monotone-up and monotone-down
+locked rules. The pooled verdict is **H5_POOLED**:
+`mean_leader_advantage` on the 128-run pooled corpus
+(4.555 → 6.977 → 7.875 → 8.117) is strict monotone non-decreasing
+with spread +3.562, well above the 1.5 bar — but persistence is
+carried entirely by the OLD 96 runs.
+
+The locked H5_POOLED_ONLY phrase is the verdict:
+
+> **"The fresh seed stream (25..32) does not show monotone-up +
+> spread->=1.5 on mean_leader_advantage. The pooled 128-run effect
+> persists on the strength of the 96 old runs alone. v0.38's H5
+> LEADER-ADVANTAGE-AMPLIFIED is not reproduced on the fresh stream;
+> it remains a same-corpus correlational finding pending further
+> calibration."**
+
+Decision:
+
+- **v0.38's H5 effect does NOT reproduce on a fresh seed stream.**
+  This is the discipline-canonical outcome: a single-stream
+  correlational finding has been tested cross-stream and failed.
+  The lineage-axis arc (v0.34..v0.38) is flagged as
+  **single-stream-correlational**.
+- **Mechanism promotion is blocked.** Even cross-stream
+  reproducible correlational evidence is not yet established for
+  the leader post-50 advantage; mechanism promotion (which would
+  require intervention design beyond v0.39's scope anyway) is
+  blocked at an earlier tier.
+- **Fresh-stream cross-observable picture is consistent.** v0.34's
+  `top_lineage_b50_share` and v0.35's `wad_rate` also fail to
+  reproduce monotone-up on this fresh stream (descriptive only;
+  not v0.39 verdict inputs). The pattern is broader than v0.38
+  alone.
+- **v0.40 candidates (per the pre-reg's deferred-list, refined by
+  the H5_POOLED_ONLY outcome):**
+  - **(e) Second fresh seed stream (seeds 33..40)** to disambiguate
+    "noise-driven null at n=8" vs "real cross-stream effect
+    absence." Discipline-canonical second-tier follow-up.
+  - **(f) Per-stream variance decomposition** on the existing four
+    streams (v0.25 1..8 / v0.32 9..16 / v0.33 17..24 / v0.39
+    25..32) — does the leader_advantage spread vary substantially
+    by stream? This would help characterise the v0.34/v0.35/v0.38
+    arc's cross-stream stability.
+  - **(b/c/d) v0.40 mortality / windowed-b50 / descendant-drift
+    candidates** are deferred indefinitely until the fresh-stream
+    calibration question is resolved. Decomposing a non-reproducing
+    effect risks chasing structure that doesn't survive cross-
+    stream replication.
+  - **HedonismPolicy and Mesa** remain deferred indefinitely.

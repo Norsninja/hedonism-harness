@@ -1251,6 +1251,19 @@ V0_33_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
 )
 
 
+# v0.39 — fresh-stream calibration of v0.38's H5 LEADER-ADVANTAGE-AMPLIFIED
+# on seeds 25..32. Literal 4-arm slice of V0_25_ARMS at influx=1.0 across
+# hazards {0, 4, 8, 12} — element-wise identical to V0_32_TIGHT_H_ARMS and
+# V0_33_TIGHT_H_ARMS by construction. The distinct binding name pins v0.39's
+# fresh-stream-calibration intent (first new sweep added since v0.34; tests
+# whether the v0.38 leader post-50 advantage effect reproduces on an
+# independent seed stream).
+# Pre-reg: [[docs/experiments/fear_hunger_v0.39.md]].
+V0_39_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
+    arm for arm in V0_25_ARMS if arm.label.endswith("-influx-1.0")
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
