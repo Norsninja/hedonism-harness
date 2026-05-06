@@ -1191,6 +1191,18 @@ V0_27_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.29 — food_ladder w=0.75 dip reproducibility on a fresh seed stream.
+# The arms are a literal 3-tuple slice of V0_27_ARMS at the dip-neighborhood
+# weights {0.5, 0.75, 1.0} (the v0.28 paired-comparison cells).
+# Substrate-byte-identity to V0_27_ARMS is by-construction (same Arm
+# instances) — the v0.29 sweep differs from v0.27 *only* in the seed set
+# (9..16 instead of 1..8). Pre-reg:
+# [[docs/experiments/fear_hunger_v0.29.md]].
+V0_29_ARMS: tuple[Arm, ...] = tuple(
+    arm for arm in V0_27_ARMS if arm.label in ("hzd8-avd0.50", "hzd8-avd0.75", "hzd8-avd1.00")
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
