@@ -207,8 +207,8 @@ def evaluate_audit(
     return AuditOutcome(
         hypothesis="H7",
         label=(
-            f"FAILURE / SAMPLE NOISE — w=0.75 ties or loses to a neighbour "
-            f"by < {thresholds.h8_neighbor_lead_min} births"
+            "FAILURE / SAMPLE NOISE — w=0.75 does not clear the weak "
+            "two-neighbour threshold and no reversal threshold fires"
         ),
         summary=summary,
         b_low=b_low,

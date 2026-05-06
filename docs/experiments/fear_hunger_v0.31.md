@@ -803,3 +803,22 @@ weight-axis one. Defer until the hazard-axis audit settles.
   uv run python scripts/v0.31_sweep.py          done in 7.9s
   uv run python scripts/v0.31_audit.py          H7_pool FAILURE
   ```
+
+## Conclusion
+
+v0.31 demotes the v0.27 tight w*=0.75 interior-optimum claim.
+
+The first two 8-seed streams showed weak aggregate directional agreement,
+but the third stream reversed the direction locally: B_3(0.75)=107 versus
+B_3(0.5)=108 and B_3(1.0)=109. In the 24-seed pool, w=0.75 still narrowly
+beats both neighbors on aggregate, but only by +10 over w=0.5 and +1 over
+w=1.0. Because Δ_high_pool=+1 falls below the pre-committed H6_pool
+threshold of +3, the pooled verdict is H7_pool — FAILURE / SAMPLE NOISE.
+
+The dominant empirical pattern is weight-insensitivity: 17/24 seeds are
+byte-identical across all three weights, and 0/24 seeds strictly prefer
+w=0.75. This supports demoting the apparent optimum rather than continuing
+to audit this weight-axis cell.
+
+Decision: no further audit on tight w*=0.75. v0.32 moves to the v0.25
+tight h*=8 hazard-axis audit.
