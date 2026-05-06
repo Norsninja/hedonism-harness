@@ -1214,6 +1214,18 @@ V0_30_TIGHT_W_ARMS: tuple[Arm, ...] = tuple(
 )
 
 
+# v0.31 — tight w*=0.75 third-stream calibration on a third independent seed
+# stream (17..24). Same 3-arm literal slice of V0_27_ARMS as V0_29_ARMS /
+# V0_30_TIGHT_W_ARMS at the same labels (substrate arm objects are shared);
+# the sweep differs from v0.30 only in the seed set (17..24 instead of 9..16).
+# The v0.31 audit then pools streams 1..8, 9..16, 17..24 and applies a
+# pre-committed pooled 24-seed classifier with linearly-scaled thresholds.
+# Pre-reg: [[docs/experiments/fear_hunger_v0.31.md]].
+V0_31_TIGHT_W_ARMS: tuple[Arm, ...] = tuple(
+    arm for arm in V0_27_ARMS if arm.label in ("hzd8-avd0.50", "hzd8-avd0.75", "hzd8-avd1.00")
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------

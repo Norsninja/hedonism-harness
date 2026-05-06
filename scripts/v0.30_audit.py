@@ -62,12 +62,6 @@ SOURCE = (
     "seed-{9..16}/events.jsonl` (24 runs)."
 )
 
-# Pre-reg thresholds (verbatim from v0.30 H5 / H6 / H8).
-H5_DELTA_MIN = 5
-H5_FAVORING_MIN = 5
-H6_DELTA_MIN = 1
-H8_NEIGHBOR_LEAD_MIN = 5
-
 WEIGHTS: tuple[float, float, float] = (0.50, 0.75, 1.00)
 
 
@@ -77,11 +71,33 @@ WEIGHTS: tuple[float, float, float] = (0.50, 0.75, 1.00)
 
 
 @dataclass(frozen=True)
+class AuditThresholds:
+    """4-tier classifier thresholds.
+
+    Defaults match the v0.30 single-stream rule (5 / 5 / 1 / 5). v0.31
+    pools 24 seeds and calls with linearly-scaled thresholds (15 / 15 /
+    3 / 15). The classifier itself is identical; only the cut-points
+    differ.
+    """
+
+    h5_delta_min: int = 5
+    h5_favoring_min: int = 5
+    h6_delta_min: int = 1
+    h8_neighbor_lead_min: int = 5
+
+
+DEFAULT_THRESHOLDS = AuditThresholds()
+
+
+@dataclass(frozen=True)
 class AuditOutcome:
     """Result of the 4-tier robustness partition.
 
     ``hypothesis`` is one of {"H5", "H6", "H7", "H8"}.
-    ``label`` is the human-readable headline.
+    ``label`` is the human-readable headline. Threshold values are
+    interpolated from the active ``AuditThresholds`` so the same
+    classifier produces self-describing labels for both 8-seed and
+    24-seed pooled invocations.
     ``summary`` is a single-line operational summary (deltas + counts).
     """
 
@@ -100,11 +116,15 @@ class AuditOutcome:
 def evaluate_audit(
     b50_at: dict[tuple[int, float], int],
     seeds: Sequence[int],
+    *,
+    thresholds: AuditThresholds = DEFAULT_THRESHOLDS,
 ) -> AuditOutcome:
-    """Apply the v0.30 4-tier robustness partition to per-seed b50.
+    """Apply the 4-tier robustness partition to per-seed b50.
 
     ``b50_at[(seed, weight)]`` -> int. ``seeds`` is the seed set;
-    weights are fixed at {0.5, 0.75, 1.0}.
+    weights are fixed at {0.5, 0.75, 1.0}. ``thresholds`` defaults to
+    the v0.30 8-seed rule; v0.31 calls with the pooled 24-seed
+    thresholds.
     """
     b_low = sum(b50_at[(s, 0.50)] for s in seeds)
     b_med = sum(b50_at[(s, 0.75)] for s in seeds)
@@ -132,10 +152,13 @@ def evaluate_audit(
     )
 
     # Priority order: H8 -> H5 -> H6 -> H7.
-    if neighbor_lead >= H8_NEIGHBOR_LEAD_MIN:
+    if neighbor_lead >= thresholds.h8_neighbor_lead_min:
         return AuditOutcome(
             hypothesis="H8",
-            label="REVERSAL — a neighbour beats w=0.75 by >= 5 births",
+            label=(
+                f"REVERSAL — a neighbour beats w=0.75 by "
+                f">= {thresholds.h8_neighbor_lead_min} births"
+            ),
             summary=summary,
             b_low=b_low,
             b_med=b_med,
@@ -145,10 +168,17 @@ def evaluate_audit(
             n_favoring=n_favoring,
             n_strict_favoring=n_strict_favoring,
         )
-    if delta_low >= H5_DELTA_MIN and delta_high >= H5_DELTA_MIN and n_favoring >= H5_FAVORING_MIN:
+    if (
+        delta_low >= thresholds.h5_delta_min
+        and delta_high >= thresholds.h5_delta_min
+        and n_favoring >= thresholds.h5_favoring_min
+    ):
         return AuditOutcome(
             hypothesis="H5",
-            label="ROBUST REPRODUCTION — both Δ >= 5 and n_favoring >= 5",
+            label=(
+                f"ROBUST REPRODUCTION — both Δ >= {thresholds.h5_delta_min} "
+                f"and n_favoring >= {thresholds.h5_favoring_min}"
+            ),
             summary=summary,
             b_low=b_low,
             b_med=b_med,
@@ -158,7 +188,7 @@ def evaluate_audit(
             n_favoring=n_favoring,
             n_strict_favoring=n_strict_favoring,
         )
-    if delta_low >= H6_DELTA_MIN and delta_high >= H6_DELTA_MIN:
+    if delta_low >= thresholds.h6_delta_min and delta_high >= thresholds.h6_delta_min:
         return AuditOutcome(
             hypothesis="H6",
             label=(
@@ -176,7 +206,10 @@ def evaluate_audit(
         )
     return AuditOutcome(
         hypothesis="H7",
-        label="FAILURE / SAMPLE NOISE — w=0.75 ties or loses to a neighbour by < 5 births",
+        label=(
+            "FAILURE / SAMPLE NOISE — w=0.75 does not clear the weak "
+            "two-neighbour threshold and no reversal threshold fires"
+        ),
         summary=summary,
         b_low=b_low,
         b_med=b_med,
