@@ -547,5 +547,259 @@ from 772 to ~795 (+~23).
 
 ## Results
 
-*(Pending sweep + audit execution. To be appended once
-`scripts/v0.31_audit.py` produces a verdict.)*
+**Status:** executed 2026-05-06. 24 fresh runs on tight_gradient × seeds
+17..24 × `V0_31_TIGHT_W_ARMS` written to
+`runs/fear-hunger-v0.31-tight_gradient/`. Audit driver
+(`scripts/v0.31_audit.py`) loaded all three streams (v0.27 1..8, v0.30
+9..16, v0.31 17..24), applied single-stream diagnostic verdicts (default
+8-seed thresholds) and the pre-committed pooled 24-seed verdict
+(thresholds 15/15/3/15). Full per-seed report:
+`runs/fear-hunger-v0.31-tight_gradient/audit.md`.
+
+### Headline
+
+**Pooled 24-seed verdict: H7_pool — FAILURE / SAMPLE NOISE.**
+
+| weight | B_pool(w) = Σ b>50 over 24 seeds |
+|-------:|---------------------------------:|
+| 0.50 | 312 |
+| 0.75 | **322** |
+| 1.00 | 321 |
+
+- Δ_low_pool  = B(0.75) − B(0.5)  = **+10**  (≥ 3 ✓ for H6, < 15 for H5).
+- Δ_high_pool = B(0.75) − B(1.0)  = **+1**   (< 3 — **fails H6 threshold**;
+  < 15 for H5).
+- Neighbour lead  = max(312, 321) − 322 = **−1**  (< 15 — H8 fails).
+- `n_favoring_pool`        = **20/24**  (ties allowed).
+- `n_strict_favoring_pool` = **0/24**   (descriptive only).
+- `n_weight_insensitive_pool` = **17/24**  (descriptive; ~71% of seeds
+  byte-identical on b>50 across all three weights).
+
+The pooled directional signal **does not compound** across three
+independent 8-seed streams. The +6 (Δ_low) / +3 (Δ_high) pattern
+observed in the 1..16 pool collapses to +10 / +1 in the 1..24 pool —
+Δ_high drops below the pre-committed H6_pool threshold of +3. **The
+v0.27 +2-birth tight w*=0.75 interior-optimum claim is demoted to
+"sample-noise-consistent at n=24."**
+
+### Stream 3 collapsed the direction
+
+Single-stream verdict on the v0.31 fresh stream (seeds 17..24):
+
+| weight | B_3(w) = Σ b>50 |
+|-------:|----------------:|
+| 0.50 | 108 |
+| 0.75 | **107** |
+| 1.00 | 109 |
+
+- Δ_low_3  = 107 − 108 = **−1**.
+- Δ_high_3 = 107 − 109 = **−2**.
+- max neighbour lead = max(108, 109) − 107 = 2 (< 5 → H8 fails).
+- Single-stream classification: **H7 — FAILURE / SAMPLE NOISE**
+  (w=0.75 ties or loses to a neighbour by < 5 births).
+
+w=0.75 actually loses to **both** neighbours on this fresh stream. The
+two prior streams' directional agreement does not extend to stream 3 at
+the aggregate level.
+
+### Cross-stream verdict table
+
+| stream | seeds | B(0.5) | B(0.75) | B(1.0) | Δ_low | Δ_high | n_fav | n_strict | single-stream verdict |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---|
+| Stream 1 (v0.27 source) | 1..8  | 113 | 118 | 116 | +5 | +2 | 7/8 | 0/8 | H6 WEAK |
+| Stream 2 (v0.30 fresh)  | 9..16 |  91 |  97 |  96 | +6 | +1 | 7/8 | 0/8 | H6 WEAK |
+| Stream 3 (v0.31 fresh)  | 17..24 | 108 | 107 | 109 | −1 | −2 | 6/8 | 0/8 | **H7 FAILURE** |
+| **Pooled**              | **1..24** | **312** | **322** | **321** | **+10** | **+1** | **20/24** | **0/24** | **H7_pool FAILURE** |
+
+Two streams agreed weakly (H6 / H6); the third did not (H7). The pooled
+verdict is H7_pool because Δ_high_pool=+1 falls below the pre-committed
+H6 threshold of +3. Linear scaling of the 8-seed rule was tight enough
+to discriminate "two-stream agreement" from "three-stream compounding."
+
+### The per-seed pattern is the substantive finding (n_weight_insensitive_pool = 17/24)
+
+The pre-committed candidate primary finding (`n_weight_insensitive_pool
+≥ 18/24`) was **just missed**: 17 of 24 seeds (~71%) are byte-identical
+on b>50 across all three weights. Per-seed b>50 across the 24-seed pool:
+
+- **Weight-insensitive seeds (17):** 1, 2, 3, 4, 5, 10, 11, 12, 14, 15,
+  16, 17, 20, 21, 22, 23, 24. b50 identical at all three weights.
+- **Seed 6:** +5 Δ_low, +0 Δ_high (w=0.5 alone is lower).
+- **Seed 7:** +0 Δ_low, +4 Δ_high (w=1.0 alone is lower).
+- **Seed 8:** +0 Δ_low, **−2 Δ_high** (w=1.0 wins by 2).
+- **Seed 9:** +0 Δ_low, +6 Δ_high (w=1.0 alone is much lower).
+- **Seed 13:** +6 Δ_low, **−5 Δ_high** (per-seed REVERSAL — H8 single-seed).
+- **Seed 18:** +0 Δ_low, **−2 Δ_high** (w=1.0 wins by 2).
+- **Seed 19:** **−1 Δ_low**, +0 Δ_high (w=0.5 wins by 1).
+
+The pooled Δ_high = +1 is the **residual of single-seed swings going
+in opposite directions**: seed 7 (+4) + seed 9 (+6) − seed 8 (−2) −
+seed 13 (−5) − seed 18 (−2) = +1, with the other 19 seeds contributing
+0. **Not a single seed in the 24-seed pool prefers w=0.75 strictly over
+both neighbours** (`n_strict_favoring_pool = 0/24`). The aggregate
+signal is statistical debris.
+
+The "n_weight_insensitive ≥ 18/24" pre-committed threshold was missed
+by 1, but the per-seed weight-insensitivity *rate* (~71%) is the
+dominant empirical finding regardless of where the H7/H6 boundary
+falls. **At hazard=8 in tight_gradient, w ∈ {0.5, 0.75, 1.0} is mostly
+weight-insensitive on b>50 at the per-seed level**, with aggregate
+deltas in the 0..2 birth range driven by a handful of single-seed
+swings.
+
+### Routing-channel — flat-then-drop, consistent across all three streams
+
+Pooled 24-seed routing observables:
+
+| weight | total_births | b>50 | total_food | hazard_entries | starvation | injury |
+|-------:|-------------:|-----:|-----------:|---------------:|-----------:|-------:|
+| 0.50 | 547 | 312 | 2169 | 119 | 333 | 0 |
+| 0.75 | 553 | 322 | 2168 | 119 | 327 | 0 |
+| 1.00 | 555 | 321 | 2173 | 110 | 326 | 0 |
+
+Hazard entries: 119 → 119 → 110 (~3-step drop at w=1.0). Same flat-
+then-drop shape v0.27 / v0.30 saw on stream 1 / stream 2. Injury deaths
+= 0 across all three weights — tight geometry protects against
+single-visit lethality regardless of weight, holding through three
+independent streams. **The routing channel is the part of the substrate
+that responds reliably to weight; the productivity channel is not.**
+
+### Hypothesis adjudication
+
+| H | claim | result |
+|---|---|---|
+| H1 | `V0_31_TIGHT_W_ARMS` is a literal subset of `V0_27_ARMS` (instance identity) | **HOLDS.** `test_v0_31_tight_w_arms_are_literal_v0_27_subset`. |
+| H1b | Arm-object identity to `V0_29_ARMS` and `V0_30_TIGHT_W_ARMS` at matched labels | **HOLDS.** `test_v0_31_tight_w_arms_share_arm_objects_with_v0_29_arms` + `_v0_30_tight_w_arms`. |
+| H2 | Sweep produces 24 events.jsonl files (artifact pre-flight) | **HOLDS.** `assert_artifacts_present` passes for all three streams. |
+| H3 | v0.27 / v0.28 / v0.29 / v0.30 prior tests pass after v0.31 additions | **HOLDS.** Suite 772 → 805 (+33 v0.31 tests); all green. |
+| H4 | Pre-v0.31 arm tuples unchanged | **HOLDS.** Pinned in `tests/test_comparison_grid_v0_31.py`. |
+| H4b | `evaluate_audit` default-preserving refactor (v0.30 12 fixtures pass unchanged) | **HOLDS.** `tests/test_v0_30_audit.py` 12/12 green; `test_evaluate_audit_default_thresholds_match_explicit_default` anchors equivalence. |
+| H5_pool | ROBUST: Δ_low ≥ 15 AND Δ_high ≥ 15 AND n_favoring ≥ 15 | **FAILS** on Δ_high_pool=+1 (need ≥ 15) and Δ_low_pool=+10 (need ≥ 15). |
+| H6_pool | WEAK: Δ_low ≥ 3 AND Δ_high ≥ 3, NOT H5 | **FAILS** on Δ_high_pool=+1 (need ≥ 3). |
+| H7_pool | FAILURE: none of H5_pool / H6_pool / H8_pool | **FIRES.** |
+| H8_pool | REVERSAL: max(B(0.5), B(1.0)) − B(0.75) ≥ 15 | **FAILS.** Lead = −1 (no neighbour beats w=0.75 in pool aggregate). |
+
+Pre-committed observation (v0.31 pre-reg): the existing 1..16 pool fires
+the equivalent of H6_pool under 16-seed-scaled thresholds (Δ_low_16=+11
+≥ 2 ✓; Δ_high_16=+3 ≥ 2 ✓). **The v0.31 fresh stream collapsed the
+Δ_high direction sufficiently to drop the pooled Δ_high from +3 (1..16)
+to +1 (1..24), tipping the 24-seed pool from H6_pool territory to
+H7_pool territory.** The H6 → H7 boundary identified in the pre-reg's
+verdict-reachability analysis ("Δ_high(17..24) < 0 could tip pooled
+Δ_high below +3") is exactly what fired.
+
+### What this means for the v0.27 tight w*=0.75 claim
+
+**Demoted to sample-noise-consistent at n=24.** Under the v0.29
+methodological rule and the v0.31 pre-committed pooled thresholds:
+
+- The directional signal does **not** compound across three independent
+  8-seed streams. Two streams agreed weakly; the third did not.
+- The pooled Δ_high = +1 over 24 seeds is *below* the pre-committed
+  weak-reproduction threshold of +3.
+- Per-seed strict preference is absent across the entire 24-seed pool
+  (`n_strict_favoring_pool = 0/24`).
+- ~71% of seeds (17/24) are byte-identical on b>50 across the three
+  weights — the productivity channel is mostly weight-insensitive in
+  this band at this cell.
+- The aggregate-level appearance of an "interior optimum at w=0.75" in
+  the 1..16 pool is residual of a small number of single-seed swings
+  that happened to favor w=0.75 in streams 1 and 2; stream 3's
+  single-seed swings did not.
+
+**Safer phrasing for forward references** (to be applied to v0.27's
+"tight w*=0.75 +2-birth interior optimum" claim in v0.27 / v0.28 /
+v0.29 / v0.30 forward-mention sites if those docs are next-touched):
+
+> At 8 seeds per stream, tight_gradient productivity in
+> w ∈ {0.5, 0.75, 1.0} is mostly weight-insensitive at hazard=8
+> (~71% of seeds byte-identical on b>50 across the three weights in
+> the 24-seed pool). Three independent seed streams (v0.27 1..8,
+> v0.30 9..16, v0.31 17..24) produce single-stream verdicts of
+> H6 WEAK, H6 WEAK, H7 FAILURE; the pooled 24-seed verdict under
+> linearly-scaled thresholds (15/15/3/15) is **H7 FAILURE / SAMPLE
+> NOISE**. The v0.27 +2-birth interior-optimum claim is
+> sample-noise-consistent at n=24 and is not a mechanism. The
+> routing channel (hazard entries / starvation deaths) responds
+> reliably to weight at the aggregate level; the productivity
+> channel does not.
+
+### v0.32+ candidates (per pre-reg decision rules)
+
+The pre-reg's H7_pool decision rule is unambiguous:
+
+> H7_pool FAILURE | v0.27 +2 finding does not compound;
+> sample-noise-consistent at n=24 | no further audit on this cell;
+> v0.25 tight h*=8 hazard-axis audit is next.
+
+Concrete next slice (v0.32):
+- **v0.25 tight h*=8 hazard-axis interior optimum audit** on a fresh
+  seed stream. Cell: tight_gradient, h ∈ {0, 4, 8, 12}, influx=1.0,
+  w=1.0, seeds 9..16. ~32 runs. Reuse `evaluate_audit` with the
+  default 8-seed thresholds (single-stream verdict only — no pooling
+  needed for a single audit).
+
+**Do NOT** introduce a finer weight grid on tight w (gated behind
+H5_pool ROBUST, which did not fire — and now will not without a
+fundamentally different study design).
+
+**Do NOT** sweep seeds 25..32 on this cell. The pooled rule has
+delivered a definitive H7_pool FAILURE; further seed streams on the
+same cell would be confirmation theater, not science.
+
+The `n_weight_insensitive_pool = 17/24` near-miss could motivate a
+*targeted* per-seed inspection of the 7 non-flat seeds (6, 7, 8, 9, 13,
+18, 19) to characterise *what* makes those seeds weight-sensitive when
+the other 17 are not — but that's a substrate-axis question, not a
+weight-axis one. Defer until the hazard-axis audit settles.
+
+### Implementation summary
+
+- **Library extension (additive only):** `V0_31_TIGHT_W_ARMS = tuple(
+  arm for arm in V0_27_ARMS if arm.label in (...))` in
+  `experiments/comparison_grid.py`. Substrate-byte-identity to
+  V0_27_ARMS / V0_29_ARMS / V0_30_TIGHT_W_ARMS by-construction.
+- **Additive default-preserving refactor:** `scripts/v0.30_audit.py`
+  `evaluate_audit(b50_at, seeds, *, thresholds=DEFAULT_THRESHOLDS)`.
+  New `AuditThresholds` frozen dataclass with field defaults
+  `(5, 5, 1, 5)`. Labels parameterised from threshold values so
+  pooled invocations print pooled thresholds (15) rather than
+  single-stream ones (5). v0.30 12 synthetic-fixture tests pass
+  unchanged.
+- **Sweep:** `scripts/v0.31_sweep.py` mirrors the v0.30 sweep
+  line-for-line with `SEEDS = tuple(range(17, 25))`,
+  `BATCH_ID = "fear-hunger-v0.31-tight_gradient"`,
+  `arms = V0_31_TIGHT_W_ARMS`. 24 runs in ~7.9s.
+- **Audit driver:** `scripts/v0.31_audit.py` — loads three streams via
+  three `DiagnosticConfig` instances against three runs roots (v0.27 /
+  v0.30 / v0.31), merges per-seed dicts, computes single-stream
+  verdicts (default thresholds) for each stream, computes pooled
+  verdict (POOLED_THRESHOLDS=AuditThresholds(15, 15, 3, 15)) on the
+  24-seed union, computes `n_weight_insensitive_pool` and other
+  descriptive observables. Writes audit.md with explicit "Pooled 24-
+  seed verdict (v0.31 HEADLINE)" + "Single-stream diagnostic
+  verdicts" section labels to prevent later confusion. ~370 LOC.
+- **Tests:** `tests/test_comparison_grid_v0_31.py` (14 tests —
+  shape / pinning / H1 / H1b two-way / H4 invariants);
+  `tests/test_v0_31_audit.py` (19 tests — default-preserving refactor
+  anchor, threshold pinning, pooled H5/H6/H7/H8 positive fixtures and
+  boundaries, priority H8_pool over H5_pool, 16-seed-scaled pre-
+  committed observation, cross-stream merge, label parameterisation).
+  Suite: **772 → 805** (+33 v0.31 tests); all green.
+- **No simulation-mechanics changes; no `core/` / `model.py` /
+  `experiments/fear_hunger_chamber.py` /
+  `experiments/population_dynamics.py` /
+  `policies/gradient_policy.py` / `policies/hedonism_policy.py` /
+  `scripts/v0.28_*.py` / `scripts/v0.29_*.py` changes.** Source
+  modifications outside `comparison_grid.py` are limited to the
+  additive refactor of `scripts/v0.30_audit.py:evaluate_audit`
+  (default-preserving; H4b anchor passes).
+- **CI gate at handoff time:**
+  ```
+  uv run ruff check .                           ok
+  uv run ruff format --check .                  ok
+  uv run pytest                                 805 passed
+  uv run python scripts/core_smoke_test.py      ok
+  uv run python scripts/v0.31_sweep.py          done in 7.9s
+  uv run python scripts/v0.31_audit.py          H7_pool FAILURE
+  ```
