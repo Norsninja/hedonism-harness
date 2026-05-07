@@ -1054,6 +1054,23 @@ hazard.**
 
 ## SUBSTRATE_PREFLIGHT_HALT (2026-05-07)
 
+> **RETRACTION NOTICE (added 2026-05-07, post-v0.43R halt):** the
+> "saturated zone" characterization in this addendum is **incorrect
+> and config-mismatched**. The feasibility probe that produced the
+> 480.0-total-food finding was a hand-rolled `run_chamber` invocation
+> that defaulted `policy_factory` to `HedonismPolicy` and
+> `auto_reproduction` to `False` — neither matches the actual sweep
+> config (V0_25 anchor: `GradientPolicy` + `auto_reproduction=True` +
+> `TraitConfig(unbounded_mutation=True)`). With the actual config,
+> the substrate at tick 50 is **depleted to zero**, not saturated.
+> See [[docs/experiments/fear_hunger_v0.43R.md]]
+> SUBSTRATE_PREFLIGHT_HALT_2 for the corrected substrate finding +
+> the methodological lesson (always feasibility-probe through
+> `_run_one_arm_seed`, never through hand-rolled `run_chamber`).
+> The text below is preserved as the historical record of the
+> incorrect characterization that informed v0.43R's design; the
+> retracted claim should not be cited.
+
 After the additive `src/` extension landed (`core/events.py` +
 `core/interventions.py` + `comparison_grid.py` arms; tests passing)
 but **before** running the v0.43 sweep, a substrate feasibility

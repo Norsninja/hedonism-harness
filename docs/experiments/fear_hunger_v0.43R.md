@@ -1,7 +1,12 @@
 # v0.43R — tick-50 food-density intervention (substrate causal probe, replacement for halted v0.43)
 
-**Status:** pre-registered 2026-05-07; sweep + intervention extension +
-audit not yet executed.
+**Status:** pre-registered 2026-05-07; **HALTED POST-SWEEP 2026-05-07**
+on substrate-mismatch finding #2 (see SUBSTRATE_PREFLIGHT_HALT_2
+addendum at the bottom). Sweep ran (48 runs, ~18s); audit ran (~3s)
+and emitted a mechanical `FOOD_DENSITY_NOT_NECESSARY` verdict from
+no-op data. **The verdict is NOT cited as a scientific result.**
+Replacement track: v0.44 candidate (respawn-schedule intervention)
+pending feasibility probe.
 **Date:** 2026-05-07
 **Branch:** `claude/v0.43-resource-flattening-intervention`
 **Predecessors:** v0.21..v0.27 (aggregate-optimum audit, closed),
@@ -916,10 +921,161 @@ state.)
 
 ## Results
 
-**Status:** pending sweep + audit execution.
+**Status:** sweep + audit executed 2026-05-07; **verdict halted as
+non-citable.** The audit emitted `FOOD_DENSITY_NOT_NECESSARY`
+mechanically because `delta(B−A) = 0.000` and `delta(C−A) = 0.000`
+on every (hazard, seed) bucket. **The locked verdict phrase is NOT
+fired** — the intervention was a no-op (see
+SUBSTRATE_PREFLIGHT_HALT_2 below).
 
-(To be appended verbatim after `scripts/v0_43R_intervention_audit.py`
-runs, using the locked-phrase template above for whichever verdict
-fires. Auxiliary DENSITY_REDUCTION_ABLATES_REPRODUCTION findings
-reported alongside per hazard. Caveats reasserted verbatim. CI
-gate at Results time recorded.)
+## SUBSTRATE_PREFLIGHT_HALT_2 (2026-05-07)
+
+This is the **second substrate-mismatch finding** in the v0.43 / v0.43R
+arc. It is documented as a first-class halt rather than as a result.
+
+### What the sweep produced
+
+48-run sweep (`scripts/v0.43r_sweep.py`) ran cleanly. All 32 fired
+events (16 B + 16 C runs) carry the same numeric profile:
+
+| field                      | value (every fired event, every seed, both hazards) |
+|----------------------------|-----------------------------------------------------:|
+| `n_eligible_cells`         | 24                                                    |
+| `n_cells_changed`          | **0**                                                 |
+| `total_food_before`        | **0.0**                                               |
+| `total_food_after`         | **0.0**                                               |
+| `food_multiset_digest_before == food_multiset_digest_after` | True |
+
+Both interventions operated on a substrate where every eligible cell
+had `food_value = 0`. Halving zeros yields zeros; the 25/75
+pair-redistribution of `(0, 0)` yields `(0, 0)`. Multiset digest is
+trivially preserved. Per-cell magnitude shock is zero.
+
+### Cause: v0.43R pre-reg's substrate model was wrong
+
+The v0.43R pre-reg's locked claim was that at h=8 tick 50 the food
+zone is **saturated** (24 × 20 = 480). That claim was inherited from
+the v0.43 SUBSTRATE_PREFLIGHT_HALT addendum, which characterized the
+substrate based on a feasibility probe run with the **wrong simulation
+config**:
+
+- Probe (incorrect): `policy_factory` defaulted to `HedonismPolicy`,
+  `auto_reproduction` defaulted to `False`. Population stayed at 5
+  founders. Foraging was minimal. Food zone stayed at 480 across all
+  ticks.
+- Actual sweep config (V0_25 anchor): `policy_factory =
+  GradientPolicy`, `auto_reproduction = True`,
+  `trait_config = TraitConfig(unbounded_mutation=True)`. By tick ~10,
+  population multiplied to 14+ agents who aggressively forage and
+  deplete the 24-cell zone faster than `food_respawn_cooldown=50`
+  refills it. **By tick ~44 the zone is at 0; it stays at 0 through
+  tick 50/51 across all 8 seeds at both hazards.**
+
+The earlier probe was a hand-rolled `run_chamber` invocation that
+skipped the policy/auto-reproduction wiring that
+`comparison_grid._run_one_arm_seed` applies. The shortcut produced
+opposite-direction misleading data.
+
+### Methodological lesson (locked into the project record)
+
+> **Always feasibility-probe through the actual sweep code path
+> (`_run_one_arm_seed` or `run_comparison_grid`), never through a
+> hand-rolled `run_chamber` invocation.** The sweep applies
+> `arm.policy_factory`, `arm.auto_reproduction`,
+> `TraitConfig(unbounded_mutation=True)`, and the `setup_observer`
+> that enables auto-reproduction; a hand-rolled invocation that
+> omits any of these will produce a substrate that does not match the
+> sweep's actual dynamics.
+
+This lesson must propagate to v0.44+ feasibility probes.
+
+### Retracted claim (was in v0.43's SUBSTRATE_PREFLIGHT_HALT)
+
+The v0.43 halt addendum's "h=8 tick-50 substrate is saturated" finding
+is **retracted** as config-mismatched. The corrected substrate finding
+(below) supersedes it. The v0.43 addendum is preserved as the
+historical record of the original (incorrect) characterization, with
+a retraction note added at the top of that addendum.
+
+### Corrected substrate finding (legitimate; survives the halt)
+
+> Under the V0_25-anchored substrate (`tight_gradient` chamber +
+> `GradientPolicy` + `auto_reproduction=True` +
+> `TraitConfig(unbounded_mutation=True)` +
+> `food_respawn_cooldown=50` + `energy_pool_initial=1500` +
+> `ambient_influx_rate=1.0`), the 24-cell food zone is **completely
+> depleted** at tick 50 across all probed seeds (49..56) at both
+> h=0 and h=8. The post-50 dominance pattern that v0.34..v0.41
+> measured emerges from a substrate where, at the locking tick, food
+> has been totally consumed and the system is subsisting on respawn
+> flow. **The causal lever at tick 50 is not `food_value` (already
+> zero); it is `world.respawn_at_tick` — which lineage is positioned
+> to claim the next refill.**
+
+### What this halt preserves
+
+- The pre-reg's locked phrases for `FOOD_DENSITY_NECESSARY` /
+  `SUBSTRATE_PERTURBATION_DISRUPTS_DOMINANCE` /
+  `FOOD_DENSITY_NOT_NECESSARY` are **not fired**. The mechanical
+  `FOOD_DENSITY_NOT_NECESSARY` emission from the audit is
+  disqualified by the no-op condition (`delta = 0` because the
+  intervention literally did nothing). Citing it would be a category
+  error analogous to v0.43's halted-design no-op.
+- The v0.43R `src/` extension (the `KIND_REDUCE_DENSITY_50PCT` and
+  `KIND_DENSITY_PRESERVING_PERTURBATION` kinds, helpers, dispatcher
+  branch) is **preserved**. v0.42 / v0.43 byte-identity invariants
+  hold. Future versions can invoke these kinds against a
+  non-depleted substrate (different chamber or earlier tick) without
+  modification.
+- All v0.43R tests (24 unit + 12 hook + 11 sweep + 36 audit = 83
+  tests) pass on the v0.43R branch.
+
+### v0.44 candidate (locked direction; design pending feasibility probe)
+
+> **Pivot to a respawn-schedule intervention.**
+
+The substrate's causal lever at tick 50 is not the (depleted)
+food-value layer; it is the per-cell respawn schedule
+(`world.respawn_at_tick`). v0.44 will operate on this layer:
+
+- **A_null**: no intervention.
+- **B_delay_respawn_schedule**: at tick 50/51, add a constant offset
+  to every cell's `respawn_at_tick` value (where currently
+  scheduled). Slows post-50 refill flow. Tests "is the post-50 food
+  flow rate causal?".
+- **C_permute_respawn_schedule**: at tick 50/51, permute the
+  scheduled refill ticks among the scheduled cells. Same multiset
+  of refill times, different cell-to-time assignments. Tests "is
+  the spatial pattern of WHICH cells refill WHEN causal, given the
+  same overall flow rate?".
+
+Open v0.44 design questions (deferred to v0.44 pre-reg discussion):
+
+- Delay magnitude (B): +25 / +50 / +100 ticks?
+- Permutation scope (C): all cells with `respawn_at_tick > 0`, or
+  only those with `respawn_at_tick > 51` (scheduled for *future*
+  refill)?
+- Eligible-cell predicate: cells with `respawn_at_tick > 0` (i.e.,
+  scheduled), excluding HAZARD/WALL/SAFE.
+
+A feasibility probe (using `_run_one_arm_seed` per the
+methodological lesson above) will tabulate the per-(seed, hazard)
+distribution of `respawn_at_tick` values at tick 50 before v0.44
+locks. If the substrate has heterogeneous schedules (likely, given
+agents stagger their consumption), B and C will be operative; if
+schedules are clustered or absent, v0.44 needs another redesign.
+
+### CI gate at v0.43R halt time
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1414 passed, 7 skipped (6 baseline + 1 v0.43
+                                substrate-finding skip)
+uv run python scripts/core_smoke_test.py                ok
+uv run python scripts/v0.43r_sweep.py                   completed (no-op)
+uv run python scripts/v0_43r_intervention_audit.py      completed; verdict
+                                                        FOOD_DENSITY_NOT_NECESSARY
+                                                        emitted but DISQUALIFIED
+                                                        per this halt addendum.
+```

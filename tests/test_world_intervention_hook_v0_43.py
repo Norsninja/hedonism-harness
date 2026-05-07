@@ -122,11 +122,16 @@ def test_flatten_total_food_preserved_within_tolerance(tmp_path):
 
 @pytest.mark.skip(
     reason=(
-        "Pre-reg substrate-mismatch finding: at tick 50 under tight_gradient + "
-        "h=8 + food_respawn_cooldown=50, the food zone is fully replenished "
-        "(total_food=480 across all probed seeds). Flatten and shuffle are "
-        "both no-ops at the primary test hazard; multiset is preserved. "
-        "v0.43 pre-reg revision pending — see design discussion in handoff."
+        "Substrate-mismatch finding (v0.43 + v0.43R halt addenda): under this "
+        "test fixture's hand-rolled config (HedonismPolicy, auto_reproduction "
+        "default off), the food zone is saturated at tick 50 (total_food=480) "
+        "and flatten is a no-op. Under the actual sweep config (V0_25 anchor: "
+        "GradientPolicy + auto_reproduction=True + unbounded mutation), the "
+        "zone is depleted to zero by tick ~44 across all seeds and flatten is "
+        "also a no-op (just for the opposite reason). Either way the assertion "
+        "below does not hold. See docs/experiments/fear_hunger_v0.43R.md "
+        "SUBSTRATE_PREFLIGHT_HALT_2 for the corrected substrate finding and "
+        "the methodological lesson."
     )
 )
 def test_flatten_changes_multiset_on_nondegenerate_substrate(tmp_path):
