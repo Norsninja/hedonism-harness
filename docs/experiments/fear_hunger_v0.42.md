@@ -861,10 +861,29 @@ gated on `primary_fires`, which is False regardless.
 | C_kill_smnonleader      | 0      | 8      | 8      | 0.804      | 0.881        |
 | C_kill_smnonleader      | 8      | 8      | 8      | 0.742      | 0.646        |
 
-Note: B arms have 7/8 used at both hazards; one run per B arm had
-0 post-50 surviving-lineage births (excluded as NaN). The audit's
-`n_excluded_zero_post50` field flags these. C arms have 8/8 used
-at both hazards.
+#### Why `B_kill_leader` has `n_used = 7` at both hazards
+
+**Seed 46** is the excluded run at both h=0 and h=8. In both, the
+tick-50 leader was lineage 0 (the largest at tick 50), and the
+intervention killed 16 agents at h=0 / 10 agents at h=8. After the
+kill, the surviving four lineages produced **zero post-50 births
+within this run**: `total_post_50_births_among_survivors = 0`,
+which makes the share field mathematically undefined (0/0).
+
+Per the pre-registered exclusion rule, runs with zero
+surviving-lineage post-50 births are excluded from the arm
+aggregation (NaN share; counted in `n_excluded_zero_post50`).
+**This is a partial disruption signal** — in 1 of 8 seeds at both
+hazards, the kill DID prevent the surviving lineages from
+reconstituting any post-50 births at all. It is reported here
+explicitly rather than silently. C and A arms had no excluded runs
+(`n_used = 8` everywhere); the exclusions are specific to the B
+arm and to seed 46.
+
+The locked verdict still drives off the mean over `n_used` rows.
+The exclusion does not change the verdict (B share at h=8 is +0.081
+above A; b_passes is False regardless of whether seed 46 is
+included with NaN or excluded entirely).
 
 ### C control availability (`runs/lineage-v0.42/c_control_availability.csv`)
 
@@ -907,70 +926,99 @@ fully populated.
 
 ### Strategic update at v0.42 close
 
-This is a **negative causal result**, not a project failure. The
-v0.34..v0.41 correlational arc identified the tick-50 leader as
-**associated with** post-50 dominance across 4 of 5 streams. v0.42
-asked whether that association reflects a mechanism the leader
-actively holds, by removing the leader and checking whether
-post-50 dominance fails to reconstitute. **It reconstitutes.**
+This is a **negative causal result on the narrow hypothesis**, not
+a project failure. The v0.34..v0.41 correlational arc identified
+the tick-50 leader as **associated with** post-50 dominance across
+4 of 5 streams. v0.42 asked whether the specific tick-50 leader
+lineage is **necessary** for that pattern under hard-kill removal.
 
-The implication: post-50 dominance is a substrate-level emergent
-property — given the chamber, population dynamics, hazard
-configuration, and food layout, *some* lineage will dominate
-post-50, regardless of which specific lineage is the tick-50
-leader. The leader-advantage correlation reflects WHICH lineage
-HAPPENS to be the tick-50 leader (the one whose substrate-level
-position favors it), not a causal lever the leader's identity
-provides.
+**The narrow hypothesis fails.** The signal survives leader
+removal: a different surviving lineage reconstitutes post-50
+dominance with comparable share. The locked verdict
+**MECHANISM_NOT_NECESSARY** fires.
 
-This **rules out a class of mechanisms** that would have been
-plausible from the v0.34..v0.41 data alone:
+What v0.42 establishes:
 
-- "Reproductive priority" of the leader (incumbency advantage).
-- "Spatial position" carried by leader's agents.
-- "Energy stockpile" the leader has accumulated by tick 50.
-- "Local food control" the leader exerts.
-- "Founder traits" amplifying the leader's reproductive output.
-- "Descendants already distributed across the map" as the leader's
-  network.
+> v0.42 rules out the tick-50 leader lineage as a **necessary
+> causal carrier of post-50 dominance under this hard-kill
+> intervention.** The dominance pattern reconstitutes through
+> another surviving lineage, suggesting the causal source is more
+> likely substrate-level than leader-identity-level.
 
-If any of these were the mechanism, removing the leader would
-disrupt post-50 dominance — the surviving 4 lineages would be
-unable to reconstitute the pattern. Instead they do reconstitute,
-suggesting these mechanisms are NOT load-bearing.
+What v0.42 does NOT establish:
 
-What remains: the dominance pattern is driven by **substrate
-properties** that any sufficiently surviving lineage can exploit.
-The post-hoc reducer arc (v0.34..v0.41) was characterising a
-real correlational pattern, but the causal interpretation
-(leader-as-mechanism) is wrong.
+- It does NOT rule out spatial position, energy stockpile, founder
+  traits, local food control, or descendants-already-distributed
+  as causal forces in general. Those properties may still be
+  mechanistically active — but they are **replaceable / niche-
+  refillable**, not bound to the original leader's identity. A
+  spatial niche the leader occupied is still there for a survivor
+  to occupy; a food region the leader controlled is still there
+  for the next dominant lineage to control. The kill only proves
+  the pattern doesn't depend on the *specific* leader; it does
+  not prove these substrate-anchored properties are not the
+  mechanism.
+- It does NOT rule out birth-suppression, energy-drain, or
+  spatial-relocation interventions identifying necessity in a
+  different sense.
+- It does NOT rule out h=4 / h=12 hazards giving different
+  verdicts.
+- It does NOT rule out a different seed band (49..56) giving a
+  different verdict on this same intervention. Cross-stream
+  calibration is reserved for v0.43+ candidate (j).
+
+The right scientific posture: **the signal survives leader
+removal, so the causal search should pivot from lineage identity
+to substrate structure.** Whatever produces the pattern lives in
+the substrate (chamber, hazard configuration, food layout,
+population dynamics) and can be exploited by *any* sufficiently
+surviving lineage, not just the one that happened to be ahead
+at tick 50.
 
 ### Deferred (v0.43+ candidates, conditional on v0.42 outcome — fired)
 
 The locked v0.43 candidate under MECHANISM_NOT_NECESSARY is:
 
-> **Pivot to substrate-level interventions** (resource concentration
-> shock, hazard relocation) rather than lineage-level
-> interventions.
+> **Pivot to substrate-level interventions** rather than lineage-
+> level interventions.
 
-Concrete v0.43+ candidates:
+**Recommended v0.43 (single substrate intervention; one at a time
+for clean reads):**
 
-- **(g) resource concentration shock.** At tick 50, randomly
-  redistribute existing food cells to test whether spatial
-  concentration of resources drives post-50 dominance.
-- **(h) hazard relocation.** At tick 50, swap the hazard band's
-  position to test whether dominance is driven by spatial niche
-  separation around the hazard.
-- **(i) chamber geometry sweep** (already adjacent to v0.42's
-  scope). Multiple chambers under the same intervention to
-  characterise where the substrate-level mechanism lives in the
-  geometry.
-- **(j) generalisation: cross-stream calibration of v0.42.** Run
-  the same intervention on a fresh seed band (49..56) to
-  disambiguate "MECHANISM_NOT_NECESSARY at n=8" from "noise-
-  driven null at n=8". This is the v0.41-style discipline cousin
-  to the v0.42 result: a single-stream causal probe could be
-  noise-driven.
+- **(g) Resource concentration shock / resource flattening.** At
+  tick 50, disrupt the chamber's resource concentration advantage —
+  e.g., flatten the food zone (uniform redistribution) or rotate
+  food positions. Tests whether the substrate's privileged
+  opportunity structure is the causal source. If post-50 dominance
+  collapses under resource flattening but persists under leader
+  kill, the mechanism is substrate-level resource asymmetry, not
+  leader identity.
+  
+  Hypotheses:
+  - `MECHANISM_RESOURCE_NECESSARY`: resource flattening collapses
+    dominance.
+  - `MECHANISM_RESOURCE_NOT_NECESSARY`: dominance persists; the
+    causal source is even further upstream.
+  - `MECHANISM_GENERAL_DISRUPTION`: a non-targeted resource shock
+    (rotation control) also collapses dominance, suggesting
+    fragility to any resource shock.
+
+**Deferred to v0.44+ (depending on v0.43 outcome):**
+
+- **(h) Hazard relocation.** Changes both danger topology AND
+  resource access at once; less clean than resource flattening.
+  Reserved for v0.44 if (g) gives a clean read worth contrasting,
+  or if (g) gives a null and we need a different probe.
+- **(i) Chamber geometry sweep.** Multiple chambers under the same
+  intervention to localise where the substrate-level mechanism
+  lives.
+- **(j) Cross-stream calibration of v0.42.** Run the same
+  intervention on a fresh seed band (49..56) to disambiguate
+  "MECHANISM_NOT_NECESSARY at n=8" from "noise-driven null at
+  n=8". This is the v0.41-style discipline cousin to the v0.42
+  result: a single-stream causal probe could be noise-driven.
+  Cheap and worth running before (g) if you want maximum
+  confidence in the v0.42 result.
 
 HedonismPolicy and Mesa remain deferred indefinitely.
 
