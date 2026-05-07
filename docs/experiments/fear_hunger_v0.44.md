@@ -314,7 +314,7 @@ Determinism contract:
 
 ### Why +25 ticks for B?
 
-The +25 delay is **magnitude-matched to the post-50 observation
+The +25 delay is **timing-matched to the post-50 observation
 window**:
 
 - Post-50 window is 50 ticks (ticks 51..100 are the v0.34..v0.41
@@ -323,47 +323,62 @@ window**:
   range 54..67 (median ~60). With food_respawn_cooldown=50 and
   ambient_influx_rate=1.0, the natural cadence after a fresh refill
   is ~50 ticks per cell.
-- A +25 delay shifts every scheduled refill from the 54..67 window
-  into the 79..92 window, **halving the post-50 refill rate** over
-  the first 50-tick observation window (refills now arrive in the
-  back half rather than the front half).
-- Halving the post-50 flow rate is the closest analogue to v0.43R's
-  intent (halve the flow integrand) that operates on the
-  schedule-time axis rather than the food-value axis.
+- A +25 delay shifts the **first post-50 refill wave** from the
+  early post-50 window (roughly ticks 54..67) into the **late
+  post-50 window** (roughly ticks 79..92). This reduces early
+  post-50 food availability while preserving a conservative,
+  non-ablative intervention magnitude. It may also suppress or
+  delay second-cycle refills that would otherwise occur within the
+  100-tick observation horizon.
+- The intervention is NOT claimed to halve total post-50 refill
+  count over the full window; the audit does not measure first-
+  half-window flow as a separate observable. The treatment is a
+  **timing shift of the first refill wave**, not a flow-rate
+  reduction over the full window.
 
 The +25 magnitude is conservative relative to +50 (which would push
-all refills past the observation horizon, ablating reproduction
-entirely and likely firing the auxiliary at both hazards) and to
-+100 (which is far past any natural cadence in the system).
+the first wave past or near the observation horizon end, risking
+reproduction ablation and likely firing the auxiliary at both
+hazards) and to +100 (which is far past any natural cadence in the
+system).
 
 ### Why reverse-row-major for C?
 
-Reverse-row-major over `(x, y)`-sorted cells is the **maximum-
-displacement deterministic permutation under the locked sort order**:
+Reverse-row-major over `(x, y)`-sorted cells is the **maximum
+index-displacement deterministic permutation under the locked
+sort order**:
 
 - Sort cells by `(x, y)` ascending (row-major in the chamber's
   coordinate convention).
 - Reverse-pair: cell[0] receives cell[n-1]'s tick; cell[n-1]
   receives cell[0]'s tick; etc.
-- For n=24 scheduled cells (probe-confirmed), this maps each cell's
-  refill tick to the tick of the cell at the diametrically
-  opposite index.
+- For n=24 scheduled cells (probe-indicated; preflight-pending for
+  seeds 57..64), this maps each cell's refill tick to the tick of
+  the cell at the opposite end of the (x, y)-sorted index.
 
 Properties:
 
 - **Multiset-preserving**: `sorted(after) == sorted(before)`
   exactly (it's a permutation).
-- **Maximum-displacement**: for any cell i, the new index is
-  n-1-i; mean displacement is n/2 (12 cells for n=24).
+- **Maximum index-displacement under the locked sort order**:
+  for any cell at sort-index i, the new index is n-1-i; mean
+  index-displacement is n/2 (12 positions for n=24). This is
+  **not** claimed to be the unique maximum spatial-displacement
+  permutation in chamber geometry — alternative sort orders
+  (e.g., by hazard-distance, by founder-position) would yield
+  different displacement profiles.
 - **Deterministic**: no RNG.
 - **Self-inverse**: applying twice restores the original.
 
-This makes C the strongest schedule-permutation control: if
-dominance reconstitutes under maximum cell-to-tick displacement,
-the spatial pattern of WHICH cells refill WHEN is not necessary
-for the post-50 dominance pattern; if dominance disrupts under C
-comparably to B, the system is sensitive to schedule rewrite
-generally rather than to flow-rate reduction specifically.
+This makes C a strong schedule-permutation control under a single
+locked deterministic rule: if dominance reconstitutes under
+maximum index-order cell-to-tick displacement, the spatial pattern
+of WHICH cells refill WHEN (along the locked sort order) is not
+necessary for the post-50 dominance pattern; if dominance disrupts
+under C comparably to B, the system is sensitive to schedule
+rewrite generally rather than to flow-rate reduction specifically.
+Alternative-permutation refinement (e.g., adjacent-pair swap,
+hazard-distance-weighted permutation) is reserved for v0.45+.
 
 ### 2. Event class (`core/events.py`) — NEW
 
@@ -480,11 +495,16 @@ Halt invariants (5):
     buckets, so cross-seed digest equality is the locked
     expectation).
   - **H2d-aux (eligible-cell-set stability across seeds):** the
-    probe established that all 24 cells in the food zone satisfy
-    `kind ∈ {EMPTY, FOOD} AND respawn_at_tick > 0` at tick 50
-    across seeds 49..56 at both hazards. v0.44 locks the same
-    expectation for seeds 57..64 and halts on deviation
-    (`n_eligible_cells != 24` on any fired event).
+    seeds-49..56 probe indicated that all 24 cells in the food
+    zone satisfy `kind ∈ {EMPTY, FOOD} AND respawn_at_tick > 0`
+    at tick 50 at both hazards. v0.44 does NOT inherit this lock
+    cross-seed; the value is committed only after the required
+    v0.44 preflight on seeds 57..64 (under the exact
+    `_run_one_arm_seed` sweep path) confirms it. If the preflight
+    deviates, halt pre-sweep and amend the pre-reg with the
+    observed eligibility before locking. After preflight, every
+    fired event must report `n_eligible_cells == EXPECTED_N_ELIGIBLE_CELLS`
+    or halt.
   - For both: `n_cells_changed <= n_eligible_cells`.
 - **H2e (regression byte-identity):** sampled v0.42 A_null seed
   AND v0.42 B_kill_leader seed re-run with v0.44 code produce
@@ -529,7 +549,14 @@ EXPECTED_N_TICKS: int = 200
 EXPECTED_INTERVENTION_TICK: int = 50
 EXPECTED_EFFECTIVE_TICK: int = 51
 EXPECTED_RUNS_TOTAL: int = 48  # 6 arms x 8 seeds
-EXPECTED_N_ELIGIBLE_CELLS: int = 24  # probe-locked
+EXPECTED_N_ELIGIBLE_CELLS: int = 24  # PREFLIGHT-PENDING: locked
+                                     # only after the required v0.44
+                                     # preflight on seeds 57..64
+                                     # confirms it under the exact
+                                     # _run_one_arm_seed sweep path.
+                                     # If preflight deviates, halt
+                                     # before sweep and amend the
+                                     # pre-reg.
 
 # Locked thresholds (parallel to v0.42 / v0.43R)
 PRIMARY_B_REDUCTION_THRESHOLD: float = 0.15
@@ -1017,27 +1044,49 @@ reachable:
 Total v0.44: ~3,130 LOC. Tests should bring the suite from 1,414
 to ~1,494 (+~80).
 
-### Pre-implementation feasibility re-probe (REQUIRED)
+### Pre-implementation feasibility preflight on seeds 57..64 (HARD REQUIREMENT)
 
-Before any implementation lands, a feasibility re-probe through
-`_run_one_arm_seed` (NOT hand-rolled `run_chamber` — see v0.43R
-methodological lesson) must confirm the locked expectations on
-seeds 57..64:
+**This preflight is mandatory before the v0.44 sweep is run, AND
+before `EXPECTED_N_ELIGIBLE_CELLS` is committed as a hard halt
+constant.** It must use `_run_one_arm_seed` (NOT hand-rolled
+`run_chamber` — see v0.43R methodological lesson) under the exact
+v0.44 sweep path (V0_25 anchor: GradientPolicy +
+auto_reproduction=True + TraitConfig(unbounded_mutation=True) +
+food_respawn_cooldown=50 + ambient_influx_rate=1.0).
 
-- All 24 cells in the food zone satisfy `kind ∈ {EMPTY, FOOD} AND
-  respawn_at_tick > 0` at tick 50 across all 16 (seed, hazard)
-  buckets.
-- Refill-tick distribution is heterogeneous (min < max within each
-  bucket) and lies in roughly [54, 67] (matching the seeds-49..56
-  probe).
+The preflight must record, for every (seed ∈ 57..64, hazard ∈
+{0, 8}) bucket at tick 50:
 
-If the re-probe deviates (e.g., fewer scheduled cells, or refill
-ticks clustered such that +25 pushes all past tick 200), v0.44
-must halt pre-sweep and document in an addendum. **Do NOT skip
-this re-probe.** Methodological lesson from v0.43 / v0.43R: the
-substrate at the V0_25 anchor under the actual sweep config is
-not always what hand-rolled or seed-band-extrapolated probes
-suggest.
+- `n_eligible_cells` (count of cells satisfying `kind ∈ {EMPTY,
+  FOOD} AND respawn_at_tick > 0`).
+- min, max, median, and full sorted multiset of `respawn_at_tick`
+  values over the eligible-cell set.
+- `total_food` over the chamber (expected: 0, matching v0.43R's
+  corrected substrate finding; deviation halts).
+
+Operative-substrate criteria (all must hold across all 16 buckets
+to clear preflight):
+
+- `n_eligible_cells` is consistent across all 16 buckets and is
+  the value that gets committed to `EXPECTED_N_ELIGIBLE_CELLS`.
+  v0.44 does NOT assume the seeds-49..56 value of 24 carries
+  over.
+- Refill-tick distribution is heterogeneous within each bucket
+  (`min < max`).
+- Refill ticks lie within a window such that `min + 25` and
+  `max + 25` are both ≤ N_TICKS (= 200), so the +25 delay does
+  not push refills past the simulation horizon.
+
+If any criterion fails on any bucket, v0.44 halts pre-sweep
+(parallel to v0.43 / v0.43R). The pre-reg is amended with the
+observed values and the halt addendum before any sweep is run.
+This is the **same halt-loud discipline** that produced the
+v0.43R correction; **do NOT proceed to sweep on the seeds-49..56
+extrapolation alone**.
+
+The preflight is a documentation step, not a sweep. Its outputs
+are committed to the pre-reg's "Preflight findings" subsection
+(added on completion). It does NOT alter `src/`.
 
 ### CI gate at pre-reg time
 
