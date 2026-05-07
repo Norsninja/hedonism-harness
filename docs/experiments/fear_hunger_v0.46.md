@@ -7,6 +7,22 @@
 
 The substrate-causal arc (v0.42..v0.45) ruled out four post-tick-50 mechanism layers as *necessary* for the observed late-window dominance share at h=8 (leader removal, density compaction, respawn flow, post-50 offspring placement). v0.45 Results explicitly named pre-50 spatial sorting, founder-position advantage, **trait-linked reproduction readiness**, and topology-mediated energy access ticks 0..50 as the live causal candidates. v0.46 is the **first decomposition slice over the modern intervention corpus** addressing the readiness / energy / momentum subset of those candidates.
 
+## Pre-implementation correction (2026-05-07, before any reducer code)
+
+After reading v0.35's `lineage_survival_replay.py`, the four merged Results documents, and `src/hedonism_harness/model.py`'s per-tick step ordering, three locked items above were corrected before any data was generated. All corrections are dated and recorded here for the historical record (per CLAUDE.md "pre-reg stands as the historical record"). No data has been seen yet — this is a pre-data design fix.
+
+1. **Eventual-dominance label** changed from `argmax(living_count_at_tick_200)` to `argmax(b50_count)` (lineage with the most agents born after tick 50; tiebreak min `lineage_id`). Reason: this is what v0.35's `compute_eventual_top_lineage` (lineage_survival_replay.py:222–244) actually returns and what each prior intervention audit's `post_intervention_top_lineage_b50_share` is computed against. Aligning v0.46's dominance label with the cross-version b50 metric makes the re-anchor structural rather than coincidental.
+
+2. **Re-anchor protocol** changed: v0.43R is excluded from the hardcoded reference set because v0.43R's audit was halted as non-citable per SUBSTRATE_PREFLIGHT_HALT_2 — its merged Results does not publish an `a_share_h8` value. v0.43R A_null runs are still included in the corpus (16 runs) and v0.46 still computes their `a_share_h8` for the audit log; the value just does not gate the verdict via halt. v0.42 / v0.44 / v0.45 published `a_share_h8` values are hardcoded as references with drift tolerance 1e-3.
+
+3. **Tick-50 state-capture path** changed from "events.jsonl arithmetic" to "in-simulation `tick_observer` snapshot during deterministic re-execution under each version's locked V0_25 + A_null arm config". Reason: model.py's per-tick step ordering (action → metabolism → birth-queue → tick_count++; observer fires post-step) introduces an off-by-one between founder ages (50 metabolism cycles) and non-founder ages (49 − birth_tick cycles), and a similar asymmetry in the energy formula. Reconstructing this from events.jsonl with arithmetic is correct in principle but fragile in practice. The `tick_observer` path captures `(energy, age, x, y)` per living agent at exactly `model.tick_count == 50` — exact by construction, no arithmetic. This is the same pattern v0.45's preflight used (script `scripts/v0_45_preflight.py`).
+
+   The reducer becomes "deterministic re-execution + in-memory observation", which qualifies as a post-hoc reducer per CLAUDE.md's lesson "feasibility probes / decomposition reads must use `_run_one_arm_seed` or operate on already-written events.jsonl" — the `_run_one_arm_seed`-equivalent path is explicitly endorsed. No `src/` modification; no new sweep arms; uses each version's existing locked seed band + A_null arm definition (already encoded in `V0_4N_INTERVENTION_ARMS` and the per-version sweep scripts). The on-disk `runs/` corpus is NOT consumed by this reducer — the per-(version, seed, hazard) execution is byte-equivalent to the merged sweep's A_null arm.
+
+   Side benefits: the reducer can run in CI without pre-regenerating sweeps; copy-local helpers from v0.35's replay are no longer necessary (agent_lifetimes.csv is also not consumed). The end-of-run state (used for `eventual_top_lineage_id` and re-anchor) is captured by a final-tick `setup_observer`-equivalent snapshot of `model.agents` after the last `model.step()`.
+
+All other locked items (3 primary observables, expected signs, paired_d formula, verdict structure, locked phrases, conservation framing, secondary metrics, output paths) are unchanged. Test list is updated below to reflect the new state-capture path.
+
 ## Conservation framing — unchanged from v0.45
 
 - **No `src/` modifications.** v0.46 is a pure post-hoc consumer of on-disk `events.jsonl`. The `process_reproduction()` keyword-only `birth_redirect_callback` parameter introduced in v0.45 is irrelevant: v0.46 reduces only A_null arms (no callback ever constructed; default-None path).
@@ -32,11 +48,14 @@ Seed bands are disjoint across versions; no run-level overlap. All four sweeps s
 For each run:
 
 ```
-eventual_top_lineage_id = argmax_lineage(living_count_at_tick_200)
+eventual_top_lineage_id = argmax_lineage(b50_count)
+  where b50_count = number of agents in lineage with birth_tick_normalized > 50
   ties broken by min(lineage_id)
 ```
 
-Reconstructed from `events.jsonl` by replaying AgentBorn/AgentDied per lineage. Halt-loud (`LineageReplayError`) if any A_null run extincts before tick 200; this should not occur on the modern A_null corpus and a halt indicates the `runs/` tree was regenerated under a different config than the merged sweeps.
+Aligns with v0.35's `compute_eventual_top_lineage` (lineage_survival_replay.py:222–244) and v0.34's `top_lineage_id` (lineage_replay.py:485) so the re-anchor against each prior version's audit-emitted `a_share_h8` is structural, not coincidental.
+
+Reconstructed from `agent_lifetimes.csv` (the same sidecar v0.34/v0.35 reduce over) by counting agents whose `birth_tick_normalized > 50` per lineage. Founder agents (`birth_tick is None` → `birth_tick_normalized = 0`) never contribute to b50_count. Runs with `total_b50 == 0` (no post-50 births at all) yield `eventual_top_lineage_id = None` and contribute NaN to all primary observables — see "NaN handling".
 
 ## Primary observables (locked, 3, with expected signs)
 
@@ -48,7 +67,7 @@ Each is computed **per (run, lineage) at tick 50**, then aggregated per-run by c
 | 2 | `tick50_above_threshold_fraction` | fraction of living lineage agents with `energy ≥ reproduction_config.energy_threshold AND age ≥ min_age` | **+** | reproduction readiness |
 | 3 | `tick50_mean_energy` | mean `energy` across living lineage agents (NaN if no living agents → run dropped from observable's pool, see "NaN handling") | **+** | energy state |
 
-**NaN handling.** A lineage with zero living agents at tick 50 contributes a `pre50_reproductive_momentum_count` (it may have produced births and then extincted — count is well-defined) but contributes NaN for `tick50_above_threshold_fraction` and `tick50_mean_energy`. Per-run paired delta (top minus mean-non-top) is computed only when both top-lineage and ≥ 1 non-top lineage have non-NaN values for the observable; runs failing this gate are dropped from that observable's pool with the count reported in the audit.
+**NaN handling.** A lineage with zero living agents at tick 50 contributes a `pre50_reproductive_momentum_count` (it may have produced births and then extincted — count is well-defined) but contributes NaN for `tick50_above_threshold_fraction` and `tick50_mean_energy`. Per-run paired delta (top minus mean-non-top) is computed only when (a) the run has `total_b50 ≥ 1` (i.e., `eventual_top_lineage_id is not None`) AND (b) both top-lineage and ≥ 1 non-top lineage have non-NaN values for the observable. Runs failing either gate are dropped from that observable's pool with the count reported in the audit.
 
 ## Effect-size rule (locked)
 
@@ -70,19 +89,27 @@ No p-values, no FDR. Multiple-comparison protection is the small pre-committed p
 
 ## Re-anchor (locked)
 
-Each predecessor version's published Results section reports an A_null pooled top-lineage share at h=8. v0.46 must re-derive that share from each version's on-disk A_null `events.jsonl` files and assert agreement within float-32 tolerance. Halt-loud on drift (`CORPUS_REDERIVE_DRIFT_HALT`).
+Each predecessor version's audit emits a pooled A_null top-lineage `b50_share` at h=8 — the same metric v0.34's `top_lineage_b50_share` and v0.42..v0.45's `post_intervention_top_lineage_b50_share` use. v0.46 must re-derive that share from each version's on-disk A_null `agent_lifetimes.csv` files and assert agreement against the published reference value. Halt-loud on drift (`CORPUS_REDERIVE_DRIFT_HALT`).
 
 Re-derivation protocol (locked):
 
 ```
-top_lineage_b50_share_at_h8(version) =
-    mean over (8 A_null runs at h=8) of:
-        (max over lineages of living_count_at_tick_200) / total_living_at_tick_200
+a_share_h8(version) = mean over (8 A_null runs at h=8) of:
+    max_lineage(b50_count) / sum_lineages(b50_count)
+  where b50_count = number of agents in lineage with birth_tick_normalized > 50
+  runs with total_b50 == 0 contribute NaN and are excluded from the mean
 ```
 
-(Identical formula to v0.34 `B_pool` and v0.42..v0.45's primary observable — re-anchored on `living_count_at_tick_200`, the late-window quantity used by every prior intervention audit.)
+Identical formula to v0.34's `top_lineage_b50_share` and the per-version audit's `post_intervention_top_lineage_b50_share`. Hardcoded reference values (extracted from each merged Results document at pre-reg time):
 
-The published reference values are pulled from the merged Results section of each version (v0.42, v0.43R, v0.44, v0.45) at reducer initialisation; if a version's Results section does not contain a parseable A_null h=8 share, halt with a config error rather than skip the anchor.
+| version | published `a_share_h8` | source |
+|---|---|---|
+| v0.42 | **0.652** | `docs/experiments/fear_hunger_v0.42.md` line 817 (Results §"Verdict — `MECHANISM_NOT_NECESSARY` fires") |
+| v0.43R | **NOT PUBLISHED** | Results halted as non-citable per SUBSTRATE_PREFLIGHT_HALT_2; A_null runs are still on-disk and clean, but no published anchor exists. **v0.43R is excluded from the re-anchor halt** — its A_null h=8 share is computed and printed for the audit log, but does not gate the verdict. |
+| v0.44 | **0.878** | `docs/experiments/fear_hunger_v0.44.md` line 1184 (Results §"Per-arm-per-hazard"; bolded) |
+| v0.45 | **0.818** | `docs/experiments/fear_hunger_v0.45.md` line 1318 (Results) |
+
+Drift tolerance: `|v0.46_derived - published| > 1e-3` halts. The published values are reported to 3 decimals so 1e-3 is the published precision; tighter tolerance would be spurious.
 
 ## Verdicts (locked, 3-way + 2 halts)
 
@@ -92,7 +119,7 @@ The published reference values are pulled from the merged Results section of eac
 | exactly 1/3 fires (and 0/3 fire wrong) | `READINESS_PARTIALLY_PREDICTIVE` | "Tick-50 readiness is partially predictive of post-50 dominance on the modern A_null corpus; only one of three primary observables clears the locked threshold." |
 | 0/3 fire (and 0/3 fire wrong) | `READINESS_NOT_PREDICTIVE` | "Tick-50 readiness does not predict post-50 dominance on the modern A_null corpus; none of the three primary observables clear the locked threshold." |
 | any primary fires |paired_d| ≥ 0.5 in WRONG direction | `READINESS_OPPOSITE_SIGN_HALT` | "Halt: tick-50 readiness shows a wrong-direction signal on the modern A_null corpus; the substrate-causal arc's readiness candidate is incompatible with the locked expected signs." |
-| any version's re-derived A_null h=8 share drifts from its merged-Results value | `CORPUS_REDERIVE_DRIFT_HALT` | "Halt: A_null re-anchor drifted from the merged Results value for v0.NN; the on-disk corpus is not byte-equivalent to the published sweep." |
+| any of v0.42 / v0.44 / v0.45's re-derived A_null h=8 share drifts > 1e-3 from its hardcoded reference | `CORPUS_REDERIVE_DRIFT_HALT` | "Halt: A_null re-anchor drifted from the published Results value for v0.NN; the on-disk corpus is not byte-equivalent to the published sweep." |
 
 The 0-of-3-fires verdict (`READINESS_NOT_PREDICTIVE`) and 1-of-3 verdict (`READINESS_PARTIALLY_PREDICTIVE`) are framed correlationally — they do not rule readiness out as a *mechanism*, only as a robust *predictor* under the locked thresholds. Mechanism declarations require a fresh-stream calibration, which v0.46 does not perform (per v0.36 framing discipline).
 
@@ -142,21 +169,26 @@ runs/v0.46-readiness/audit_log.txt
   the locked phrase fired verbatim.
 ```
 
-## Implementation plan (locked)
+## Implementation plan (locked, post-correction)
 
-1. Fresh script `scripts/v0_46_tick50_readiness_audit.py`. Underscore filename (matches v0_43r/v0_44/v0_45 audit naming), CLI: `uv run python scripts/v0_46_tick50_readiness_audit.py --runs-root runs/`.
-2. Copy-local `_replay_living_state` helper from v0.35's `lineage_survival_replay.py` (NOT import). v0.35's script remains byte-identical. Helper is adapted to additionally track `(agent_id → energy, age)` per tick by deterministic metabolism + `AteFood` / `HazardDamageApplied` deltas (verify metabolism formula matches `src/hedonism_harness/model.py` per-tick agent step exactly).
-3. Read each version's merged Results to extract the published A_null h=8 share (string-match a locked anchor in the markdown — see "Watch-outs"). Halt with config error if not found.
-4. For each of 64 runs: replay events.jsonl up to tick 50 → emit per-lineage tick-50 row; replay through tick 200 → assign `is_eventual_top` and `end_of_run_living`.
-5. Compute paired_d per primary observable across all 64 runs (NaN-aware drops per "NaN handling").
-6. Re-anchor: per (version, hazard) compute `top_lineage_b50_share_at_h8`; compare to merged-Results value; halt-loud on |drift| > 1e-4 (float-32 tolerance).
-7. Emit verdict per the locked decision rule; print + write the locked phrase verbatim.
+1. Fresh script `scripts/v0_46_tick50_readiness_audit.py`. Underscore filename (matches v0_43r/v0_44/v0_45 audit naming), CLI: `uv run python scripts/v0_46_tick50_readiness_audit.py [--out-dir runs/v0.46-readiness]`.
+2. Per (version, seed, hazard) tuple in the locked corpus, build the same V0_25 + A_null arm config the version's sweep used (re-using `V0_42_INTERVENTION_ARMS[0]` / `V0_43R_INTERVENTION_ARMS[0]` / `V0_44_INTERVENTION_ARMS[0]` / `V0_45_INTERVENTION_ARMS[0]` — the A_null arm — from `comparison_grid.py`).
+3. Run `run_chamber(...)` once per tuple with two observers:
+   - **`tick_observer`**: fires when `model.tick_count == 50`, snapshots per-living-agent `(agent_id, lineage_id, parent_id, x, y, energy, age, traits)` and per-living-agent reproduction-readiness predicate `(energy ≥ energy_threshold AND age ≥ min_age)`. Stores in a per-run dict keyed by `(version, seed, hazard)`.
+   - **End-of-run capture**: after the last `model.step()`, snapshot `birth_tick` per agent (founders: 0; non-founders: from each agent's stored `birth_tick`) and compute `b50_count` per lineage = number of agents (including dead ones) with `birth_tick > 50`.
+4. Per (run, lineage) at tick 50: aggregate the 3 primary observables + secondary descriptive metrics over the lineage's living agents at tick 50 (snapshot from step 3's `tick_observer`).
+5. Per run: assign `is_eventual_top` per the corrected dominance label (`argmax(b50_count)` from step 3's end-of-run capture). Runs with `total_b50 == 0` get `eventual_top_lineage_id = None` (and contribute NaN to all primary observables, see "NaN handling").
+6. Compute paired_d per primary observable across all 64 runs (NaN-aware drops per "NaN handling").
+7. Re-anchor: for v0.42 / v0.44 / v0.45 only, compute `a_share_h8 = mean over A_null h=8 runs of (max_lineage(b50_count) / total_b50_in_run)`; compare to hardcoded reference (0.652 / 0.878 / 0.818); halt-loud on |drift| > 1e-3. v0.43R: compute and print, do NOT halt-gate.
+8. Emit verdict per the locked decision rule; print + write the locked phrase verbatim.
+
+The reducer is fully self-contained: it reads no on-disk `runs/` artifacts. Re-execution of 64 A_null runs at ~5–10 s each gives a wall time of ~5–10 minutes total — comparable to running each sweep (~17 s per sweep × 4 = ~70 s, plus overhead) but consolidated in one driver. Determinism guaranteed by passing each (version, seed) the same anchor config the merged sweep used.
 
 ## Test list (locked, per v0.45 7-point review pattern)
 
 `tests/test_v0_46_tick50_readiness_audit.py`:
 
-1. `test_replay_recovers_living_count_at_tick200_against_v0_35_anchor` — on a synthetic events.jsonl, copy-local replay produces the same end-of-run living count as v0.35's own replay (re-anchor of the helper itself).
+1. `test_tick50_observer_fires_once_at_correct_step_boundary` — run `run_chamber` for 100 ticks with a counting `tick_observer`; assert the observer sees `model.tick_count == 50` exactly once and that the snapshot is non-empty (≥ 1 living agent on the V0_25 anchor).
 2. `test_eventual_top_lineage_tiebreak_lowest_lineage_id` — synthetic two-lineage tie at tick 200; assert lowest lineage_id wins.
 3. `test_pre50_reproductive_momentum_count_matches_filtered_events` — synthetic events with births at ticks 30, 50, 75; assert count = 2 (≤ 50 inclusive).
 4. `test_tick50_above_threshold_fraction_predicate` — synthetic agents with energy/age combinations spanning the predicate boundary; assert exact fraction.
@@ -174,9 +206,10 @@ runs/v0.46-readiness/audit_log.txt
 ## Watch-outs (for future-Chronus)
 
 - **`runs/` is gitignored.** Each of the 4 sweeps must be re-run locally before the reducer (`uv run python scripts/v0.42_sweep.py`, etc., ~17s each). Pre-commit which sweeps fired.
-- **A_null published-share extraction**: each version's Results section uses its own table format. Plan: lock a regex anchor like `A_null at h=8: <float>` per merged Results, halt-loud on parse failure rather than fall back. Adapt the regex per version if the markdown formats diverge.
-- **Metabolism formula** for per-tick energy reconstruction MUST match `src/hedonism_harness/model.py` exactly. Test #1 above re-anchors the helper against v0.35's replay output; any drift here halts the slice.
-- **Birth queue ordering**: v0.21..v0.27 birth queue applies the parent energy debit + child startup-energy spawn at queue-process time, which can fall on the same tick as the `ReproductionRequested`. Tick-50 energy reconstruction must apply the parent-debit to anyone who requested reproduction at tick ≤ 50 AND was processed at tick ≤ 50.
+- **A_null reference values are hardcoded** (0.652 / 0.878 / 0.818 for v0.42 / v0.44 / v0.45). v0.43R has no published value and is excluded from the halt protocol. If a future correction to a prior version's Results changes those numbers, this slice's pre-reg becomes drift-positive and must be amended.
+- **`tick_observer` fires AFTER `model.step()` increments `tick_count`** (`fear_hunger_chamber.py:502-503`). When the observer sees `model.tick_count == 50`, the model has just completed step 49: founder agents have undergone 50 metabolism cycles (steps 0..49); an agent with `body.id` born at tick T has undergone (49 − T) metabolism cycles. The observer reads `body.energy` and `body.age` directly — no arithmetic, no off-by-one risk.
+- **`b50_count` reads `body.parent_id` of the live `model.agents`** at end-of-run plus an internal birth-tick map populated at `AgentBorn` emission time (signal listener attached at `setup_observer` time). Founders never contribute to `b50_count` (they have no `AgentBorn` event; `birth_tick = 0` by convention).
+- **No `src/` modification.** The reducer uses `setup_observer` and `tick_observer`, both already supported by `fear_hunger_chamber.run_chamber` since v0.45. No new sweep arms; no callback construction; A_null runs use `optional_intervention=InterventionConfig(kind=KIND_NULL)` (byte-identical to `optional_intervention=None`, verified by H2e).
 - **Pre-50 reproduction byte-identity** through v0.46 is preserved by construction: v0.46 makes no `src/` change.
 - **Locked phrase discipline**: when the verdict fires, the locked-phrase string in the Results section MUST match the table above verbatim. No paraphrase.
 - **`is_eventual_top` is a function of tick-200 living count, not of share**. Some prior versions report share thresholds; the dominance label here is purely the argmax (with tiebreak), not a share-fraction threshold.
