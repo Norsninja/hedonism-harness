@@ -328,50 +328,69 @@ One callable factory:
 ```python
 def make_v045_birth_redirect_callback(config, model):
     """Returns a callable suitable for ``birth_redirect_callback``
-    in process_reproduction(). The callable receives (world, parent_body,
-    occupied) and returns either (x, y) for the redirected child or
-    None to skip the birth.
+    in process_reproduction(). The callable receives
+    (world, parent_body, occupied, original_placement) and returns
+    either (x, y) for the redirected child or None to skip the
+    birth.
+
+    The callback is NEVER invoked for tick <= 50; that gate lives
+    in the call site (chamber driver / agent reproduction step).
+    The callback assumes tick > 50 unconditionally.
 
     Behavior by kind:
       - B (uniform_valid_region_birth_position_after_tick50):
-        if model.tick_count <= 50: defer to default placement (return
-            None? — see hook contract);
-        else: pick uniformly at random from
-            _v045_eligible_global_cells(...) using
-            model.streams['v0_45_birth_position_intervention'].
-            If the eligible set is empty, return None (birth skipped).
+        pick uniformly at random from
+        _v045_eligible_global_cells(world, occupied) using
+        model.streams['v0_45_birth_position_intervention'].
+        If the eligible set is empty, increment
+        model.v045_skipped_redirect_counter and return None
+        (birth skipped, no event emitted).
       - C (uniform_neighbor_birth_position_after_tick50):
-        if model.tick_count <= 50: defer to default placement;
-        else: pick uniformly at random from
-            _v045_eligible_neighbor_cells(...) using the same RNG
-            stream. If empty, return None (birth skipped).
+        pick uniformly at random from
+        _v045_eligible_neighbor_cells(world, parent, occupied)
+        using the same RNG stream. If empty, increment the
+        skipped counter and return None.
 
-    The callback emits one BirthRedirectedByIntervention event per
-    redirected birth (including events for tick > 50 redirected
-    placements; pre-50 events are NOT emitted because the callback
-    defers without firing)."""
+    On a successful redirect, the callback emits one
+    BirthRedirectedByIntervention event with all locked fields
+    populated (including target_cell_kind read from
+    world.kind_layer[redirected_x, redirected_y] at firing time)
+    and returns the redirected (x, y)."""
 ```
 
 Hook contract for `birth_redirect_callback`:
 
-- The callback is invoked by `process_reproduction()` *in place of*
-  the default `find_adjacent_empty_cell` call when
-  `birth_redirect_callback is not None`.
-- Return value semantics:
-  - `(x, y)` tuple (any in-bounds non-WALL unoccupied cell):
-    placement proceeds at that cell.
-  - `None`: birth is skipped (no charge, no child, no event other
-    than whatever the callback chose to emit).
-- Pre-tick-51 invocations: the callback **defers to default**
-  placement by returning the result of `find_adjacent_empty_cell`
-  itself (so the v0.45 callback acts as an intercepting wrapper,
-  preserving v0.21..v0.44 semantics for ticks <= 50). The callback
-  does **not** emit `BirthRedirectedByIntervention` for these
-  pre-50 deferrals.
-- Post-tick-50 invocations: the callback selects from its kind-
-  specific eligible-cell set (B or C); on success emits one
-  `BirthRedirectedByIntervention` event and returns the selected
-  cell; on empty-set returns `None` (birth skipped, no event).
+- **Pre-50 gate is OUTSIDE the callback.** `process_reproduction()`
+  receives `birth_redirect_callback=None` whenever
+  `model.tick_count <= 50`. The callback is constructed once per
+  run by the chamber driver and gated at the call-site (in the
+  agent's `_attempt_reproduction` path) by checking `tick > 50`
+  before passing the callback into `process_reproduction()`. This
+  keeps the default-N/S/E/W path **genuinely untouched** for
+  pre-50 reproduction; no wrapper, no deferral, no risk of
+  callback contamination.
+- For `tick > 50`, when the callback is provided:
+  - The callback receives `(world, parent_body, occupied,
+    original_placement)` where `original_placement` is the result
+    of `find_adjacent_empty_cell(world, parent_body, occupied)`
+    (or `None` if the default would have skipped). The callback
+    has access to what the default would have done; it is free
+    to ignore that info or use it for diagnostics.
+  - The callback returns `(x, y)` to redirect the birth, or
+    `None` to skip the birth (no charge, no child).
+  - On a successful redirect (`(x, y)` returned), the callback
+    emits one `BirthRedirectedByIntervention` event with the
+    correct fields (see Event class §below).
+  - On a skip (`None` returned with empty eligible set), the
+    callback does **not** emit an event but does increment a
+    run-local counter `n_skipped_birth_redirect_empty_eligible`
+    that is read by the audit (see Aggregate audit fields
+    §below).
+- **Invalid callback return contract.** If the callback returns a
+  cell that fails `_is_placeable` (in-bounds, non-WALL,
+  unoccupied), `process_reproduction()` raises `ValueError`. This
+  is intervention code, not organism behavior; a soft-fail would
+  hide bugs and contaminate the scientific record.
 
 Determinism contract:
 
@@ -470,7 +489,7 @@ class BirthRedirectedByIntervention:
       eligible set."""
 
     intervention_kind: str
-    tick: int                      # the model.tick_count when birth fires
+    tick: int                      # the model.tick_count when birth fires (always > 50)
     parent_id: int
     parent_lineage_id: int
     parent_x: int                  # parent's position (origin of default placement)
@@ -479,14 +498,25 @@ class BirthRedirectedByIntervention:
     original_y: int                # (None-encoded as -1 if default would have skipped)
     redirected_x: int              # what the callback chose
     redirected_y: int
-    n_valid_cells: int             # size of eligible-cell set at this firing
+    n_valid_cells: int             # size of eligible-cell set at this firing (>= 1)
+    target_cell_kind: str          # CellKind.name of the redirected cell
+                                   # (one of "EMPTY", "FOOD", "SAFE"); audit
+                                   # validates this against the predicate
+                                   # without needing full chamber-state dumps
     preserved_parent_adjacency: bool
     rng_stream_label: str          # "v0_45_birth_position_intervention" (locked)
 ```
 
 Added to `_SIGNAL_NAMES` and the `AnyEvent` union.
 
-### 3. Reproduction extension (`core/reproduction.py`) — additive
+### 3. Reproduction extension (`core/reproduction.py`) — additive (FLAGGED)
+
+> **v0.45 is the FIRST causal slice modifying `core/reproduction.py`.**
+> The modification must be additive, **keyword-only**, default
+> `None`, and regression-tested for byte-identical default
+> behavior. Callers must NOT pass `birth_redirect_callback`
+> positionally; the parameter is keyword-only to prevent silent
+> propagation through `*args` chains.
 
 ```python
 def process_reproduction(
@@ -497,15 +527,25 @@ def process_reproduction(
     parent_rng: random.Random,
     child_id: int,
     occupied: frozenset[tuple[int, int]] | None = None,
+    *,                                                              # NEW v0.45 — keyword-only barrier
     birth_redirect_callback: Callable[..., tuple[int, int] | None] | None = None,  # NEW v0.45
 ) -> tuple[AgentBody, AgentBody] | None:
     """[existing docstring] ...
 
-    v0.45 (additive): when birth_redirect_callback is provided, the
-    callback is consulted in place of find_adjacent_empty_cell to
-    determine the child's coordinates. A None return value skips
-    the birth. The default-None path preserves v0.21..v0.44 behavior
-    byte-identically."""
+    v0.45 (additive, keyword-only): when birth_redirect_callback is
+    provided, the callback is consulted in place of
+    find_adjacent_empty_cell to determine the child's coordinates.
+    The callback receives (world, parent, occupied,
+    original_placement) and returns either (x, y) or None (skip
+    birth). If the callback returns a cell that fails
+    _is_placeable, this function raises ValueError. The default-None
+    path preserves v0.21..v0.44 behavior byte-identically.
+
+    Callers (chamber driver / agent reproduction step) gate the
+    callback by tick at the CALL SITE: pre-50 invocations pass
+    birth_redirect_callback=None unconditionally, so the v0.45
+    callback never fires for pre-50 births. This keeps the
+    default path genuinely untouched for v0.21..v0.44 semantics."""
 ```
 
 Default-None preserves byte-identity exactly: when `None`, the
@@ -559,28 +599,50 @@ Halt invariants (5):
 
 - **H2a (run count):** exactly 6 arms × 8 seeds = 48 runs on disk.
 - **H2b (intervention-fire pattern per arm):**
-  - A_null: 0 `BirthRedirectedByIntervention` events per run.
+  - A_null: 0 `BirthRedirectedByIntervention` events per run, AND
+    `n_skipped_birth_redirect_empty_eligible == 0` (no callback
+    constructed).
   - B_uniform_valid_region: at least 1 event per run with
     `tick > 50` and `intervention_kind="uniform_valid_region_birth_position_after_tick50"`,
-    UNLESS the run's auxiliary `excluded_zero_post50 == True`
-    (no post-50 births of any kind, so no redirections to fire).
-  - C_uniform_neighbor: same with the C kind.
+    UNLESS the run is in one of the documented exclusion buckets:
+    - `excluded_zero_post50`: zero post-50 reproduction attempts
+      (no fertile parents). No redirections fire because no
+      births fire.
+    - `excluded_redirect_empty`: post-50 reproduction attempts
+      occurred but every attempt found an empty B-eligible set
+      (no chamber-wide non-HAZARD non-WALL unoccupied cell at
+      the firing moment — pathological; expected to be vanishingly
+      rare for B given the chamber size).
+    These two exclusion categories are tracked separately and
+    NOT collapsed into a single `excluded` field.
+  - C_uniform_neighbor: same as B but with the C kind. Note that
+    `excluded_redirect_empty` is more plausible for C than for B
+    because parent's N/S/E/W can all be HAZARD/WALL/occupied at
+    a given tick.
 - **H2c (tick monotonicity):** every fired event has
   `tick > 50`. Pre-50 events are forbidden (callback defers
   pre-50).
 - **H2d (placement conservation):**
-  - For both B and C: every fired event's `(redirected_x, redirected_y)`
-    satisfies `_is_v045_birth_safe_placeable` at the firing moment
-    (i.e., the audit re-evaluates the predicate against the chamber
-    state captured in the event; halt on violation).
-  - For C only: `|original_x - redirected_x| + |original_y -
-    redirected_y| <= 1` (parent-adjacency preserved by predicate
-    construction).
+  - For both B and C: every fired event's `target_cell_kind` is
+    one of `{"EMPTY", "FOOD", "SAFE"}`. (HAZARD/WALL excluded
+    by the predicate; the audit verifies the kind at firing
+    time was captured correctly. The audit does NOT reconstruct
+    full chamber state; per-event `target_cell_kind` is the
+    sufficient witness.)
+  - For both: redirected cell != parent cell
+    (`(redirected_x, redirected_y) != (parent_x, parent_y)`).
+  - For C only (parent-adjacency): Manhattan distance
+    `|parent_x - redirected_x| + |parent_y - redirected_y| == 1`.
+    (Strict equality 1, not <= 1, since the parent cell itself
+    is occupied and excluded by predicate.)
+  - For B: no adjacency invariant. `preserved_parent_adjacency`
+    is True/False per event; the audit aggregates the fraction
+    over the run as a diagnostic.
   - For both: `n_valid_cells >= 1` on every fired event (callback
     only fires when the eligible set is non-empty).
   - For both: `rng_stream_label == "v0_45_birth_position_intervention"`.
   - For both: `preserved_parent_adjacency` is consistent with the
-    Manhattan-distance predicate (always True for C; True/False
+    Manhattan-distance check (always True for C; True/False
     per-event for B).
 - **H2e (regression byte-identity):** sampled v0.42 A_null seed +
   v0.42 B_kill_leader seed + v0.43R B_reduce seed + v0.44 B_delay
@@ -604,12 +666,23 @@ Computes per-(arm, seed):
 - `n_redirected_births`: count of BirthRedirectedByIntervention
   events in the run (0 for A_null; otherwise positive for B/C
   unless excluded).
+- `n_skipped_birth_redirect_empty_eligible`: count of post-50
+  reproduction attempts where the callback returned None (empty
+  eligible set). Read from a model-level counter.
+- `n_attempted_post_50_reproductions`: sum of redirected + skipped
+  for B/C; 0 for A_null.
 - `mean_n_valid_cells_per_birth`: average over fired events.
 - `fraction_b_preserved_adjacency`: for B runs, fraction of fired
   events with `preserved_parent_adjacency == True` (diagnostic for
   how often random global selection happened to land adjacent;
   expected small).
+- `target_cell_kind_distribution`: histogram of `target_cell_kind`
+  values across fired events in the run (e.g.,
+  `{"EMPTY": 8, "FOOD": 3, "SAFE": 1}`); useful diagnostic for
+  audit cross-check on H2d.
 - `excluded_zero_post50` (True if `total_post_50_births == 0`).
+- `excluded_redirect_empty` (True if B/C arm AND attempted > 0 AND
+  redirected == 0).
 
 Aggregates per-(arm, hazard) and computes the locked decision rule.
 
@@ -689,7 +762,17 @@ RNG_STREAM_LABEL: str = "v0_45_birth_position_intervention"
 - `arm` ∈ {A_null, B_uniform_valid_region, C_uniform_neighbor}.
 - `hazard` ∈ {0, 8}.
 - `seed` ∈ {65..72}.
-- `n_redirected_births`: int (>=0; 0 for A_null).
+- `n_redirected_births`: int (>=0; 0 for A_null). Count of
+  `BirthRedirectedByIntervention` events emitted.
+- `n_skipped_birth_redirect_empty_eligible`: int (>=0; 0 for
+  A_null). Count of post-50 reproduction attempts where the
+  eligible set was empty and the birth was skipped without an
+  event. Run-local counter incremented by the callback; surfaced
+  in the audit's per-run aggregate.
+- `n_attempted_post_50_reproductions`: int (>=0). Total post-50
+  invocations of the callback (sum of `n_redirected_births +
+  n_skipped_birth_redirect_empty_eligible` for B/C; 0 for
+  A_null).
 - `mean_n_valid_cells_per_birth`: float (NaN for A_null and runs
   with `n_redirected_births == 0`).
 - `fraction_b_preserved_adjacency`: float in [0, 1] (NaN for
@@ -700,7 +783,12 @@ RNG_STREAM_LABEL: str = "v0_45_birth_position_intervention"
 - `top_lineage_id`, `top_lineage_post50_births`: int.
 - `post_intervention_top_lineage_b50_share`: float in [0, 1]
   (NaN if total_post_50_births == 0).
-- `excluded_zero_post50`: bool.
+- `excluded_zero_post50`: bool — True iff `total_post_50_births == 0`.
+- `excluded_redirect_empty`: bool — True iff B/C arm AND
+  `n_attempted_post_50_reproductions > 0` AND
+  `n_redirected_births == 0` (every attempt found an empty
+  eligible set). Tracked separately from `excluded_zero_post50`;
+  must NOT be collapsed.
 
 ### Per-(arm, hazard) — 6 rows total
 
@@ -1086,26 +1174,46 @@ arithmetically reachable:
   - Determinism: same world state → byte-identical eligible-cell
     list.
 - **Callback factory:**
-  - For tick <= 50, callback returns
-    `find_adjacent_empty_cell(world, parent, occupied)` (defers).
-  - For tick > 50 with B kind, callback returns a cell from
+  - For B kind, callback returns a cell from
     `_v045_eligible_global_cells(...)` selected via the locked
     RNG stream.
-  - For tick > 50 with C kind, callback returns a cell from
+  - For C kind, callback returns a cell from
     `_v045_eligible_neighbor_cells(...)` selected via the same
     stream.
-  - Empty eligible set → callback returns None.
+  - Empty eligible set → callback returns None and increments
+    `n_skipped_birth_redirect_empty_eligible`.
   - Same seed + same chamber state + same kind → byte-identical
     redirected cell.
-- **Reproduction extension:**
-  - Default-None: `process_reproduction()` byte-identical to
-    pre-v0.45 (regression).
-  - Callback-provided + returns valid cell: child placed at
-    callback's cell.
-  - Callback-provided + returns None: birth skipped (no charge,
-    no child).
-  - Callback-provided + returns invalid cell: ??? (recommend
-    halt with `ValueError` to surface bugs early).
+  - The callback is NEVER invoked for tick <= 50; that gate lives
+    in the call site (chamber driver / agent reproduction step),
+    not the callback itself.
+- **Reproduction extension** (`tests/test_reproduction_v0_45_callback.py`,
+  minimum required test cases):
+  - **default-None reproduces existing deterministic N/S/E/W
+    placement** (byte-identical regression, sampled across
+    multiple parent positions and chamber states).
+  - **callback is not called for tick <= 50** (verified by
+    constructing a callback that raises if invoked, then
+    confirming pre-50 reproductions complete normally).
+  - **callback is called for tick >= 51** (verified by counting
+    invocations in a tracking callback).
+  - **callback returning None skips the birth** (no charge to
+    parent, no child constructed, return value of
+    `process_reproduction` is `None`).
+  - **callback returning a cell that fails `_is_placeable`
+    raises `ValueError`** (out-of-bounds, WALL-adjacent,
+    occupied — all three negative cases).
+  - **B predicate excludes HAZARD and WALL**
+    (`_is_v045_birth_safe_placeable` returns False on HAZARD,
+    WALL, out-of-bounds, occupied; True on EMPTY, FOOD, SAFE
+    when in-bounds and unoccupied).
+  - **C predicate excludes HAZARD and WALL and requires
+    adjacency** (`_v045_eligible_neighbor_cells` returns only
+    cells at Manhattan distance 1 from parent that satisfy
+    the predicate).
+  - **callback signature contract**: receives `(world, parent,
+    occupied, original_placement)`; rejects positional
+    `birth_redirect_callback` argument (keyword-only).
 - **Event class:**
   - `BirthRedirectedByIntervention` is frozen, slotted, hashable,
     serialisable.
