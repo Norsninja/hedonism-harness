@@ -1275,5 +1275,192 @@ commit state.)
 
 ## Results
 
-**Status:** pending implementation, sweep, and audit. Results
-appended after the audit fires (or after a halt, whichever applies).
+**Status:** sweep + audit executed 2026-05-07. **Verdict:
+BIRTH_LOCALITY_NOT_NECESSARY.** All H2 invariants held; no halts.
+The locked phrase fires verbatim. The v0.42 → v0.43R → v0.44 → v0.45
+substrate-causal-probe arc closes with **four consecutive negative
+findings**: tick-50 leader identity not necessary, food-density
+probe disqualified (substrate depleted), respawn flow not necessary,
+post-50 birth-position locality not necessary.
+
+### Per-(arm, hazard) post-intervention top-lineage b50 share
+
+| arm | h | n_runs | n_used | mean | median |
+|---|---:|---:|---:|---:|---:|
+| A_null                  | 0 | 8 | 8 | 0.724 | 0.624 |
+| A_null                  | 8 | 8 | 8 | **0.818** | 1.000 |
+| B_uniform_valid_region  | 0 | 8 | 8 | 0.763 | 0.744 |
+| B_uniform_valid_region  | 8 | 8 | 8 | **0.821** | 0.941 |
+| C_uniform_neighbor      | 0 | 8 | 8 | 0.683 | 0.641 |
+| C_uniform_neighbor      | 8 | 8 | 8 | **0.808** | 1.000 |
+
+### Primary test (h=8)
+
+- `a_share_h8 = 0.818`, `b_share_h8 = 0.821`, `c_share_h8 = 0.808`.
+- `delta(B−A) = +0.003` (B *slightly increases* dominance, far above
+  the −0.15 threshold; `b_passes=False`).
+- `delta(C−A) = −0.010` (within ±0.10 tolerance; `c_passes=True`).
+- `b_passes=False` → **BIRTH_LOCALITY_NOT_NECESSARY** verdict.
+- `primary_fires=False`.
+
+### Secondary test (hazard amplification of B-A)
+
+- `|delta(h=0)| = 0.039`, `|delta(h=8)| = 0.003`.
+- `hazard_amplified=False`.
+- `secondary_fires=False`.
+
+### h=0 comparison
+
+| arm | h=0 share | delta vs A | h=8 share | delta vs A |
+|---|---:|---:|---:|---:|
+| A_null    | 0.724 | —      | 0.818 | —      |
+| B_uniform | 0.763 | +0.039 | 0.821 | +0.003 |
+| C_neighbor| 0.683 | −0.041 | 0.808 | −0.010 |
+
+Both treatment and placebo land within ±0.05 of A at both hazards;
+within the noise band given n=8 per bucket. **No directional signal
+in either arm.**
+
+### n_redirected per arm/hazard + adjacency diagnostic
+
+| arm | h | n_redirected (8 runs) | mean n_valid_cells | B-adjacency-fraction |
+|---|---:|---:|---:|---:|
+| B_uniform | 0 | 127 | 24.0 | **0.07** |
+| B_uniform | 8 | 148 | 26.7 | **0.08** |
+| C_neighbor| 0 |  94 |  1.4 | 1.00 |
+| C_neighbor| 8 | 102 |  1.5 | 1.00 |
+
+**Striking diagnostic**: B's `fraction_b_preserved_adjacency` is
+only 7–8% — the global redirection is genuinely scattering offspring
+across the chamber (mean 24+ valid global cells per birth, only ~1
+of which is parent-adjacent on average). The adjacency invariant of
+the lineage-cluster mechanism is *materially broken* by B, yet
+post-50 dominance reconstitutes within 0.003 of A. **The dominance
+pattern is robust to spatial-cluster destruction.**
+
+### `GLOBAL_REDIRECT_ABLATES_REPRODUCTION` status
+
+**Did not fire** at either hazard (`b_n_excluded=0` on every bucket).
+B produced more total post-50 births than A (B: 127+148=275; A:
+98+109=207). Reproduction is fully sustained even under maximally-
+scattered placement; in fact **B reproduces *more* than A**, perhaps
+because freed parent-adjacent cells reduce same-tick contention.
+The `_is_v045_birth_safe_placeable` predicate's HAZARD-exclusion
+also helps newborns avoid hazard-placement mortality.
+
+### Placement conservation (per-(arm, hazard))
+
+- **B (uniform global)**: target_kind histogram across 275 redirected
+  births = **EMPTY: 124, FOOD: 2, SAFE: 149**. Mean valid cells per
+  birth: 24–27. B-adjacency-fraction: 7–8%.
+- **C (uniform neighbor)**: target_kind histogram across 196 redirected
+  births = **EMPTY: 182, FOOD: 14, SAFE: 0**. Mean valid cells per
+  birth: 1.4–1.5 (parent often has only 1–2 valid neighbors at any
+  given tick). C-adjacency: 100% (by construction).
+
+### Respawn / Birth event invariant summary
+
+H2 invariants verified across all 48 runs:
+
+- **H2a**: 48 events.jsonl files on disk.
+- **H2b**: A_null = 0 redirect events; B/C arms emit ≥ 1 per run on
+  every bucket (no `excluded_zero_post50` or `excluded_redirect_empty`
+  buckets at this hazard band).
+- **H2c**: every fired event has `tick > 50`.
+- **H2d**:
+  - All `target_cell_kind` values ∈ {EMPTY, FOOD, SAFE} (no HAZARD/WALL).
+  - `(redirected_x, redirected_y) != (parent_x, parent_y)` on every
+    event.
+  - C arm: Manhattan distance from parent == 1 on every event.
+  - All events: `n_valid_cells >= 1`,
+    `rng_stream_label = "v0_45_birth_position_intervention"`,
+    `preserved_parent_adjacency` consistent with Manhattan check.
+
+### H2e regression status
+
+**PASS.** Verified by [[tests/test_world_intervention_hook_v0_45.py]]:
+
+- `test_kind_null_byte_identical_to_no_intervention`: PASS.
+  `optional_intervention=InterventionConfig(kind="null")` produces
+  events.jsonl bytewise identical to `optional_intervention=None`
+  on the same seed.
+- `test_v0_42_kill_leader_path_remains_dispatchable`: PASS.
+  v0.42 `kill_tick50_leader` path remains dispatchable on the
+  v0.45 branch and emits `LineageKilledByIntervention`; no
+  `BirthRedirectedByIntervention` events.
+- `test_v0_43r_reduce_density_path_remains_dispatchable`: PASS.
+  v0.43R density path remains dispatchable; emits
+  `FoodRedistributedByIntervention`.
+- `test_v0_44_delay_respawn_path_remains_dispatchable`: PASS.
+  v0.44 respawn-schedule path remains dispatchable; emits
+  `RespawnScheduleByIntervention`.
+
+`process_reproduction()`'s additive keyword-only
+`birth_redirect_callback` parameter (default None) preserves
+v0.21..v0.44 byte-identity exactly. Regression-tested via
+[[tests/test_reproduction_v0_45_callback.py]].
+
+### Locked phrase (fired verbatim)
+
+> "Neither redirection (global or adjacency-preserving) materially
+> disrupts the post-50 dominance pattern at h=8. A surviving lineage
+> reconstitutes concentration-of-share even when offspring are
+> scattered uniformly across the chamber's valid-safe-placeable
+> region. **Parent-local birth placement is not necessary** for
+> post-50 dominance under the tested substrate; the causal source
+> lives outside the offspring-placement layer at the anchor moment.
+> v0.42 ruled out the tick-50 leader's identity; v0.43R's food-
+> density probe was disqualified (substrate depleted); v0.44 ruled
+> out tick-50 respawn flow; v0.45 rules out post-50 birth-position
+> locality. Remaining substrate-anchored candidates: founder-trait
+> lock-in, hazard topology relocation, chamber geometry
+> (wall-adjacency, reachability). v0.46 candidate: founder-trait
+> lock-in or hazard-relocation intervention."
+
+### Caveats (locked, repeated from pre-reg)
+
+- Per-arm n is 8.
+- Necessity only; sufficiency NOT tested.
+- One seed band (65..72); two hazards ({0, 8}); single locked
+  redirection rule (uniform-valid-region for B, uniform-neighbor
+  for C); single locked predicate (HAZARD/WALL excluded, SAFE
+  included).
+- Hazard topology preserved; walls inviolate; food-value layer
+  untouched; respawn-schedule layer untouched.
+- Founder placement at tick 0 untouched; v0.45 intervenes on
+  offspring births only, post-tick-50.
+- Pre-50 reproduction byte-identical to v0.44 (callback gated at
+  call site; no events emitted pre-50).
+- No biological-realism claim.
+- No mechanism declaration even on a positive outcome.
+- Effect-size budget (0.15 / 0.10) inherited from v0.42 / v0.43R
+  / v0.44 unchanged.
+
+### Methodological note
+
+This is the first slice that modifies `core/reproduction.py` since
+v0.27. The modification is **additive, keyword-only, default-None**
+and regression-tested for byte-identical default behavior. The
+callback is constructed only when `optional_intervention.kind ∈
+v0.45 set`; v0.42/v0.43/v0.43R/v0.44 sweeps re-run on the v0.45
+branch produce no new RNG draws and no behavioral change.
+
+The chamber driver gates the callback at the call site (`tick > 50`)
+rather than letting the callback receive pre-50 invocations.
+`process_reproduction()` itself never sees the callback for pre-50
+ticks. This keeps the default N/S/E/W placement path genuinely
+untouched.
+
+### CI gate at audit time
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1573 passed, 7 skipped
+                                (1494 baseline + 79 v0.45 tests)
+uv run python scripts/core_smoke_test.py                ok
+uv run python scripts/v0_45_preflight.py                PASS (b91b4d3)
+uv run python scripts/v0.45_sweep.py                    completed in 16.9s
+uv run python scripts/v0_45_intervention_audit.py       completed; verdict
+                                                        BIRTH_LOCALITY_NOT_NECESSARY
+```

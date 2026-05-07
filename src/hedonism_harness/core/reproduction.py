@@ -19,6 +19,7 @@ allocates a fresh ``ValenceMemory`` for the child if the policy requires one.
 from __future__ import annotations
 
 import dataclasses
+from collections.abc import Callable
 
 import numpy as np
 
@@ -150,16 +151,53 @@ def process_reproduction(
     reproduction_config: ReproductionConfig,
     child_id: int,
     occupied: frozenset[tuple[int, int]] | None = None,
+    birth_redirect_callback: Callable[..., tuple[int, int] | None] | None = None,
 ) -> tuple[AgentBody, AgentBody] | None:
     """Atomic reproduction step: charge parent + create child, or do nothing.
 
     Returns ``(updated_parent, child)`` on success. Returns ``None`` if no
     adjacent empty cell remains at process time (per SPEC §27.7, no energy
     is lost on failure).
+
+    v0.45 (additive, keyword-only): when ``birth_redirect_callback`` is
+    provided, the callback is consulted in place of
+    ``find_adjacent_empty_cell`` to determine the child's coordinates.
+    The callback receives ``(world, parent, occupied, original_placement)``
+    where ``original_placement`` is what the default would have returned.
+    The callback returns either ``(x, y)`` for the redirected child or
+    ``None`` to skip the birth (no parent charge, no child).
+
+    Callers (chamber driver / agent reproduction step) are responsible
+    for gating the callback by tick at the CALL SITE: pre-50 invocations
+    pass ``birth_redirect_callback=None`` unconditionally, so the v0.45
+    callback never fires for pre-50 births. This keeps the default path
+    genuinely untouched for v0.21..v0.44 semantics.
+
+    If the callback returns a cell that fails ``_is_placeable``, this
+    function raises ``ValueError``. Halt-loud discipline: a soft-fail
+    would hide intervention bugs.
+
+    Default-None preserves byte-identical v0.21..v0.44 behaviour.
     """
-    placement = find_adjacent_empty_cell(world, parent, occupied)
-    if placement is None:
-        return None
+    if birth_redirect_callback is None:
+        placement = find_adjacent_empty_cell(world, parent, occupied)
+        if placement is None:
+            return None
+    else:
+        original_placement = find_adjacent_empty_cell(world, parent, occupied)
+        placement = birth_redirect_callback(world, parent, occupied, original_placement)
+        if placement is None:
+            return None
+        x_redirect, y_redirect = placement
+        if not _is_placeable(world, x_redirect, y_redirect, occupied):
+            msg = (
+                "v0.45 birth_redirect_callback returned an invalid cell "
+                f"({x_redirect}, {y_redirect}) for parent at "
+                f"({parent.x}, {parent.y}); cell fails _is_placeable "
+                "(out-of-bounds, WALL, or occupied). Intervention bug; "
+                "halt-loud."
+            )
+            raise ValueError(msg)
     x, y = placement
     updated_parent = charge_parent(parent, reproduction_config)
     child = make_child(

@@ -312,6 +312,62 @@ class RespawnScheduleByIntervention:
     respawn_multiset_digest_after: str
 
 
+@dataclass(frozen=True)
+class BirthRedirectedByIntervention:
+    """v0.45: emitted once per offspring birth event with ``tick > 50``
+    when the birth-redirect callback fires (and the redirect succeeds —
+    i.e., a child is actually placed). Two intervention kinds:
+
+    - ``"uniform_valid_region_birth_position_after_tick50"`` (B): the
+      callback selects uniformly at random from the chamber-wide
+      eligible-cell set defined by ``_is_v045_birth_safe_placeable``
+      (in_bounds AND unoccupied AND ``kind in {EMPTY, FOOD, SAFE}``,
+      excluding HAZARD and WALL). ``preserved_parent_adjacency`` may
+      be True or False per event.
+    - ``"uniform_neighbor_birth_position_after_tick50"`` (C): the
+      callback selects uniformly at random from parent's N/S/E/W
+      neighbors filtered by the same predicate.
+      ``preserved_parent_adjacency`` is always True (Manhattan
+      distance from parent == 1).
+
+    Skipped redirects (callback returns None on empty eligible set)
+    are NOT emitted as events; they are counted in a model-level
+    counter that surfaces in the v0.45 audit's per-run aggregate
+    field ``n_skipped_birth_redirect_empty_eligible``. This avoids
+    contaminating the event stream with negative-result placeholders.
+
+    Audit conservation (v0.45):
+
+    - ``target_cell_kind in {"EMPTY", "FOOD", "SAFE"}`` (HAZARD/WALL
+      excluded by predicate; the field stores ``CellKind.name`` of
+      the redirected cell at firing time so the audit can verify
+      H2d without dumping full chamber state).
+    - ``(redirected_x, redirected_y) != (parent_x, parent_y)``.
+    - For C only: ``|parent_x - redirected_x| + |parent_y -
+      redirected_y| == 1`` (strict equality 1; Manhattan distance
+      from parent).
+    - For both: ``n_valid_cells >= 1`` (callback only fires on
+      successful redirects).
+    - ``rng_stream_label == "v0_45_birth_position_intervention"``
+      (locked stream).
+    """
+
+    intervention_kind: str
+    tick: int  # model.tick_count when the redirected birth fires (always > 50)
+    parent_id: int
+    parent_lineage_id: int
+    parent_x: int
+    parent_y: int
+    original_x: int  # what find_adjacent_empty_cell would have returned (-1 if None)
+    original_y: int
+    redirected_x: int
+    redirected_y: int
+    n_valid_cells: int
+    target_cell_kind: str  # CellKind.name string ("EMPTY" | "FOOD" | "SAFE")
+    preserved_parent_adjacency: bool
+    rng_stream_label: str  # "v0_45_birth_position_intervention" (locked)
+
+
 AnyEvent = (
     AgentMoved
     | AgentStayed
@@ -328,6 +384,7 @@ AnyEvent = (
     | LineageKilledByIntervention
     | FoodRedistributedByIntervention
     | RespawnScheduleByIntervention
+    | BirthRedirectedByIntervention
 )
 
 
@@ -374,6 +431,7 @@ _SIGNAL_NAMES: dict[type, str] = {
     LineageKilledByIntervention: "hh.lineage_killed_by_intervention",
     FoodRedistributedByIntervention: "hh.food_redistributed_by_intervention",
     RespawnScheduleByIntervention: "hh.respawn_schedule_by_intervention",
+    BirthRedirectedByIntervention: "hh.birth_redirected_by_intervention",
 }
 
 
