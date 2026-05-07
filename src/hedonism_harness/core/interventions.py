@@ -56,6 +56,7 @@ from hedonism_harness.core.body import DeathCause, mark_dead
 from hedonism_harness.core.events import (
     FoodRedistributedByIntervention,
     LineageKilledByIntervention,
+    RespawnScheduleByIntervention,
 )
 from hedonism_harness.core.world import CellKind
 
@@ -89,6 +90,12 @@ KIND_SHUFFLE_FOOD: str = "shuffle_food_at_tick50"
 # [[docs/experiments/fear_hunger_v0.43R.md]].
 KIND_REDUCE_DENSITY_50PCT: str = "reduce_food_density_50pct_at_tick50"
 KIND_DENSITY_PRESERVING_PERTURBATION: str = "density_preserving_perturbation_at_tick50"
+# v0.44 respawn-schedule rewrite kinds (additive; no agent deaths emitted).
+# Operates on ``world.respawn_at_tick`` rather than ``world.food_value``;
+# emits ``RespawnScheduleByIntervention``. See
+# [[docs/experiments/fear_hunger_v0.44.md]].
+KIND_DELAY_RESPAWN_PLUS_25: str = "delay_respawn_schedule_plus_25_at_tick50"
+KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR: str = "permute_respawn_schedule_reverse_row_major_at_tick50"
 
 ROLE_LEADER: str = "leader"
 ROLE_SMNONLEADER: str = "size_matched_nonleader"
@@ -103,6 +110,9 @@ B_DENSITY_FACTOR: float = 0.5
 C_PAIR_SPLIT_FIRST: float = 0.25
 C_PAIR_SPLIT_SECOND: float = 0.75
 
+# v0.44 locked constants (pre-reg-anchored).
+B_DELAY_TICKS: int = 25
+
 
 _VALID_KINDS: frozenset[str] = frozenset(
     {
@@ -113,6 +123,8 @@ _VALID_KINDS: frozenset[str] = frozenset(
         KIND_SHUFFLE_FOOD,
         KIND_REDUCE_DENSITY_50PCT,
         KIND_DENSITY_PRESERVING_PERTURBATION,
+        KIND_DELAY_RESPAWN_PLUS_25,
+        KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR,
     }
 )
 
@@ -123,6 +135,14 @@ _FOOD_REDISTRIBUTION_KINDS: frozenset[str] = frozenset(
         KIND_SHUFFLE_FOOD,
         KIND_REDUCE_DENSITY_50PCT,
         KIND_DENSITY_PRESERVING_PERTURBATION,
+    }
+)
+
+
+_RESPAWN_SCHEDULE_KINDS: frozenset[str] = frozenset(
+    {
+        KIND_DELAY_RESPAWN_PLUS_25,
+        KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR,
     }
 )
 
@@ -157,6 +177,8 @@ class InterventionConfig:
         "shuffle_food_at_tick50",
         "reduce_food_density_50pct_at_tick50",
         "density_preserving_perturbation_at_tick50",
+        "delay_respawn_schedule_plus_25_at_tick50",
+        "permute_respawn_schedule_reverse_row_major_at_tick50",
     ] = KIND_NULL
     intervention_tick: int = DEFAULT_INTERVENTION_TICK
     effective_tick: int = DEFAULT_EFFECTIVE_TICK
@@ -338,6 +360,9 @@ def apply_intervention(model: HHModel, config: InterventionConfig) -> Interventi
 
     if config.kind in _FOOD_REDISTRIBUTION_KINDS:
         return _apply_food_redistribution(model, config)
+
+    if config.kind in _RESPAWN_SCHEDULE_KINDS:
+        return _apply_respawn_schedule_rewrite(model, config)
 
     buckets = _living_agents_by_lineage(model)
     leader_id = _identify_leader(buckets)
@@ -556,6 +581,147 @@ def _apply_food_redistribution(model: HHModel, config: InterventionConfig) -> In
         eligible_cells_digest=cells_digest,
         food_multiset_digest_before=digest_before,
         food_multiset_digest_after=digest_after,
+    )
+    model.record_event(summary)
+
+    return InterventionResult(
+        fired=True,
+        lineage_id=None,
+        lineage_role=ROLE_NONE,
+        n_killed=0,
+        control_unavailable=False,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v0.44 respawn-schedule helpers
+# ---------------------------------------------------------------------------
+
+
+def _eligible_respawn_cells(model: HHModel) -> list[tuple[int, int]]:
+    """Return cells with ``kind in {EMPTY, FOOD} AND respawn_at_tick > 0`` at
+    the firing moment, sorted by ``(x, y)`` ascending. Excludes HAZARD,
+    WALL, SAFE cells; excludes cells with no pending refill
+    (``respawn_at_tick == 0``).
+    """
+    kind_layer = model.world.kind_layer
+    respawn = model.world.respawn_at_tick
+    width = model.world.width
+    height = model.world.height
+    out: list[tuple[int, int]] = []
+    for x in range(width):
+        for y in range(height):
+            if int(kind_layer[x, y]) in _ELIGIBLE_KINDS and int(respawn[x, y]) > 0:
+                out.append((x, y))
+    return out
+
+
+def _respawn_multiset_digest(values: np.ndarray) -> str:
+    """SHA-256 hex over the int32 ``values`` vector, sorted ascending,
+    packed via ``struct.pack(f"<{n}i", *sorted_vals)``. Two arrays produce
+    the same digest iff they share the same multiset (exact int32 equality
+    after sort).
+    """
+    vals_i32 = np.asarray(values, dtype=np.int32)
+    sorted_vals = np.sort(vals_i32)
+    packed = struct.pack(f"<{len(sorted_vals)}i", *sorted_vals.tolist())
+    return hashlib.sha256(packed).hexdigest()
+
+
+def _apply_respawn_schedule_rewrite(
+    model: HHModel, config: InterventionConfig
+) -> InterventionResult:
+    """Apply a v0.44 respawn-schedule rewrite. Two kinds:
+
+    - ``KIND_DELAY_RESPAWN_PLUS_25`` (B arm): increment every eligible
+      cell's ``respawn_at_tick`` by ``B_DELAY_TICKS`` (locked at +25).
+      Schedule multiset shifts by exactly +25 elementwise.
+    - ``KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR`` (C arm): reassign refill
+      ticks across (x, y)-sorted eligible cells via reverse-row-major
+      mapping (``new[i] = old[n - 1 - i]``). Multiset of refill ticks
+      exactly preserved; min/max/sum unchanged.
+
+    Both kinds:
+      - Operate only on ``world.respawn_at_tick``.
+      - Leave ``food_value``, ``kind_layer``, hazard/wall/safe untouched.
+      - Always fire (always emit ``RespawnScheduleByIntervention``);
+        ``n_cells_changed`` records whether any cell's value actually
+        changed (B always changes all eligible cells; C changes any cell
+        whose new tick differs from its old tick).
+    """
+    cells = _eligible_respawn_cells(model)
+    n_eligible = len(cells)
+
+    if n_eligible == 0:
+        empty_digest = hashlib.sha256(b"").hexdigest()
+        summary = RespawnScheduleByIntervention(
+            intervention_kind=config.kind,
+            intervention_tick=config.intervention_tick,
+            effective_tick=config.effective_tick,
+            n_eligible_cells=0,
+            n_cells_changed=0,
+            min_respawn_tick_before=0,
+            max_respawn_tick_before=0,
+            min_respawn_tick_after=0,
+            max_respawn_tick_after=0,
+            sum_respawn_tick_before=0,
+            sum_respawn_tick_after=0,
+            eligible_cells_digest=empty_digest,
+            respawn_multiset_digest_before=empty_digest,
+            respawn_multiset_digest_after=empty_digest,
+        )
+        model.record_event(summary)
+        return InterventionResult(
+            fired=True,
+            lineage_id=None,
+            lineage_role=ROLE_NONE,
+            n_killed=0,
+            control_unavailable=False,
+        )
+
+    respawn_layer = model.world.respawn_at_tick
+
+    xs = np.array([x for (x, _y) in cells], dtype=np.int64)
+    ys = np.array([y for (_x, y) in cells], dtype=np.int64)
+    values_before = respawn_layer[xs, ys].astype(np.int32, copy=True)
+    cells_digest = _eligible_cells_digest(cells)
+    digest_before = _respawn_multiset_digest(values_before)
+    sum_before = int(values_before.sum(dtype=np.int64))
+    min_before = int(values_before.min())
+    max_before = int(values_before.max())
+
+    if config.kind == KIND_DELAY_RESPAWN_PLUS_25:
+        values_after = (values_before + np.int32(B_DELAY_TICKS)).astype(np.int32, copy=False)
+    elif config.kind == KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR:
+        values_after = values_before[::-1].copy()
+    else:  # pragma: no cover — guarded by InterventionConfig.__post_init__.
+        msg = f"unreachable respawn-schedule kind {config.kind!r}"
+        raise AssertionError(msg)
+
+    n_cells_changed = int((values_after != values_before).sum())
+
+    respawn_layer[xs, ys] = values_after
+
+    sum_after = int(values_after.sum(dtype=np.int64))
+    min_after = int(values_after.min())
+    max_after = int(values_after.max())
+    digest_after = _respawn_multiset_digest(values_after)
+
+    summary = RespawnScheduleByIntervention(
+        intervention_kind=config.kind,
+        intervention_tick=config.intervention_tick,
+        effective_tick=config.effective_tick,
+        n_eligible_cells=n_eligible,
+        n_cells_changed=n_cells_changed,
+        min_respawn_tick_before=min_before,
+        max_respawn_tick_before=max_before,
+        min_respawn_tick_after=min_after,
+        max_respawn_tick_after=max_after,
+        sum_respawn_tick_before=sum_before,
+        sum_respawn_tick_after=sum_after,
+        eligible_cells_digest=cells_digest,
+        respawn_multiset_digest_before=digest_before,
+        respawn_multiset_digest_after=digest_after,
     )
     model.record_event(summary)
 

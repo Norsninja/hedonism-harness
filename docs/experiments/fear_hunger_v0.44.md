@@ -1168,6 +1168,164 @@ state.)
 
 ## Results
 
-**Status:** pending implementation, feasibility re-probe, sweep,
-and audit. Results appended after the audit fires (or after a
-substrate-preflight halt, whichever applies).
+**Status:** sweep + audit executed 2026-05-07. **Verdict:
+RESPAWN_FLOW_NOT_NECESSARY.** All H2 invariants held; no halts. The
+locked phrase fires verbatim. The v0.42 → v0.43R → v0.44 substrate-
+causal-probe arc closes with three negative findings: tick-50
+leader identity not necessary (v0.42 MECHANISM_NOT_NECESSARY),
+food-density probe disqualified (v0.43R substrate-depleted halt),
+respawn flow not necessary (v0.44).
+
+### Per-(arm, hazard) post-intervention top-lineage b50 share
+
+| arm | h | n_runs | n_used | mean | median |
+|---|---:|---:|---:|---:|---:|
+| A_null                                       | 0 | 8 | 8 | 0.699 | 0.652 |
+| A_null                                       | 8 | 8 | 8 | **0.878** | 1.000 |
+| B_delay_respawn_schedule_plus_25             | 0 | 8 | 8 | 0.741 | 0.667 |
+| B_delay_respawn_schedule_plus_25             | 8 | 8 | 8 | **0.866** | 0.971 |
+| C_permute_respawn_schedule_reverse_row_major | 0 | 8 | 8 | 0.730 | 0.741 |
+| C_permute_respawn_schedule_reverse_row_major | 8 | 8 | 8 | **0.878** | 1.000 |
+
+### Primary test (h=8)
+
+- `a_share_h8 = 0.878`, `b_share_h8 = 0.866`, `c_share_h8 = 0.878`.
+- `delta(B-A) = -0.012` (well above the −0.15 threshold required
+  for `b_passes`).
+- `delta(C-A) = +0.000` (within ±0.10 tolerance; `c_passes=True`).
+- `b_passes=False` → **RESPAWN_FLOW_NOT_NECESSARY** verdict.
+- `primary_fires=False`.
+
+### Secondary test (hazard amplification of B-A)
+
+- `|delta(h=0)| = 0.042`, `|delta(h=8)| = 0.012`.
+- `hazard_amplified=False` (h=0 delta is larger than h=8;
+  treatment effect is not amplified by hazard, consistent with
+  the null primary).
+- `secondary_fires=False`.
+
+### h=0 comparison
+
+| arm | h=0 share | delta vs A | h=8 share | delta vs A |
+|---|---:|---:|---:|---:|
+| A_null   | 0.699 | —      | 0.878 | —      |
+| B_delay  | 0.741 | +0.042 | 0.866 | −0.012 |
+| C_permute| 0.730 | +0.031 | 0.878 | +0.000 |
+
+Both treatment and placebo nudge slightly upward at h=0; both are
+within the ±0.10 C tolerance (small-n noise). At h=8, A and C
+land identically; B is 0.012 below — far inside the noise band.
+
+### n_excluded per arm/hazard
+
+All 48 runs had ≥ 1 post-50 birth. `n_excluded_zero_post50 = 0`
+across every (arm, hazard) bucket.
+
+### DELAY_ABLATES_REPRODUCTION
+
+**Did not fire at either hazard** (`b_n_excluded = 0` at both
+h=0 and h=8). Despite the seed-63-hzd-8 worst case where a single
+delayed refill lands at tick 104 (4 ticks past the 100-tick
+observation horizon), the +25 delay did not push any seed below
+the post-50 reproduction threshold. The conservative magnitude
+choice cleared the auxiliary, leaving the primary verdict as the
+sole signal.
+
+### Respawn event invariant summary
+
+Per-(arm, hazard) schedule conservation (audit-validated, all
+runs):
+
+| arm | h | mean min_b | mean max_b | mean sum_b | mean min_a | mean max_a | mean sum_a | multiset_changed |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| A_null   | 0 | —    | —    | —      | —    | —    | —      | 0 / 8 |
+| A_null   | 8 | —    | —    | —      | —    | —    | —      | 0 / 8 |
+| B_delay  | 0 | 54.0 | 67.6 | 1477.0 | 79.0 | 92.6 | 2077.0 | 8 / 8 |
+| B_delay  | 8 | 54.0 | 71.8 | 1535.5 | 79.0 | 96.8 | 2135.5 | 8 / 8 |
+| C_permute| 0 | 54.0 | 67.6 | 1477.0 | 54.0 | 67.6 | 1477.0 | 0 / 8 |
+| C_permute| 8 | 54.0 | 71.8 | 1535.5 | 54.0 | 71.8 | 1535.5 | 0 / 8 |
+
+H2 invariants verified across all 48 runs:
+
+- **H2a**: 48 events.jsonl files on disk (3 arms × 2 hazards × 8 seeds).
+- **H2b**: A_null = 0 events/run; B = 1 delay event/run; C = 1 permute event/run.
+- **H2c**: every fired event has `effective_tick = 51`.
+- **H2d**:
+  - B: `sum_after = sum_before + 25 × 24` exactly on every run;
+    `min_after = min_before + 25`; `max_after = max_before + 25`;
+    multiset digest shifted on 8/8 runs at both hazards.
+  - C: `sum_after = sum_before` exactly; `min/max_after =
+    min/max_before` exactly; multiset digest preserved on 8/8 runs
+    at both hazards (permutation is multiset-invariant).
+- **H2d-aux**: `n_eligible_cells == 24` on every fired event
+  across all 16 (seed, hazard) buckets (preflight expectation
+  reproduced exactly).
+
+### H2e regression status
+
+**PASS.** Verified by [[tests/test_world_intervention_hook_v0_44.py]]:
+
+- `test_kind_null_byte_identical_to_no_intervention`: PASS.
+  `optional_intervention=InterventionConfig(kind="null")` produces
+  events.jsonl bytewise identical to `optional_intervention=None`
+  on the same seed.
+- `test_kill_leader_path_emits_lineagekilled_summary`: PASS.
+  v0.42 `kill_tick50_leader` path remains dispatchable on the
+  v0.44 branch and emits `LineageKilledByIntervention` (not
+  `RespawnScheduleByIntervention`).
+- `test_v0_43r_reduce_density_path_remains_dispatchable`: PASS.
+  v0.43R `reduce_food_density_50pct_at_tick50` path remains
+  dispatchable on the v0.44 branch and emits
+  `FoodRedistributedByIntervention` (not
+  `RespawnScheduleByIntervention`).
+
+All v0.42 / v0.43 / v0.43R intervention infrastructure remains
+byte-identical when re-run on the v0.44 branch; only the new
+`KIND_DELAY_RESPAWN_PLUS_25` and `KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR`
+paths exercise the new dispatcher branch.
+
+### Locked phrase (fired verbatim)
+
+> "Delaying the respawn schedule by +25 ticks at the tick-50/tick-51
+> boundary does not materially disrupt the post-50 dominance pattern
+> at h=8. A surviving lineage reconstitutes concentration-of-share
+> even when the post-50 refill window is shifted by half its width.
+> **Respawn flow at tick 50 is not necessary** for post-50 dominance
+> under the tested substrate; the causal source lives outside the
+> respawn-schedule layer at the anchor moment. v0.42 ruled out the
+> tick-50 leader's identity; v0.43R's food-density probe was
+> disqualified (substrate depleted); v0.44 rules out tick-50 respawn
+> flow. Remaining substrate-anchored candidates: founder-trait +
+> spatial-position interaction at the depleted moment, hazard
+> topology, chamber geometry (wall-adjacency, reachability), and
+> birth-position constraints. v0.45 candidate: founder-trait lock-in
+> or hazard-relocation intervention."
+
+### Caveats (locked, repeated from pre-reg)
+
+- Per-arm n is 8.
+- Necessity only; sufficiency NOT tested.
+- One seed band (57..64); two hazards ({0, 8}); single locked
+  delay magnitude (+25); single locked permutation (reverse-
+  row-major over (x, y) ascending).
+- Hazard topology preserved; walls inviolate; food-value layer
+  untouched.
+- Substrate at h=8 anchor moment is depleted on `food_value`
+  (v0.43R corrected finding).
+- No mechanism declaration even on a positive outcome (v0.44 only
+  establishes necessity, not which property of flow).
+- Effect-size budget threshold (0.15) and tolerance (0.10) inherited
+  from v0.42 / v0.43R unchanged.
+
+### CI gate at audit time
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1494 passed, 7 skipped
+                                (1414 baseline + 80 v0.44 tests)
+uv run python scripts/core_smoke_test.py                ok
+uv run python scripts/v0.44_sweep.py                    completed in 17.0s
+uv run python scripts/v0_44_intervention_audit.py       completed; verdict
+                                                        RESPAWN_FLOW_NOT_NECESSARY
+```

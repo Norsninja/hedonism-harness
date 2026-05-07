@@ -252,6 +252,66 @@ class FoodRedistributedByIntervention:
     food_multiset_digest_after: str
 
 
+@dataclass(frozen=True)
+class RespawnScheduleByIntervention:
+    """v0.44: emitted at the tick-50/tick-51 boundary when a respawn-schedule
+    rewrite intervention fires. Two kinds:
+
+    - ``"delay_respawn_schedule_plus_25_at_tick50"`` (arm B): every eligible
+      cell's ``respawn_at_tick`` is incremented by +25. Schedule multiset
+      shifts by +25 elementwise; min/max/sum all shift by +25; food_value
+      and kind topology unchanged.
+    - ``"permute_respawn_schedule_reverse_row_major_at_tick50"`` (arm C):
+      ``respawn_at_tick`` values are reassigned across (x, y)-sorted
+      eligible cells via reverse-row-major mapping. Multiset of refill
+      ticks exactly preserved; min/max/sum unchanged; food_value and kind
+      topology unchanged.
+
+    Eligibility predicate: ``kind in {EMPTY, FOOD} AND respawn_at_tick > 0``.
+    HAZARD/WALL/SAFE cells excluded; cells with ``respawn_at_tick == 0`` (no
+    pending refill) excluded.
+
+    Distinct from ``FoodRedistributedByIntervention`` because the rewritten
+    layer is int32 schedule ticks, not float32 food values; the digest /
+    extrema fields differ accordingly.
+
+    Digests (locked formats):
+
+    - ``eligible_cells_digest``: SHA-256 hex of
+      ``b"\\n".join(f"{x},{y}".encode() for (x, y) in sorted_eligible_cells)``.
+      Pure function of tick-50 eligibility set.
+    - ``respawn_multiset_digest_before`` / ``respawn_multiset_digest_after``:
+      SHA-256 hex of ``struct.pack(f"<{n}i", *sorted_ticks)`` where
+      ``sorted_ticks`` is the int32 ``respawn_at_tick`` vector over eligible
+      cells, sorted ascending.
+
+    Audit conservation (v0.44):
+
+    - For B (delay): ``sum_after == sum_before + 25 * n_eligible_cells``;
+      ``min_after == min_before + 25``; ``max_after == max_before + 25``;
+      ``digest_before != digest_after`` (multiset shifted).
+    - For C (permute): ``sum_after == sum_before``; ``min_after ==
+      min_before``; ``max_after == max_before``; ``digest_before ==
+      digest_after`` (permutation preserves the sorted multiset).
+    """
+
+    intervention_kind: str  # "delay_respawn_schedule_plus_25_at_tick50" |
+    #                        "permute_respawn_schedule_reverse_row_major_at_tick50"
+    intervention_tick: int  # 50
+    effective_tick: int  # 51
+    n_eligible_cells: int
+    n_cells_changed: int
+    min_respawn_tick_before: int
+    max_respawn_tick_before: int
+    min_respawn_tick_after: int
+    max_respawn_tick_after: int
+    sum_respawn_tick_before: int
+    sum_respawn_tick_after: int
+    eligible_cells_digest: str
+    respawn_multiset_digest_before: str
+    respawn_multiset_digest_after: str
+
+
 AnyEvent = (
     AgentMoved
     | AgentStayed
@@ -267,6 +327,7 @@ AnyEvent = (
     | BirthDeniedParentEnergy
     | LineageKilledByIntervention
     | FoodRedistributedByIntervention
+    | RespawnScheduleByIntervention
 )
 
 
@@ -312,6 +373,7 @@ _SIGNAL_NAMES: dict[type, str] = {
     BirthDeniedParentEnergy: "hh.birth_denied_parent_energy",
     LineageKilledByIntervention: "hh.lineage_killed_by_intervention",
     FoodRedistributedByIntervention: "hh.food_redistributed_by_intervention",
+    RespawnScheduleByIntervention: "hh.respawn_schedule_by_intervention",
 }
 
 

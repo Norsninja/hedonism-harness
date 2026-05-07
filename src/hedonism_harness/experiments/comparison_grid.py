@@ -1465,6 +1465,50 @@ V0_43R_INTERVENTION_ARMS: tuple[Arm, ...] = (
 )
 
 
+def _v0_44_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.44 arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v044-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_44_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_44_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_44_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_delay_respawn_schedule_plus_25 (treatment: +25-tick delay over scheduled cells)
+    _v0_44_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_delay_respawn_schedule_plus_25",
+        intervention_kind="delay_respawn_schedule_plus_25_at_tick50",
+    ),
+    _v0_44_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_delay_respawn_schedule_plus_25",
+        intervention_kind="delay_respawn_schedule_plus_25_at_tick50",
+    ),
+    # C_permute_respawn_schedule_reverse_row_major (multiset-preserving placebo)
+    _v0_44_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_permute_respawn_schedule_reverse_row_major",
+        intervention_kind="permute_respawn_schedule_reverse_row_major_at_tick50",
+    ),
+    _v0_44_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_permute_respawn_schedule_reverse_row_major",
+        intervention_kind="permute_respawn_schedule_reverse_row_major_at_tick50",
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
