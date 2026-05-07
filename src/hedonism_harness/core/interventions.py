@@ -77,8 +77,18 @@ KIND_NULL: str = "null"
 KIND_KILL_LEADER: str = "kill_tick50_leader"
 KIND_KILL_SMNONLEADER: str = "kill_size_matched_nonleader"
 # v0.43 substrate-rewrite kinds (additive; no agent deaths emitted).
+# Halted pre-sweep on substrate-mismatch finding (h=8 saturation); the code
+# paths remain dispatchable for byte-identity regression but are unused by
+# V0_43R_INTERVENTION_ARMS. See [[docs/experiments/fear_hunger_v0.43.md]]
+# SUBSTRATE_PREFLIGHT_HALT addendum.
 KIND_FLATTEN_FOOD: str = "flatten_food_at_tick50"
 KIND_SHUFFLE_FOOD: str = "shuffle_food_at_tick50"
+# v0.43R substrate-rewrite kinds (additive; no agent deaths emitted).
+# Replacement for halted v0.43 design; operative at h=8 (the v0.42 primary
+# test hazard) on the saturated substrate. See
+# [[docs/experiments/fear_hunger_v0.43R.md]].
+KIND_REDUCE_DENSITY_50PCT: str = "reduce_food_density_50pct_at_tick50"
+KIND_DENSITY_PRESERVING_PERTURBATION: str = "density_preserving_perturbation_at_tick50"
 
 ROLE_LEADER: str = "leader"
 ROLE_SMNONLEADER: str = "size_matched_nonleader"
@@ -88,6 +98,11 @@ ROLE_NONE: str = "none"
 # redistribution. HAZARD, WALL, SAFE cells are preserved untouched.
 _ELIGIBLE_KINDS: frozenset[int] = frozenset({int(CellKind.EMPTY), int(CellKind.FOOD)})
 
+# v0.43R locked constants (pre-reg-anchored; mutating these is a corpus invalidation).
+B_DENSITY_FACTOR: float = 0.5
+C_PAIR_SPLIT_FIRST: float = 0.25
+C_PAIR_SPLIT_SECOND: float = 0.75
+
 
 _VALID_KINDS: frozenset[str] = frozenset(
     {
@@ -96,6 +111,18 @@ _VALID_KINDS: frozenset[str] = frozenset(
         KIND_KILL_SMNONLEADER,
         KIND_FLATTEN_FOOD,
         KIND_SHUFFLE_FOOD,
+        KIND_REDUCE_DENSITY_50PCT,
+        KIND_DENSITY_PRESERVING_PERTURBATION,
+    }
+)
+
+
+_FOOD_REDISTRIBUTION_KINDS: frozenset[str] = frozenset(
+    {
+        KIND_FLATTEN_FOOD,
+        KIND_SHUFFLE_FOOD,
+        KIND_REDUCE_DENSITY_50PCT,
+        KIND_DENSITY_PRESERVING_PERTURBATION,
     }
 )
 
@@ -128,6 +155,8 @@ class InterventionConfig:
         "kill_size_matched_nonleader",
         "flatten_food_at_tick50",
         "shuffle_food_at_tick50",
+        "reduce_food_density_50pct_at_tick50",
+        "density_preserving_perturbation_at_tick50",
     ] = KIND_NULL
     intervention_tick: int = DEFAULT_INTERVENTION_TICK
     effective_tick: int = DEFAULT_EFFECTIVE_TICK
@@ -307,7 +336,7 @@ def apply_intervention(model: HHModel, config: InterventionConfig) -> Interventi
             control_unavailable=False,
         )
 
-    if config.kind in {KIND_FLATTEN_FOOD, KIND_SHUFFLE_FOOD}:
+    if config.kind in _FOOD_REDISTRIBUTION_KINDS:
         return _apply_food_redistribution(model, config)
 
     buckets = _living_agents_by_lineage(model)
@@ -472,6 +501,25 @@ def _apply_food_redistribution(model: HHModel, config: InterventionConfig) -> In
     elif config.kind == KIND_SHUFFLE_FOOD:
         # Reverse the (x, y)-sorted vector in place.
         values_after = values_before[::-1].copy()
+    elif config.kind == KIND_REDUCE_DENSITY_50PCT:
+        # v0.43R B arm. Multiply every eligible cell by B_DENSITY_FACTOR
+        # (locked at 0.5). Total drops to factor * total_before exactly
+        # (modulo float32 epsilon).
+        values_after = (values_before * np.float32(B_DENSITY_FACTOR)).astype(np.float32, copy=False)
+    elif config.kind == KIND_DENSITY_PRESERVING_PERTURBATION:
+        # v0.43R C arm. Per-pair 25/75 redistribution over (x, y)-sorted
+        # consecutive eligible cells. Each pair (i, i+1) where i is even
+        # gets:
+        #     new[i]   = C_PAIR_SPLIT_FIRST  * (old[i] + old[i+1])
+        #     new[i+1] = C_PAIR_SPLIT_SECOND * (old[i] + old[i+1])
+        # Per-pair sum exactly preserved; grand total exactly preserved.
+        # If n_eligible is odd, the last cell stays unchanged.
+        values_after = values_before.copy()
+        n_pairs = n_eligible - (n_eligible % 2)
+        for i in range(0, n_pairs, 2):
+            pair_sum = np.float32(values_after[i]) + np.float32(values_after[i + 1])
+            values_after[i] = np.float32(C_PAIR_SPLIT_FIRST) * pair_sum
+            values_after[i + 1] = np.float32(C_PAIR_SPLIT_SECOND) * pair_sum
     else:  # pragma: no cover — guarded by InterventionConfig.__post_init__.
         msg = f"unreachable food-redistribution kind {config.kind!r}"
         raise AssertionError(msg)

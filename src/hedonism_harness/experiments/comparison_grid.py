@@ -1410,6 +1410,61 @@ V0_43_INTERVENTION_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.43R — replacement for halted v0.43. Tick-50 food-density intervention.
+#   A_null                              : no intervention.
+#   B_reduce_food_density_50pct         : multiply every eligible cell's
+#                                         food_value by 0.5.
+#   C_density_preserving_perturbation   : per-pair 25/75 redistribution over
+#                                         (x, y)-sorted consecutive eligible
+#                                         cells; total density preserved.
+#
+# Operative at h=8 across seeds 49..56 per substrate feasibility probe (see
+# v0.43 SUBSTRATE_PREFLIGHT_HALT addendum). Pre-reg:
+# [[docs/experiments/fear_hunger_v0.43R.md]].
+def _v0_43r_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.43R arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v043R-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_43R_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_reduce_food_density_50pct (treatment: density halved)
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_reduce_food_density_50pct",
+        intervention_kind="reduce_food_density_50pct_at_tick50",
+    ),
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_reduce_food_density_50pct",
+        intervention_kind="reduce_food_density_50pct_at_tick50",
+    ),
+    # C_density_preserving_perturbation (multiset-shifting placebo, density preserved)
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_density_preserving_perturbation",
+        intervention_kind="density_preserving_perturbation_at_tick50",
+    ),
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_density_preserving_perturbation",
+        intervention_kind="density_preserving_perturbation_at_tick50",
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
