@@ -1264,6 +1264,24 @@ V0_39_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
 )
 
 
+# v0.41 — second fresh-stream calibration of lineage-axis stability on seeds
+# 33..40. Literal 4-arm slice of V0_25_ARMS at influx=1.0 across hazards
+# {0, 4, 8, 12} — element-wise identical to V0_32_TIGHT_H_ARMS,
+# V0_33_TIGHT_H_ARMS, and V0_39_TIGHT_H_ARMS by construction. The distinct
+# binding name pins v0.41's intent: a second fresh stream to disambiguate
+# v0.39's M2/M3 dissent as a one-off n=8 noise excursion vs a systematic
+# post-v0.33 deviation (v0.40 H5 STREAM-STABLE rehabilitated the OLD-stream
+# arc; v0.39 was the lone outlier across 4 streams). Substrate-byte-identity
+# to the prior tight-hazard slices is guarded by arm-object-identity tests in
+# the v0.41 sweep test file. Defined as an explicit literal-via-filter pattern
+# (NOT an alias to V0_32_TIGHT_H_ARMS) so v0.41 reads as its own sealed
+# experimental substrate; provenance protected against future mutation drift.
+# Pre-reg: [[docs/experiments/fear_hunger_v0.41.md]].
+V0_41_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
+    arm for arm in V0_25_ARMS if arm.label.endswith("-influx-1.0")
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------

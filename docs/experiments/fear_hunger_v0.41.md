@@ -770,5 +770,173 @@ uv run python scripts/core_smoke_test.py   ok
 
 ## Results
 
-_To be appended after the v0.41 sweep, three extension reducers, and
-the v0.41 audit run on the 160-run corpus._
+**Status:** sweep + 3 extension reducers + audit executed 2026-05-07.
+
+### Primary verdict — `v0.41_OLD_LIKE`
+
+The v0.41 stream's M1/M2/M3 agreement bitmap is **(True, True, True)**.
+Cell: **v0.41_OLD_LIKE.**
+
+> **Locked phrase fires verbatim:** "Seeds 33..40 reproduce the OLD-
+> stream M1/M2/M3 agreement pattern in full. v0.39 is the lone outlier
+> across the now-five-stream corpus and is best read as a one-off n=8
+> noise excursion rather than evidence of a systematic post-v0.33
+> deviation. The v0.34..v0.38 lineage-axis arc's stream-stability claim
+> is reinforced from 3 of 4 streams to 4 of 5 streams. Mechanism
+> promotion still requires intervention design and is not declared by
+> this audit."
+
+### Secondary verdict — `H5_STREAM_STABLE_N5`
+
+`m3_agreement_count = 4/5`. `family_agreement_count = 3/3`.
+
+> **Locked phrase fires verbatim:** "Lineage-axis hazard signals
+> reproduce in at least four of five seed streams (v0.25 1..8, v0.32
+> 9..16, v0.33 17..24, v0.39 25..32, v0.41 33..40) under the inherited
+> v0.40 spread agreement rules. The v0.34..v0.38 arc's correlational
+> signal upgrades from stream-stable on 4 streams to stream-stable on
+> 5 streams. Mechanism promotion still requires intervention design
+> and is not declared by this audit."
+
+### Per-stream signed spreads (`runs/lineage-v0.41/per_stream_summary.csv`)
+
+| stream | M1 spread | M1 ✓ | M2 spread | M2 ✓ | M3 spread | M3 ✓ |
+|--------|----------:|:----:|----------:|:----:|----------:|:----:|
+| v0.25  | +0.262    | True | +0.250    | True | **+6.125** | **True** |
+| v0.32  | +0.142    | True | +0.375    | True | **+5.062** | **True** |
+| v0.33  | +0.048    | True | +0.375    | True | **+3.938** | **True** |
+| v0.39  | +0.017    | True | −0.250    | False | **−0.875** | **False** |
+| v0.41  | +0.083    | True | +0.250    | True | **+2.031** | **True** |
+
+### Stream × metric agreement (`runs/lineage-v0.41/stream_metric_table.csv`)
+
+| stream | M1 | M2 | M3 |
+|--------|:--:|:--:|:--:|
+| v0.25  | ✓  | ✓  | ✓  |
+| v0.32  | ✓  | ✓  | ✓  |
+| v0.33  | ✓  | ✓  | ✓  |
+| v0.39  | ✓  | ✗  | ✗  |
+| v0.41  | ✓  | ✓  | ✓  |
+
+### Metric agreement summary (`runs/lineage-v0.41/metric_summary.csv`)
+
+| metric | n_streams_agree | rate |
+|--------|----------------:|-----:|
+| M1     | 5 / 5           | 1.000 |
+| M2     | 4 / 5           | 0.800 |
+| M3     | 4 / 5           | 0.800 |
+
+All three metrics individually clear the ≥ 4/5 family bar; M1 unanimous.
+
+### Per-(stream, hazard) means (`runs/lineage-v0.41/per_stream_per_hazard.csv`)
+
+v0.41 stream alone (8 runs per hazard):
+
+| hazard | mean_M1 | mean_M2 | mean_M3 |
+|-------:|--------:|--------:|--------:|
+| 0      | 0.582   | 0.375   | 4.000   |
+| 4      | 0.633   | 0.375   | 4.688   |
+| 8      | 0.664   | 0.500   | 5.969   |
+| 12     | 0.665   | 0.625   | 6.031   |
+
+All three metrics drift positively across hazards; M3 in particular
+rises from 4.000 → 6.031 across {0, 4, 8, 12}. Spread +2.031 clears
+the locked +1.5 bar with margin.
+
+### Combined headline (`runs/lineage-v0.41/combined_summary.csv`)
+
+> v0.41 stream classified as v0.41_OLD_LIKE; n=5 stream audit fires
+> H5_STREAM_STABLE_N5 (m3=4/5, family=3/3).
+
+### Caveats reasserted (locked, must appear in Results)
+
+- **Per-stream n is 8.** v0.41's per-hazard means are over 8 runs
+  each. M3 spread of +2.031 sits ~0.5 above the +1.5 bar — comfortable
+  but not enormous. A different 8-seed draw could plausibly land
+  closer to the bar.
+- **M1/M2 thresholds are direction-only by design.** v0.41 passed M1
+  (+0.083) and M2 (+0.250) on direction; magnitude was not the bar.
+  Both are positive but smaller than the OLD streams' M1 spreads
+  (v0.25 +0.262, v0.32 +0.142, v0.33 +0.048 — note v0.33's M1 is
+  also small at +0.048, so v0.41's +0.083 is mid-range).
+- **Magnitudes for all three metrics ARE reported** (table above);
+  descriptive context for interpretation, not verdict input beyond
+  M3.
+- **Monotonicity is descriptive only.** v0.41 happens to be
+  monotone-up on all three metrics, but monotonicity does not enter
+  the verdict by design.
+- **n=5 thresholds preserve the v0.40 75/25 bars.** ≥ 4/5 = 80% on
+  M3, ≥ 4/5 each on family ≥ 2/3. H5_N5 fires with the strongest
+  possible margin: m3=4/5 AND family=3/3.
+- **No pooled-corpus verdict was computed.** v0.41 is per-stream
+  only.
+- **v0.41 did not investigate WHY v0.39 dissented** — only whether
+  v0.41 follows the same dissent pattern. v0.41 does not, and v0.39
+  is now the lone outlier across the 5-stream corpus.
+- **No mechanism promotion.** Even with v0.41_OLD_LIKE +
+  H5_STREAM_STABLE_N5 firing in the strongest joint cell, the arc
+  remains correlational. Mechanism still requires intervention
+  design.
+
+### Reachability narrative — what we ruled out vs ruled in
+
+- **v0.41_V039_LIKE was reachable but did not fire.** The fork test
+  was genuinely live: had v0.41's M2 inverted and M3 turned negative
+  (mirroring v0.39 25..32), the locked V039_LIKE phrase would have
+  fired and the arc would have been pinned to OLD-only. Instead,
+  v0.41's M2 spread is +0.250 (matching v0.32/v0.33's +0.375 to
+  within seed-stream noise) and M3 spread is +2.031 (positive,
+  above bar).
+- **v0.41_NOVEL_MIXED was reachable and did not fire.** The 6 of 8
+  alternative bitmaps were all live — v0.41 could have passed any
+  proper subset of {M1, M2, M3} that wasn't (✓✓✓) or (✓✗✗). The
+  bitmap is exactly (✓, ✓, ✓), the OLD-stream pattern.
+- **H7_STREAM_UNSTABLE_N5 was unreachable a priori** given the
+  three OLD streams' known M3 passes (locked at v0.40 sign-off).
+  This was reasserted in pre-reg's reachability section. The
+  verdict held.
+- **H6_STREAM_MIXED_N5 was reachable in two pathways:** (a) v0.41
+  fails M3 (would force m3=3/5 < 4/5), or (b) v0.41 passes M3 but
+  causes a family metric to drop below 4/5 (impossible at n=5
+  since OLD already has all three at ≥ 3/4 = 4/5 with v0.41 either
+  preserving or improving). v0.41 passed M3, so neither pathway
+  fired.
+
+### Strategic update at v0.41 close
+
+The v0.34..v0.38 lineage-axis arc is now **stream-stable across 4 of
+5 seed streams** (v0.25, v0.32, v0.33, v0.41 ✓; v0.39 ✗). v0.39 is
+reframed from "structurally distinct fresh stream" to "one-off n=8
+noise excursion." The arc's correlational status holds; mechanism
+promotion remains blocked pending intervention design.
+
+The post-hoc reducer arc (v0.34..v0.41) is correlationally complete
+on a 5-stream corpus. There is no further within-arc question that a
+sixth post-hoc reducer can resolve. Future work splits along three
+axes:
+
+- **Mechanism**: intervention design (handicap the tick-50 leader
+  and measure post-50 advantage collapse). Out of scope for any
+  post-hoc reducer slice; requires sim-mechanics work.
+- **Robustness**: per-lineage mortality (b), windowed b50 (c),
+  descendant-trait drift (d) — re-opened by v0.40+v0.41's 4-of-5
+  stream-stable foundation. These characterise WHAT the signal is,
+  not WHETHER it survives.
+- **Generalisation**: parameter-grid expansion (other influxes,
+  other chambers, other founder counts) — orthogonal to the seed-
+  stream calibration question that v0.39..v0.41 answered.
+
+HedonismPolicy and Mesa remain deferred indefinitely.
+
+### CI gate at Results time
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1225 passed, 6 skipped (v0.23/v0.27 corpus
+                                skips; non-regression). +95 from handoff.
+uv run python scripts/core_smoke_test.py                ok
+uv run python scripts/v0_41_stream_classification_audit.py
+                                v0.41_OLD_LIKE + H5_STREAM_STABLE_N5
+                                (re-runnable; idempotent on sealed inputs)
+```
