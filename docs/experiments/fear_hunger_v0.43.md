@@ -330,13 +330,31 @@ class FoodRedistributedByIntervention:
     n_cells_changed: int            # cells whose food_value or kind changed
     total_food_before: float        # sum of food_value over eligible cells before
     total_food_after: float         # sum of food_value over eligible cells after
+    eligible_cells_digest: str      # SHA-256 hex of (x, y) pairs over eligible cells, sorted ascending; chamber-geometry anchor
+    food_multiset_digest_before: str  # SHA-256 hex of struct-packed float32 food_value vector over eligible cells, sorted ascending (before)
+    food_multiset_digest_after: str   # SHA-256 hex of struct-packed float32 food_value vector over eligible cells, sorted ascending (after)
 ```
+
+Digest format (locked): for the food multiset, sort the float32
+`food_value` vector over eligible cells in ascending order, pack
+as little-endian float32 via `struct.pack(f"<{n}f", *sorted_vals)`,
+SHA-256, hex-encode. For the cells digest, take the eligible cells
+sorted by `(x, y)` ascending, encode as `b"\n".join(f"{x},{y}".encode()
+for (x, y) in sorted_cells)`, SHA-256, hex-encode. Both digests are
+pure functions of locked chamber state at firing time; reproducible.
 
 Added to `_SIGNAL_NAMES` and `AnyEvent` union. **No new `DeathCause`
 value.** No `AgentDied` events emitted by either new kind (no
 agents are killed by the food redistribution itself; agents that
 later starve will emit `AgentDied(cause=STARVATION)` through the
 existing path).
+
+The C arm's multiset-preservation invariant is verified at audit
+time by asserting `food_multiset_digest_before ==
+food_multiset_digest_after` on every fired C event. The B arm's
+flatten does NOT preserve the multiset (by design); for B,
+`food_multiset_digest_before != food_multiset_digest_after` is
+expected (it's a flatten).
 
 ### 3. Sweep + arm tuple (`scripts/v0.43_sweep.py`,
    `src/hedonism_harness/experiments/comparison_grid.py` additions)
@@ -391,11 +409,22 @@ Halt invariants (5):
 - **H2d (substrate conservation):**
   - For B and C: `abs(total_food_after - total_food_before) <=
     max(1e-3, 1e-5 * total_food_before)`.
-  - For C: multiset of `food_value` over eligible cells before and
-    after is exactly equal (sorted lists equal element-wise within
-    1e-6 per element). The audit reads a sealed pre/post snapshot
-    embedded in the summary event for verification (audit-time
-    sample on at least one C run per (hazard, seed) bucket).
+  - For C: `food_multiset_digest_before ==
+    food_multiset_digest_after` on every fired C event (digest
+    equality verifies multiset preservation exactly without
+    storing full snapshots).
+  - For B: `food_multiset_digest_before !=
+    food_multiset_digest_after` on every fired B event (flatten
+    is not a permutation; multiset must change in non-degenerate
+    cases). On any B run where the digests are equal AND
+    `n_cells_changed > 0`, halt — indicates an arithmetic bug.
+    (If `n_cells_changed == 0` on B, the substrate was already
+    uniform pre-intervention; digests may match legitimately —
+    record as descriptive but do not halt.)
+  - For both: `eligible_cells_digest` is consistent across all 48
+    runs at the same (hazard) bucket — chamber geometry is
+    seed-independent at tick 50 (no agent action mutates kind for
+    eligible-cell membership). Halt if drift detected.
   - For both: `n_eligible_cells` consistent with chamber geometry
     (computed from layout); `n_cells_changed <= n_eligible_cells`.
 - **H2e (regression byte-identity):** sampled v0.42 A_null seed
@@ -438,11 +467,15 @@ Outputs eight CSVs under `runs/lineage-v0.43/`:
 - `primary_test.csv` — 1 row: a_share_h8, b_share_h8, c_share_h8,
   delta_b_minus_a_h8, delta_c_minus_a_h8, b_passes (b−a ≤ −0.15),
   c_passes (|c−a| ≤ 0.10), c_below_a (c−a ≤ −0.10),
-  c_above_a (c−a > 0.10), primary_fires, verdict.
+  c_above_a (c−a > 0.10), resource_concentration_necessary,
+  substrate_rewrite_disrupts, resource_concentration_not_necessary,
+  c_above_a_unmodeled_substrate_artefact, primary_fires, verdict.
 - `secondary_test.csv` — 1 row: delta_b_minus_a_h0,
   delta_b_minus_a_h8, hazard_amplified
   (|delta_h8| > |delta_h0|), secondary_fires.
-- `verdict.csv` — 1 row: verdict, locked_phrase, primary_fires,
+- `verdict.csv` — 1 row: verdict, locked_phrase,
+  resource_concentration_necessary, substrate_rewrite_disrupts,
+  resource_concentration_not_necessary, primary_fires,
   secondary_fires.
 - `auxiliary_findings.csv` — 2 rows (one per hazard):
   hazard, b_n_excluded_zero_post50, ablation_threshold_exceeded
@@ -490,9 +523,11 @@ ELIGIBLE_KINDS: frozenset = frozenset({"EMPTY", "FOOD"})  # by name
 
 ### Determinism — anchors
 
-- v0.21..v0.42 events.jsonl + sidecar artifacts on disk are not
-  re-read by the audit. The audit reads ONLY v0.43's own sweep
-  output.
+- v0.21..v0.42 events.jsonl + sidecar artifacts are not re-read by
+  the **primary** v0.43 audit. The H2e regression check **does**
+  read selected sealed v0.42 reference events.jsonl files (one
+  v0.42 A_null seed + one v0.42 B_kill_leader seed) for fingerprint
+  comparison only; it does not consume them as scientific inputs.
 - v0.21..v0.42 test suites continue to pass (additive guard).
 - Default `optional_intervention=None` is byte-identical to
   pre-v0.42 behaviour — re-running any pre-v0.42 sweep produces
@@ -523,8 +558,12 @@ ELIGIBLE_KINDS: frozenset = frozenset({"EMPTY", "FOOD"})  # by name
 - `arm` ∈ {A_null, B_flatten_food, C_shuffle_food}.
 - `hazard` ∈ {0, 8}.
 - `seed` ∈ {49..56}.
-- `fired`: bool. True iff the intervention (B or C) fired and at
-  least one cell changed. False for A_null.
+- `fired`: bool. True iff a `FoodRedistributedByIntervention`
+  event was emitted for this run. False for A_null. Note: B/C
+  runs may legitimately have `fired=True` with `n_cells_changed=0`
+  in edge cases (already-uniform food before flatten; reverse
+  permutation that happens to fix all values). Firing is event-
+  emission, not outcome.
 - `intervention_kind`: str. The kind label.
 - `n_eligible_cells`: int. Count of cells with kind in {EMPTY, FOOD}
   at tick 50.
@@ -564,10 +603,16 @@ ELIGIBLE_KINDS: frozenset = frozenset({"EMPTY", "FOOD"})  # by name
   (C drops below A by more than 0.10).
 - `c_above_a := delta_c_minus_a_h8 > PRIMARY_C_TOLERANCE`
   (C rises above A by more than 0.10 — substrate-artefact halt).
-- `primary_fires := (b_passes AND c_passes) OR (b_passes AND c_below_a)`.
-  (Both verdicts that fire substantively under b_passes; the
-  c_above_a cell is the halt cell and does NOT fire.)
-- `verdict`: derived from the cell mapping (see Decision rules).
+- `resource_concentration_necessary := b_passes AND c_passes`.
+- `substrate_rewrite_disrupts := b_passes AND c_below_a`.
+- `resource_concentration_not_necessary := NOT b_passes`.
+- `c_above_a_unmodeled_substrate_artefact := b_passes AND c_above_a`
+  (halt cell — audit halts loud; verdict is NOT emitted).
+- `primary_fires := resource_concentration_necessary OR
+  substrate_rewrite_disrupts` (umbrella for verdict-firing cases;
+  the halt cell does NOT count as a fire).
+- `verdict`: derived from the explicit booleans above (see Decision
+  rules).
 
 ### Secondary test (`secondary_test.csv` — 1 row)
 
@@ -652,14 +697,15 @@ the causal source is further upstream than the food layer (hazard
 topology, chamber geometry, founder-trait + spatial-position
 interaction, birth-position constraints).
 
-**HALT cell:** `b_passes == True` AND `c_above_a == True`. Substrate
-artefact unmodeled at pre-reg time. Audit halts loud
-(`LineageReplayError`).
+**C_ABOVE_A_UNMODELED_SUBSTRATE_ARTEFACT (halt cell):** `b_passes ==
+True` AND `c_above_a == True`. Substrate artefact unmodeled at
+pre-reg time. Audit halts loud (`LineageReplayError`); no
+scientific verdict is emitted.
 
 (All four cells exhaust the rule space:
 - `b_passes=True, c_passes=True` → CONCENTRATION_NECESSARY.
 - `b_passes=True, c_below_a=True` → REWRITE_DISRUPTS.
-- `b_passes=True, c_above_a=True` → HALT.
+- `b_passes=True, c_above_a=True` → C_ABOVE_A_UNMODELED_SUBSTRATE_ARTEFACT (halt).
 - `b_passes=False, *` → CONCENTRATION_NOT_NECESSARY.)
 
 ### Auxiliary finding — independent of primary verdict
@@ -804,8 +850,9 @@ reachable:
 - **RESOURCE_CONCENTRATION_NOT_NECESSARY**: requires B share to NOT
   drop by ≥ 0.15. If post-50 dominance reconstitutes regardless of
   food layout, this is where it lands.
-- **HALT (substrate artefact)**: requires C share to rise above A
-  by > 0.10 while B drops. Mechanistically unmotivated; halt loud.
+- **C_ABOVE_A_UNMODELED_SUBSTRATE_ARTEFACT (halt)**: requires C
+  share to rise above A by > 0.10 while B drops. Mechanistically
+  unmotivated; halt loud, no scientific verdict emitted.
 
 The rule space genuinely separates the three.
 
@@ -823,12 +870,12 @@ The rule space genuinely separates the three.
 
 ### Primary
 
-| `b_passes` | C-direction          | verdict                                  |
-|:----------:|----------------------|------------------------------------------|
-| True       | `c_passes` (|c−a|≤0.10) | **RESOURCE_CONCENTRATION_NECESSARY**     |
-| True       | `c_below_a` (c−a≤−0.10) | **SUBSTRATE_REWRITE_DISRUPTS_DOMINANCE** |
-| True       | `c_above_a` (c−a>+0.10) | **HALT** (substrate artefact)            |
-| False      | any                  | **RESOURCE_CONCENTRATION_NOT_NECESSARY** |
+| `b_passes` | C-direction             | verdict                                              |
+|:----------:|-------------------------|------------------------------------------------------|
+| True       | `c_passes` (|c−a|≤0.10) | **RESOURCE_CONCENTRATION_NECESSARY**                 |
+| True       | `c_below_a` (c−a≤−0.10) | **SUBSTRATE_REWRITE_DISRUPTS_DOMINANCE**             |
+| True       | `c_above_a` (c−a>+0.10) | **C_ABOVE_A_UNMODELED_SUBSTRATE_ARTEFACT** (halt)    |
+| False      | any                     | **RESOURCE_CONCENTRATION_NOT_NECESSARY**             |
 
 ### Auxiliary (independent of primary)
 
