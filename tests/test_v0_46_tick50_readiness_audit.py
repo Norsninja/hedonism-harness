@@ -63,7 +63,7 @@ def _make_lineage_row(
         tick50_total_energy=mean_energy * living if not math.isnan(mean_energy) else 0.0,
         tick50_mean_age=15.0,
         tick50_above_threshold_count=int(above_fraction * living) if living > 0 else 0,
-        tick50_valid_adjacent_empty_count=0,
+        tick50_neighbor_unoccupied_coarse_count=0,
         pre50_food_acquired_count=0,
         pre50_hazard_damage_received_count=0,
         end_of_run_living=living,

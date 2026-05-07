@@ -126,7 +126,7 @@ LOCKED_PHRASES: dict[str, str] = {
     ),
     VERDICT_HALT_DRIFT: (
         "Halt: A_null re-anchor drifted from the published Results value for {version}; "
-        "the on-disk corpus is not byte-equivalent to the published sweep."
+        "v0.46's deterministic re-execution does not reproduce the published metric within 1e-3."
     ),
 }
 
@@ -434,7 +434,7 @@ class PerLineageRow:
     tick50_total_energy: float
     tick50_mean_age: float  # NaN if no living agents.
     tick50_above_threshold_count: int
-    tick50_valid_adjacent_empty_count: int
+    tick50_neighbor_unoccupied_coarse_count: int
     pre50_food_acquired_count: int
     pre50_hazard_damage_received_count: int
     end_of_run_living: int
@@ -456,7 +456,7 @@ PER_LINEAGE_FIELDNAMES: list[str] = [
     "tick50_total_energy",
     "tick50_mean_age",
     "tick50_above_threshold_count",
-    "tick50_valid_adjacent_empty_count",
+    "tick50_neighbor_unoccupied_coarse_count",
     "pre50_food_acquired_count",
     "pre50_hazard_damage_received_count",
     "end_of_run_living",
@@ -543,7 +543,9 @@ def _aggregate_per_lineage(capture: _RunCapture) -> tuple[list[PerLineageRow], i
                 if s.energy >= capture.energy_threshold and s.age >= capture.min_age
             )
             above_fraction = n_above / n_living
-            valid_adj = sum(_count_valid_adjacent_empty(s, capture.tick50_snapshot) for s in living)
+            valid_adj = sum(
+                _count_neighbor_unoccupied_coarse(s, capture.tick50_snapshot) for s in living
+            )
 
         # Pre-50 food / hazard counts (sum of agent-level counts; agents not
         # in dict contribute 0).
@@ -569,7 +571,7 @@ def _aggregate_per_lineage(capture: _RunCapture) -> tuple[list[PerLineageRow], i
                 tick50_total_energy=total_energy,
                 tick50_mean_age=mean_age,
                 tick50_above_threshold_count=n_above,
-                tick50_valid_adjacent_empty_count=valid_adj,
+                tick50_neighbor_unoccupied_coarse_count=valid_adj,
                 pre50_food_acquired_count=food_count,
                 pre50_hazard_damage_received_count=hazard_count,
                 end_of_run_living=capture.end_of_run_living_by_lineage.get(lid, 0),
@@ -580,11 +582,16 @@ def _aggregate_per_lineage(capture: _RunCapture) -> tuple[list[PerLineageRow], i
     return rows, eventual_top, total_b50
 
 
-def _count_valid_adjacent_empty(agent: _AgentSnapshot, all_living: list[_AgentSnapshot]) -> int:
-    """Count of N/S/E/W cells around ``agent`` that are not occupied by another
-    living agent. (Bounds / WALL exclusion not modelled here — secondary metric;
-    out-of-bounds neighbours are not pre-emptively rejected. Coarse but
-    descriptive-only per the pre-reg.)"""
+def _count_neighbor_unoccupied_coarse(
+    agent: _AgentSnapshot, all_living: list[_AgentSnapshot]
+) -> int:
+    """Coarse occupancy-only count: N/S/E/W cells around ``agent`` not held by
+    another living agent at tick 50. **Does NOT** exclude WALL cells or
+    out-of-bounds positions because the snapshot does not carry world
+    geometry. The count therefore overestimates true reproduction-eligible
+    adjacency (an "unoccupied" neighbour can be a WALL or off-grid). This is
+    a secondary descriptive metric per the pre-reg; not a verdict-firing
+    observable. The name "coarse" is part of the field name to flag this."""
     occupied = {(s.x, s.y) for s in all_living}
     count = 0
     for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0)):

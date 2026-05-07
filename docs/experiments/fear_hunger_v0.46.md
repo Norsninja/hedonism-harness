@@ -17,15 +17,15 @@ After reading v0.35's `lineage_survival_replay.py`, the four merged Results docu
 
 3. **Tick-50 state-capture path** changed from "events.jsonl arithmetic" to "in-simulation `tick_observer` snapshot during deterministic re-execution under each version's locked V0_25 + A_null arm config". Reason: model.py's per-tick step ordering (action → metabolism → birth-queue → tick_count++; observer fires post-step) introduces an off-by-one between founder ages (50 metabolism cycles) and non-founder ages (49 − birth_tick cycles), and a similar asymmetry in the energy formula. Reconstructing this from events.jsonl with arithmetic is correct in principle but fragile in practice. The `tick_observer` path captures `(energy, age, x, y)` per living agent at exactly `model.tick_count == 50` — exact by construction, no arithmetic. This is the same pattern v0.45's preflight used (script `scripts/v0_45_preflight.py`).
 
-   The reducer becomes "deterministic re-execution + in-memory observation", which qualifies as a post-hoc reducer per CLAUDE.md's lesson "feasibility probes / decomposition reads must use `_run_one_arm_seed` or operate on already-written events.jsonl" — the `_run_one_arm_seed`-equivalent path is explicitly endorsed. No `src/` modification; no new sweep arms; uses each version's existing locked seed band + A_null arm definition (already encoded in `V0_4N_INTERVENTION_ARMS` and the per-version sweep scripts). The on-disk `runs/` corpus is NOT consumed by this reducer — the per-(version, seed, hazard) execution is byte-equivalent to the merged sweep's A_null arm.
+   The reducer becomes "deterministic re-execution + in-memory observation", which qualifies as a post-hoc reducer per CLAUDE.md's lesson endorsing the `_run_one_arm_seed`-equivalent path. No `src/` modification; no new sweep arms; uses each version's existing locked seed band + A_null arm definition (already encoded in `V0_4N_INTERVENTION_ARMS` and the per-version sweep scripts). The `runs/` corpus is NOT a precondition — the reducer derives every observable in-memory from the same `(seed, V0_25, A_null)` execution path each version's sweep used, and asserts cross-version metric consistency against each version's published `a_share_h8` to within 1e-3 (not byte identity; just the published metric).
 
-   Side benefits: the reducer can run in CI without pre-regenerating sweeps; copy-local helpers from v0.35's replay are no longer necessary (agent_lifetimes.csv is also not consumed). The end-of-run state (used for `eventual_top_lineage_id` and re-anchor) is captured by a final-tick `setup_observer`-equivalent snapshot of `model.agents` after the last `model.step()`.
+   Side benefits: the reducer can run in CI without any precondition on the `runs/` tree; copy-local helpers from v0.35's replay are no longer necessary (no per-run sidecar is consumed at all). The end-of-run state (used for `eventual_top_lineage_id` and re-anchor) is captured by walking `model.agents` after `run_chamber` returns, using the in-memory model reference held by the `setup_observer`.
 
 All other locked items (3 primary observables, expected signs, paired_d formula, verdict structure, locked phrases, conservation framing, secondary metrics, output paths) are unchanged. Test list is updated below to reflect the new state-capture path.
 
 ## Conservation framing — unchanged from v0.45
 
-- **No `src/` modifications.** v0.46 is a pure post-hoc consumer of on-disk `events.jsonl`. The `process_reproduction()` keyword-only `birth_redirect_callback` parameter introduced in v0.45 is irrelevant: v0.46 reduces only A_null arms (no callback ever constructed; default-None path).
+- **No `src/` modifications.** v0.46 is a pure post-hoc consumer in the sense that it adds nothing to the simulation surface: it consumes only `setup_observer` and `tick_observer` (both supported by `fear_hunger_chamber.run_chamber` since v0.45) plus the `AgentBorn` blinker signal. It does NOT modify any chamber / population / policy / event module.
 - **No new sweep.** Corpus is the 64 A_null runs from v0.42 / v0.43R / v0.44 / v0.45's existing sweep scripts. Re-running those sweeps locally is a prerequisite (the `runs/` tree is gitignored) but is not part of v0.46.
 - **No modifications to prior reducer scripts.** v0.34's `lineage_replay.py`, v0.35's `lineage_survival_replay.py`, v0.36's `trait_replay.py`, and the four intervention audits remain byte-identical to their merged forms. v0.46's reducer copy-locals any helpers it needs from v0.35 rather than importing.
 
@@ -55,7 +55,7 @@ eventual_top_lineage_id = argmax_lineage(b50_count)
 
 Aligns with v0.35's `compute_eventual_top_lineage` (lineage_survival_replay.py:222–244) and v0.34's `top_lineage_id` (lineage_replay.py:485) so the re-anchor against each prior version's audit-emitted `a_share_h8` is structural, not coincidental.
 
-Reconstructed from `agent_lifetimes.csv` (the same sidecar v0.34/v0.35 reduce over) by counting agents whose `birth_tick_normalized > 50` per lineage. Founder agents (`birth_tick is None` → `birth_tick_normalized = 0`) never contribute to b50_count. Runs with `total_b50 == 0` (no post-50 births at all) yield `eventual_top_lineage_id = None` and contribute NaN to all primary observables — see "NaN handling".
+Computed in-process during deterministic re-execution: a `setup_observer` registers an `AgentBorn` blinker listener that records `(agent_id → birth_tick, lineage_id)` per non-founder; founders are walked off `model.agents` at setup time and recorded with `birth_tick = 0` by convention. After `run_chamber` returns, b50_count per lineage = count of agents with `birth_tick > 50`. Founders (`birth_tick = 0`) never contribute to b50_count. Runs with `total_b50 == 0` (no post-50 births at all) yield `eventual_top_lineage_id = None` and contribute NaN to all primary observables — see "NaN handling".
 
 ## Primary observables (locked, 3, with expected signs)
 
@@ -89,7 +89,7 @@ No p-values, no FDR. Multiple-comparison protection is the small pre-committed p
 
 ## Re-anchor (locked)
 
-Each predecessor version's audit emits a pooled A_null top-lineage `b50_share` at h=8 — the same metric v0.34's `top_lineage_b50_share` and v0.42..v0.45's `post_intervention_top_lineage_b50_share` use. v0.46 must re-derive that share from each version's on-disk A_null `agent_lifetimes.csv` files and assert agreement against the published reference value. Halt-loud on drift (`CORPUS_REDERIVE_DRIFT_HALT`).
+Each predecessor version's audit emits a pooled A_null top-lineage `b50_share` at h=8 — the same metric v0.34's `top_lineage_b50_share` and v0.42..v0.45's `post_intervention_top_lineage_b50_share` use. v0.46 re-derives that share from its own deterministic re-execution of each version's A_null arm (no on-disk artifacts read) and asserts that the derived value matches the published reference within `1e-3` (the published precision of 3 decimals). This is a metric-level cross-version consistency check, not a byte-level identity check; the bytes of the simulation output (events.jsonl, agent_lifetimes.csv, etc.) are not consulted. Halt-loud on drift (`CORPUS_REDERIVE_DRIFT_HALT`).
 
 Re-derivation protocol (locked):
 
@@ -105,7 +105,7 @@ Identical formula to v0.34's `top_lineage_b50_share` and the per-version audit's
 | version | published `a_share_h8` | source |
 |---|---|---|
 | v0.42 | **0.652** | `docs/experiments/fear_hunger_v0.42.md` line 817 (Results §"Verdict — `MECHANISM_NOT_NECESSARY` fires") |
-| v0.43R | **NOT PUBLISHED** | Results halted as non-citable per SUBSTRATE_PREFLIGHT_HALT_2; A_null runs are still on-disk and clean, but no published anchor exists. **v0.43R is excluded from the re-anchor halt** — its A_null h=8 share is computed and printed for the audit log, but does not gate the verdict. |
+| v0.43R | **NOT PUBLISHED** | Results halted as non-citable per SUBSTRATE_PREFLIGHT_HALT_2. v0.43R's A_null seeds (49..56) and arm config are still well-defined and re-executable; v0.46 re-executes them and reports the derived share informationally, but no hardcoded reference exists. **v0.43R is excluded from the re-anchor halt** — its derived A_null h=8 share is logged but does not gate the verdict. |
 | v0.44 | **0.878** | `docs/experiments/fear_hunger_v0.44.md` line 1184 (Results §"Per-arm-per-hazard"; bolded) |
 | v0.45 | **0.818** | `docs/experiments/fear_hunger_v0.45.md` line 1318 (Results) |
 
@@ -119,7 +119,7 @@ Drift tolerance: `|v0.46_derived - published| > 1e-3` halts. The published value
 | exactly 1/3 fires (and 0/3 fire wrong) | `READINESS_PARTIALLY_PREDICTIVE` | "Tick-50 readiness is partially predictive of post-50 dominance on the modern A_null corpus; only one of three primary observables clears the locked threshold." |
 | 0/3 fire (and 0/3 fire wrong) | `READINESS_NOT_PREDICTIVE` | "Tick-50 readiness does not predict post-50 dominance on the modern A_null corpus; none of the three primary observables clear the locked threshold." |
 | any primary fires |paired_d| ≥ 0.5 in WRONG direction | `READINESS_OPPOSITE_SIGN_HALT` | "Halt: tick-50 readiness shows a wrong-direction signal on the modern A_null corpus; the substrate-causal arc's readiness candidate is incompatible with the locked expected signs." |
-| any of v0.42 / v0.44 / v0.45's re-derived A_null h=8 share drifts > 1e-3 from its hardcoded reference | `CORPUS_REDERIVE_DRIFT_HALT` | "Halt: A_null re-anchor drifted from the published Results value for v0.NN; the on-disk corpus is not byte-equivalent to the published sweep." |
+| any of v0.42 / v0.44 / v0.45's re-derived A_null h=8 share drifts > 1e-3 from its hardcoded reference | `CORPUS_REDERIVE_DRIFT_HALT` | "Halt: A_null re-anchor drifted from the published Results value for v0.NN; v0.46's deterministic re-execution does not reproduce the published metric within 1e-3." |
 
 The 0-of-3-fires verdict (`READINESS_NOT_PREDICTIVE`) and 1-of-3 verdict (`READINESS_PARTIALLY_PREDICTIVE`) are framed correlationally — they do not rule readiness out as a *mechanism*, only as a robust *predictor* under the locked thresholds. Mechanism declarations require a fresh-stream calibration, which v0.46 does not perform (per v0.36 framing discipline).
 
@@ -138,7 +138,7 @@ Reported in `runs/v0.46-readiness/per_run_per_lineage_tick50.csv` for transparen
 
 - `tick50_living_count` per lineage
 - `tick50_total_energy` per lineage (sum across living agents)
-- `tick50_valid_adjacent_empty_count` per lineage (sum across living agents of N/S/E/W in-bounds non-WALL unoccupied cells)
+- `tick50_neighbor_unoccupied_coarse_count` per lineage (sum across living agents of N/S/E/W cells not occupied by another living agent at tick 50; **coarse** — does NOT exclude WALL cells or out-of-bounds positions because the snapshot does not capture world geometry, so the count overestimates true reproduction-eligible adjacency. Descriptive only.)
 - `pre50_food_acquired_count` per lineage (cumulative `AteFood` events with tick ≤ 50 by `lineage_id` of agent)
 - `pre50_hazard_damage_received_count` per lineage (cumulative `HazardDamageApplied`)
 - `tick50_mean_age` per lineage
@@ -152,7 +152,7 @@ runs/v0.46-readiness/per_run_per_lineage_tick50.csv
   columns: version, seed, hazard, run_id, lineage_id,
            tick50_living_count, tick50_mean_energy, tick50_mean_age,
            tick50_above_threshold_count, tick50_above_threshold_fraction,
-           tick50_total_energy, tick50_valid_adjacent_empty_count,
+           tick50_total_energy, tick50_neighbor_unoccupied_coarse_count,
            pre50_reproductive_momentum_count,
            pre50_food_acquired_count, pre50_hazard_damage_received_count,
            end_of_run_living, is_eventual_top
@@ -182,7 +182,7 @@ runs/v0.46-readiness/audit_log.txt
 7. Re-anchor: for v0.42 / v0.44 / v0.45 only, compute `a_share_h8 = mean over A_null h=8 runs of (max_lineage(b50_count) / total_b50_in_run)`; compare to hardcoded reference (0.652 / 0.878 / 0.818); halt-loud on |drift| > 1e-3. v0.43R: compute and print, do NOT halt-gate.
 8. Emit verdict per the locked decision rule; print + write the locked phrase verbatim.
 
-The reducer is fully self-contained: it reads no on-disk `runs/` artifacts. Re-execution of 64 A_null runs at ~5–10 s each gives a wall time of ~5–10 minutes total — comparable to running each sweep (~17 s per sweep × 4 = ~70 s, plus overhead) but consolidated in one driver. Determinism guaranteed by passing each (version, seed) the same anchor config the merged sweep used.
+The reducer is fully self-contained: it reads no `runs/` artifacts. Re-execution of 64 A_null runs at ~5–10 s each gives a wall time of ~5–10 minutes total — comparable to running each sweep (~17 s per sweep × 4 = ~70 s, plus overhead) but consolidated in one driver. Determinism guaranteed by passing each (version, seed) the same anchor config the merged sweep used; cross-version consistency verified by re-anchoring the derived `a_share_h8` against each version's published value within 1e-3.
 
 ## Test list (locked, per v0.45 7-point review pattern)
 
@@ -212,7 +212,7 @@ The reducer is fully self-contained: it reads no on-disk `runs/` artifacts. Re-e
 - **No `src/` modification.** The reducer uses `setup_observer` and `tick_observer`, both already supported by `fear_hunger_chamber.run_chamber` since v0.45. No new sweep arms; no callback construction; A_null runs use `optional_intervention=InterventionConfig(kind=KIND_NULL)` (byte-identical to `optional_intervention=None`, verified by H2e).
 - **Pre-50 reproduction byte-identity** through v0.46 is preserved by construction: v0.46 makes no `src/` change.
 - **Locked phrase discipline**: when the verdict fires, the locked-phrase string in the Results section MUST match the table above verbatim. No paraphrase.
-- **`is_eventual_top` is a function of tick-200 living count, not of share**. Some prior versions report share thresholds; the dominance label here is purely the argmax (with tiebreak), not a share-fraction threshold.
+- **`is_eventual_top` is a function of `b50_count` (post-50 birth count), not of living-count or share**. Some prior versions report share thresholds; the dominance label here is purely `argmax(b50_count)` with tiebreak `min(lineage_id)`, mirroring v0.35's `compute_eventual_top_lineage`.
 
 ## Files this slice will create
 
@@ -251,7 +251,7 @@ Per-run paired delta = `top_lineage_value − mean(non_top_lineage_values)`; pai
 | v0.44  | 8 | 0.878 | 0.878 | 0.0001 | no |
 | v0.45  | 8 | 0.818 | 0.818 | 0.0002 | no |
 
-Re-anchor confirms v0.46's deterministic re-execution is byte-equivalent to each version's merged sweep at the published precision (3 decimals). The on-disk corpus is not a precondition — the reducer derives its anchor from the same `(seed, V0_25, A_null)` execution path each version's sweep used. v0.43R's derived 0.674 is informational; v0.43R's audit was halted as non-citable per SUBSTRATE_PREFLIGHT_HALT_2 and no published reference exists.
+Re-anchor confirms v0.46's deterministic re-execution reproduces each version's published `a_share_h8` to within the published precision (3 decimals; tolerance 1e-3) — a metric-level consistency check, not a byte-level identity check. The `runs/` corpus is not a precondition — the reducer derives its anchor from the same `(seed, V0_25, A_null)` execution path each version's sweep used. v0.43R's derived 0.674 is informational; v0.43R's audit was halted as non-citable per SUBSTRATE_PREFLIGHT_HALT_2 and no published reference exists.
 
 ### Reading the result correlationally
 
