@@ -224,4 +224,69 @@ No other files modified.
 
 ## Results
 
-*(Appended after reducer run on 64-run modern A_null corpus.)*
+**Status:** reducer executed 2026-05-07 against 64 A_null runs (v0.42 / v0.43R / v0.44 / v0.45, h ∈ {0, 8}, 8 seeds per (version, hazard) bucket). All re-anchors PASS (drift ≤ 0.0003 ≪ 1e-3 tolerance).
+
+### Verdict — `READINESS_PREDICTS_DOMINANCE` fires
+
+> **Locked phrase fires verbatim:** "Tick-50 readiness predicts post-50 dominance on the modern A_null corpus."
+
+Two of three primary observables fire above the locked Cohen's d threshold of +0.5; zero observables fire wrong-sign.
+
+### Paired Cohen's d per primary observable
+
+| # | observable | expected sign | paired_d | n_runs | fires |
+|---|---|:-:|:-:|:-:|:-:|
+| 1 | `pre50_reproductive_momentum_count` | + | **+1.136** | 64 | **YES** |
+| 2 | `tick50_above_threshold_fraction` | + | **+0.810** | 64 | **YES** |
+| 3 | `tick50_mean_energy` | + | +0.452 | 64 | no |
+
+Per-run paired delta = `top_lineage_value − mean(non_top_lineage_values)`; paired_d = `mean(per_run_delta) / stdev(per_run_delta, ddof=1)`. All 64 runs contributed to every observable's pool (zero NaN drops; every run had `total_b50 ≥ 1`).
+
+### Re-anchor — all three published versions PASS
+
+| version | n_runs | derived `a_share_h8` | published | |drift| | halt |
+|---|:-:|:-:|:-:|:-:|:-:|
+| v0.42  | 8 | 0.652 | 0.652 | 0.0003 | no |
+| v0.43R | 8 | 0.674 | — (halted, non-citable) | — | n/a |
+| v0.44  | 8 | 0.878 | 0.878 | 0.0001 | no |
+| v0.45  | 8 | 0.818 | 0.818 | 0.0002 | no |
+
+Re-anchor confirms v0.46's deterministic re-execution is byte-equivalent to each version's merged sweep at the published precision (3 decimals). The on-disk corpus is not a precondition — the reducer derives its anchor from the same `(seed, V0_25, A_null)` execution path each version's sweep used. v0.43R's derived 0.674 is informational; v0.43R's audit was halted as non-citable per SUBSTRATE_PREFLIGHT_HALT_2 and no published reference exists.
+
+### Reading the result correlationally
+
+The locked phrase is **correlational, not causal**: the eventual top lineage is *already differentially advantaged* at tick 50 along two of the three pre-committed readiness axes:
+
+- **Pre-50 reproductive momentum** is the strongest signal (d = +1.136, large effect by Cohen's convention). The eventual top lineage produced ~1.1 standard deviations more pre-50 births than the mean of its non-top peers in the same run, paired across 64 runs.
+- **Reproduction-readiness fraction at tick 50** (energy ≥ threshold AND age ≥ min_age) fires at d = +0.810 (large effect). The top lineage carries proportionally more reproduction-ready agents at the tick-50 boundary.
+- **Mean energy at tick 50** alone is the weakest (d = +0.452, just below the locked +0.5 threshold). Energy state per se does not predict dominance as cleanly as readiness counts or momentum do.
+
+This is consistent with — but does not prove — the v0.45 caveat candidate "trait-linked reproduction readiness". v0.46 specifically does **not** rule out: pre-50 spatial sorting, founder-position advantage, topology-mediated energy access ticks 0..50, or any post-tick-200 dynamic. These remain live causal candidates regardless of v0.46's verdict.
+
+### What v0.46 establishes (and what it does not)
+
+- ✓ **Establishes**: on the modern A_null corpus (4 versions × 8 seeds × 2 hazards = 64 runs), the eventual post-50 dominant lineage is identifiable at tick 50 by reproductive-momentum count and reproduction-readiness-fraction with large paired effect sizes; mean energy alone is a borderline predictor.
+- ✗ **Does not establish**: that readiness *causes* dominance. Mechanism declarations require fresh-stream calibration analogous to v0.30..v0.33; v0.46 is observational decomposition only.
+- ✗ **Does not rule out** any of the live causal candidates from v0.45's caveat list: pre-50 spatial sorting, founder-position advantage, topology-mediated energy access ticks 0..50.
+- ✗ **Does not generalise** beyond the locked V0_25 anchor (tight_gradient + GradientPolicy + auto_reproduction=True + unbounded_mutation + transfer-pool funding + ambient_influx_rate=1.0).
+
+### Caveats
+
+- **Pre-50 momentum is partly tautological with `b50_count`** in expectation: lineages that produce more pre-50 births tend to produce more post-50 births by sheer continuity (more reproduction-eligible agents at tick 50, more queue-throughput at tick 51+). The +1.136 paired_d is a strong signal but does not isolate a *fresh* mechanism distinct from the b50-based dominance label itself. Reproduction-readiness fraction (d = +0.810) is the cleaner observable in this regard — it measures the *state* of living lineage members at tick 50, not their reproductive history.
+- **Mean energy borderline (+0.452)** is below the locked threshold (+0.5) but only by a small margin. A wider effect-size window (say d ≥ 0.4 per v0.36's primary-trait threshold) would have fired all three. The locked +0.5 stands; this is the kind of "single-knob choice changes the verdict" finding that the pre-reg's discipline is designed to surface honestly.
+- **Cross-version pooling**: the 64 runs are pooled across 4 versions whose substrate `src/` extensions accumulated additively (v0.42 leader-kill, v0.43R density, v0.44 respawn-flow, v0.45 birth-redirect). All four A_null arms are byte-identical to `optional_intervention=None` (verified by H2e regression on each version's branch); pooling is therefore valid. The h=8 re-anchor passing for all 3 published versions is the strongest available evidence that the cross-version pool is a single distribution.
+- **No claim about post-tick-200 dynamics**, no claim about the chamber's other layouts (open_field / hazard_band), no claim about non-V0_25 anchors.
+
+### v0.47 candidate (open; not locked)
+
+The natural next decomposition is whether the readiness signals at tick 50 are **inherited from founder traits** (mutated lineage signatures) or **emergent from trajectory-level path advantage** (which lineage happened to find food first). v0.36's `trait_replay.py` is the analogous decomposition over v0.34 corpus; an extension to the modern A_null corpus, restricted to traits that influence reproduction-readiness (e.g. `metabolic_rate`, `sensor_radius`), would isolate the heritability fraction of the v0.46 finding. This is a reducer slice, not an intervention slice.
+
+### CI gate at v0.46 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1587 passed, 7 skipped (was 1573, +14 v0.46)
+uv run python scripts/core_smoke_test.py                ok
+uv run python scripts/v0_46_tick50_readiness_audit.py   READINESS_PREDICTS_DOMINANCE
+```
