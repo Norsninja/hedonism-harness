@@ -1509,6 +1509,50 @@ V0_44_INTERVENTION_ARMS: tuple[Arm, ...] = (
 )
 
 
+def _v0_45_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.45 arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v045-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_45_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_45_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_45_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_uniform_valid_region (treatment: break parent adjacency)
+    _v0_45_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_uniform_valid_region",
+        intervention_kind="uniform_valid_region_birth_position_after_tick50",
+    ),
+    _v0_45_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_uniform_valid_region",
+        intervention_kind="uniform_valid_region_birth_position_after_tick50",
+    ),
+    # C_uniform_neighbor (placebo: preserve adjacency, randomize tie-break)
+    _v0_45_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_uniform_neighbor",
+        intervention_kind="uniform_neighbor_birth_position_after_tick50",
+    ),
+    _v0_45_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_uniform_neighbor",
+        intervention_kind="uniform_neighbor_birth_position_after_tick50",
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------

@@ -54,6 +54,7 @@ import numpy as np
 
 from hedonism_harness.core.body import DeathCause, mark_dead
 from hedonism_harness.core.events import (
+    BirthRedirectedByIntervention,
     FoodRedistributedByIntervention,
     LineageKilledByIntervention,
     RespawnScheduleByIntervention,
@@ -96,6 +97,26 @@ KIND_DENSITY_PRESERVING_PERTURBATION: str = "density_preserving_perturbation_at_
 # [[docs/experiments/fear_hunger_v0.44.md]].
 KIND_DELAY_RESPAWN_PLUS_25: str = "delay_respawn_schedule_plus_25_at_tick50"
 KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR: str = "permute_respawn_schedule_reverse_row_major_at_tick50"
+# v0.45 birth-position rewrite kinds (additive; no agent deaths emitted).
+# Continuous firing from ``effective_tick >= 51``; the chamber driver gates
+# the per-birth callback at the call site (``tick > 50``). Operates on
+# offspring placement only; default reproduction (tick <= 50, A_null arms,
+# pre-v0.45 sweeps) is byte-identical. Emits
+# ``BirthRedirectedByIntervention`` once per successful redirect. See
+# [[docs/experiments/fear_hunger_v0.45.md]].
+KIND_UNIFORM_VALID_REGION_BIRTH: str = "uniform_valid_region_birth_position_after_tick50"
+KIND_UNIFORM_NEIGHBOR_BIRTH: str = "uniform_neighbor_birth_position_after_tick50"
+
+# v0.45 RNG stream label (locked; consumed via ``model.streams``).
+V045_RNG_STREAM_LABEL: str = "v0_45_birth_position_intervention"
+
+# v0.45 birth-redirection eligibility predicate scopes both B (global) and
+# C (parent-adjacent) eligible-cell sets to non-HAZARD non-WALL non-occupied
+# in-bounds cells. This is INTERVENTION-LOCAL; ``core/reproduction.py``'s
+# ``_is_placeable`` is unchanged.
+_V045_BIRTH_SAFE_KINDS: frozenset[int] = frozenset(
+    {int(CellKind.EMPTY), int(CellKind.FOOD), int(CellKind.SAFE)}
+)
 
 ROLE_LEADER: str = "leader"
 ROLE_SMNONLEADER: str = "size_matched_nonleader"
@@ -125,6 +146,16 @@ _VALID_KINDS: frozenset[str] = frozenset(
         KIND_DENSITY_PRESERVING_PERTURBATION,
         KIND_DELAY_RESPAWN_PLUS_25,
         KIND_PERMUTE_RESPAWN_REVERSE_ROW_MAJOR,
+        KIND_UNIFORM_VALID_REGION_BIRTH,
+        KIND_UNIFORM_NEIGHBOR_BIRTH,
+    }
+)
+
+
+_BIRTH_REDIRECT_KINDS: frozenset[str] = frozenset(
+    {
+        KIND_UNIFORM_VALID_REGION_BIRTH,
+        KIND_UNIFORM_NEIGHBOR_BIRTH,
     }
 )
 
@@ -179,6 +210,8 @@ class InterventionConfig:
         "density_preserving_perturbation_at_tick50",
         "delay_respawn_schedule_plus_25_at_tick50",
         "permute_respawn_schedule_reverse_row_major_at_tick50",
+        "uniform_valid_region_birth_position_after_tick50",
+        "uniform_neighbor_birth_position_after_tick50",
     ] = KIND_NULL
     intervention_tick: int = DEFAULT_INTERVENTION_TICK
     effective_tick: int = DEFAULT_EFFECTIVE_TICK
@@ -321,7 +354,9 @@ def _kill_lineage(model: HHModel, agents: list[HHAgent]) -> int:
     return n_killed
 
 
-def apply_intervention(model: HHModel, config: InterventionConfig) -> InterventionResult:
+def apply_intervention(  # noqa: PLR0911 — additive verdict-cell dispatch; refactor would obscure intent.
+    model: HHModel, config: InterventionConfig
+) -> InterventionResult:
     """Apply ``config`` to ``model`` at the firing moment. Caller is
     responsible for invoking this exactly once per run, at
     ``model.tick_count == config.effective_tick``. The chamber driver
@@ -363,6 +398,22 @@ def apply_intervention(model: HHModel, config: InterventionConfig) -> Interventi
 
     if config.kind in _RESPAWN_SCHEDULE_KINDS:
         return _apply_respawn_schedule_rewrite(model, config)
+
+    if config.kind in _BIRTH_REDIRECT_KINDS:
+        # v0.45 birth-redirection kinds fire continuously per-birth via
+        # the chamber driver's call-site callback; ``apply_intervention``
+        # at tick 51 is a no-op for these kinds. The callback is already
+        # installed on ``model.v045_birth_redirect_callback`` by the
+        # chamber driver setup; this function is invoked once at tick 51
+        # and returns immediately without emitting any event or killing
+        # any agent.
+        return InterventionResult(
+            fired=False,
+            lineage_id=None,
+            lineage_role=ROLE_NONE,
+            n_killed=0,
+            control_unavailable=False,
+        )
 
     buckets = _living_agents_by_lineage(model)
     leader_id = _identify_leader(buckets)
@@ -732,3 +783,155 @@ def _apply_respawn_schedule_rewrite(
         n_killed=0,
         control_unavailable=False,
     )
+
+
+# ---------------------------------------------------------------------------
+# v0.45 birth-redirection helpers + callback factory
+# ---------------------------------------------------------------------------
+
+
+def _is_v045_birth_safe_placeable(
+    world,
+    x: int,
+    y: int,
+    occupied: frozenset[tuple[int, int]] | None,
+) -> bool:
+    """v0.45 birth-redirection eligibility predicate. Returns True iff:
+
+    - ``(x, y)`` is in-bounds (``0 <= x < world.width`` and
+      ``0 <= y < world.height``).
+    - ``world.kind_layer[x, y]`` is one of ``{EMPTY, FOOD, SAFE}``
+      (excludes WALL and HAZARD).
+    - ``(x, y)`` is not in ``occupied``.
+
+    INTERVENTION-LOCAL: this predicate is used only by the v0.45
+    birth-redirect callback. ``core/reproduction.py``'s ``_is_placeable``
+    is unchanged and continues to govern default reproduction
+    semantics (which permits HAZARD cells; the default chamber
+    driver's behaviour is preserved exactly).
+    """
+    if x < 0 or y < 0:
+        return False
+    if x >= world.width or y >= world.height:
+        return False
+    if int(world.kind_layer[x, y]) not in _V045_BIRTH_SAFE_KINDS:
+        return False
+    return not (occupied is not None and (x, y) in occupied)
+
+
+def _v045_eligible_global_cells(
+    world,
+    occupied: frozenset[tuple[int, int]] | None,
+) -> list[tuple[int, int]]:
+    """v0.45 B arm. Return all cells (x, y) satisfying
+    ``_is_v045_birth_safe_placeable``, sorted (x, y) ascending.
+    Excludes HAZARD/WALL and occupied/out-of-bounds cells.
+    """
+    out: list[tuple[int, int]] = []
+    for x in range(world.width):
+        for y in range(world.height):
+            if _is_v045_birth_safe_placeable(world, x, y, occupied):
+                out.append((x, y))
+    return out
+
+
+def _v045_eligible_neighbor_cells(
+    world,
+    parent,
+    occupied: frozenset[tuple[int, int]] | None,
+) -> list[tuple[int, int]]:
+    """v0.45 C arm. Return parent's N/S/E/W neighbors filtered by
+    ``_is_v045_birth_safe_placeable``, in deterministic (x, y)
+    ascending order over the surviving neighbors.
+    """
+    candidates = [(parent.x + dx, parent.y + dy) for dx, dy in ((0, 1), (0, -1), (1, 0), (-1, 0))]
+    valid = [c for c in candidates if _is_v045_birth_safe_placeable(world, c[0], c[1], occupied)]
+    valid.sort()
+    return valid
+
+
+def make_v045_birth_redirect_callback(
+    config: InterventionConfig,
+    model,
+):
+    """Build the v0.45 birth-redirect callback bound to the
+    intervention kind and the model's RNG.
+
+    The returned callable receives ``(world, parent_body, occupied,
+    original_placement)`` and returns either ``(x, y)`` for the
+    redirected child or ``None`` to skip the birth.
+
+    The callback is NEVER invoked for ``tick <= 50``; that gate
+    lives in the call site (``mesa_agents.HHAgent._attempt_reproduction``).
+    The callback assumes ``tick > 50`` unconditionally.
+
+    Behaviour by kind:
+
+    - B (``KIND_UNIFORM_VALID_REGION_BIRTH``): pick uniformly at
+      random from ``_v045_eligible_global_cells(world, occupied)``
+      using a dedicated RNG spawned from ``model.streams.mutation``.
+      If empty, increment ``model.v045_skipped_redirect_counter`` and
+      return ``None``.
+    - C (``KIND_UNIFORM_NEIGHBOR_BIRTH``): pick uniformly at random
+      from ``_v045_eligible_neighbor_cells(world, parent, occupied)``
+      using the same RNG. If empty, increment the counter and
+      return ``None``.
+
+    On a successful redirect, the callback emits one
+    ``BirthRedirectedByIntervention`` event (via
+    ``model.record_event``) and returns the redirected ``(x, y)``.
+    """
+    if config.kind not in _BIRTH_REDIRECT_KINDS:
+        msg = f"make_v045_birth_redirect_callback: kind {config.kind!r} is not a v0.45 kind"
+        raise ValueError(msg)
+
+    # Spawn a dedicated RNG from the mutation stream. v0.42..v0.44 sweeps
+    # don't construct this callback so their mutation sequences are unaffected.
+    callback_rng = model.streams.mutation.spawn(1)[0]
+    kind = config.kind
+
+    def callback(world, parent, occupied, original_placement):
+        # Augment occupied with the parent's own cell. Mesa's grid is
+        # capacity=1 and ``occupied_cells_excluding(parent)`` deliberately
+        # omits the parent's cell so default ``find_adjacent_empty_cell``
+        # works (the child is placed adjacent, not on the parent). The
+        # v0.45 callback selects from the chamber-wide / neighbor-wide
+        # eligible set, so we MUST exclude the parent's cell explicitly
+        # to avoid picking it and crashing Mesa's add_agent.
+        occupied_plus_parent = (occupied or frozenset()) | {(parent.x, parent.y)}
+        if kind == KIND_UNIFORM_VALID_REGION_BIRTH:
+            eligible = _v045_eligible_global_cells(world, occupied_plus_parent)
+        else:  # KIND_UNIFORM_NEIGHBOR_BIRTH
+            eligible = _v045_eligible_neighbor_cells(world, parent, occupied_plus_parent)
+        n_valid = len(eligible)
+        if n_valid == 0:
+            model.v045_skipped_redirect_counter += 1
+            return None
+        idx = int(callback_rng.integers(0, n_valid))
+        chosen = eligible[idx]
+        # Emit the event (model.record_event wraps in LoggedEvent envelope).
+        original_x = -1 if original_placement is None else int(original_placement[0])
+        original_y = -1 if original_placement is None else int(original_placement[1])
+        target_kind = CellKind(int(world.kind_layer[chosen[0], chosen[1]])).name
+        manhattan = abs(parent.x - chosen[0]) + abs(parent.y - chosen[1])
+        preserved_adjacency = manhattan == 1
+        event = BirthRedirectedByIntervention(
+            intervention_kind=kind,
+            tick=int(model.tick_count),
+            parent_id=int(parent.id),
+            parent_lineage_id=int(parent.lineage_id),
+            parent_x=int(parent.x),
+            parent_y=int(parent.y),
+            original_x=original_x,
+            original_y=original_y,
+            redirected_x=int(chosen[0]),
+            redirected_y=int(chosen[1]),
+            n_valid_cells=n_valid,
+            target_cell_kind=target_kind,
+            preserved_parent_adjacency=preserved_adjacency,
+            rng_stream_label=V045_RNG_STREAM_LABEL,
+        )
+        model.record_event(event)
+        return chosen
+
+    return callback

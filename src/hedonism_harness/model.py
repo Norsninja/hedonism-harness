@@ -707,6 +707,17 @@ class HHModel(mesa.Model):
                         )
                     )
                     continue
+            # v0.45 (additive): the chamber driver may install a
+            # birth_redirect_callback on the model when the intervention
+            # kind is one of v0.45's two. The callback is gated to
+            # ``tick > 50`` HERE at the call site so process_reproduction
+            # never sees the callback for pre-50 reproduction. Default
+            # path (no callback installed, or tick <= 50) is byte-
+            # identical to v0.21..v0.44.
+            v045_callback = getattr(self, "v045_birth_redirect_callback", None)
+            active_callback = (
+                v045_callback if (v045_callback is not None and self.tick_count > 50) else None
+            )
             outcome = process_reproduction(
                 self.world,
                 parent.body,
@@ -716,6 +727,7 @@ class HHModel(mesa.Model):
                 reproduction_config=self.reproduction_config,
                 child_id=self._next_body_id,
                 occupied=occupied,
+                birth_redirect_callback=active_callback,
             )
             if outcome is None:
                 # Defensive: under v0.19 we pre-checked placement so this

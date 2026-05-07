@@ -28,7 +28,13 @@ from hedonism_harness.core.config import (
     ReproductionConfig,
     WorldConfig,
 )
-from hedonism_harness.core.interventions import InterventionConfig, apply_intervention
+from hedonism_harness.core.interventions import (
+    KIND_UNIFORM_NEIGHBOR_BIRTH,
+    KIND_UNIFORM_VALID_REGION_BIRTH,
+    InterventionConfig,
+    apply_intervention,
+    make_v045_birth_redirect_callback,
+)
 from hedonism_harness.core.traits import TraitConfig
 from hedonism_harness.core.world import CellKind
 from hedonism_harness.io.csv_writer import (
@@ -455,6 +461,24 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     # first step so subscribers see every tick-0 event.
     if setup_observer is not None:
         setup_observer(model)
+
+    # v0.45 (additive): if the intervention kind is a birth-redirection
+    # kind, construct the per-birth callback here and stash it on the
+    # model. Also initialise the run-local skipped-redirect counter. The
+    # call-site gate (model.step's reproduction loop) checks tick > 50
+    # before passing the callback into process_reproduction, so pre-50
+    # behaviour is byte-identical to v0.44. Pre-v0.45 sweeps and v0.45
+    # A_null arms do NOT construct a callback (kind not in v0.45 set);
+    # mutation-stream byte-identity preserved.
+    model.v045_skipped_redirect_counter = 0
+    model.v045_birth_redirect_callback = None
+    if optional_intervention is not None and optional_intervention.kind in (
+        KIND_UNIFORM_VALID_REGION_BIRTH,
+        KIND_UNIFORM_NEIGHBOR_BIRTH,
+    ):
+        model.v045_birth_redirect_callback = make_v045_birth_redirect_callback(
+            optional_intervention, model
+        )
 
     started_at = now_unix()
     intervention_fired: bool = False
