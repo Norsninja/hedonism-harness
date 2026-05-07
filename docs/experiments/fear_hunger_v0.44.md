@@ -1088,6 +1088,70 @@ The preflight is a documentation step, not a sweep. Its outputs
 are committed to the pre-reg's "Preflight findings" subsection
 (added on completion). It does NOT alter `src/`.
 
+### Preflight findings (executed 2026-05-07)
+
+**Status: PASS — preflight clears the v0.44 sweep.** All four
+operative-substrate criteria hold across all 16 (seed, hazard)
+buckets. Driver: `[[scripts/v0_44_preflight.py]]`. Path used:
+`_run_one_arm_seed`-equivalent reconstruction via `_v0_43r_arm`
+with `intervention_kind="null"` (byte-identical to the v0.44
+A_null arms' eventual sweep path). Substrate captured at end of
+`tick_count == 50` via `tick_observer`.
+
+| seed | hzd | n_eligible | min | median | max | total_food |
+|-----:|----:|-----------:|----:|-------:|----:|-----------:|
+| 57   | 0   | 24         | 54  | 64.0   | 71  | 0.0        |
+| 58   | 0   | 24         | 54  | 61.5   | 67  | 0.0        |
+| 59   | 0   | 24         | 54  | 59.0   | 65  | 0.0        |
+| 60   | 0   | 24         | 54  | 64.0   | 70  | 0.0        |
+| 61   | 0   | 24         | 54  | 62.0   | 65  | 0.0        |
+| 62   | 0   | 24         | 54  | 60.0   | 67  | 0.0        |
+| 63   | 0   | 24         | 54  | 64.5   | 70  | 0.0        |
+| 64   | 0   | 24         | 54  | 62.0   | 66  | 0.0        |
+| 57   | 8   | 24         | 54  | 67.0   | 75  | 0.0        |
+| 58   | 8   | 24         | 54  | 68.5   | 78  | 0.0        |
+| 59   | 8   | 24         | 54  | 60.0   | 66  | 0.0        |
+| 60   | 8   | 24         | 54  | 67.0   | 75  | 0.0        |
+| 61   | 8   | 24         | 54  | 62.0   | 66  | 0.0        |
+| 62   | 8   | 24         | 54  | 60.0   | 67  | 0.0        |
+| 63   | 8   | 24         | 54  | 68.5   | 79  | 0.0        |
+| 64   | 8   | 24         | 54  | 62.0   | 68  | 0.0        |
+
+Aggregate refill-tick distribution across all 16 buckets
+(n=384 = 16 × 24): **min=54, median=63.0, max=79**.
+
+Criteria evaluation:
+
+- **[PASS] Criterion 1** — `n_eligible_cells` consistent across
+  all 16 buckets. Observed value: **24** in every bucket.
+  `EXPECTED_N_ELIGIBLE_CELLS = 24` is now committed.
+- **[PASS] Criterion 2** — refill-tick distribution heterogeneous
+  within every bucket (`min < max` on all 16 buckets; `min=54`
+  uniformly, `max ∈ [65, 79]`).
+- **[PASS] Criterion 3** — `max_tick + 25 ≤ 200` on every bucket
+  (worst case: seed 63 hzd 8, `max=79 → max+25=104`, well within
+  the 200-tick simulation horizon).
+- **[PASS] Criterion 4** — `total_food == 0.0` on every bucket
+  (matches v0.43R's corrected substrate finding; the 24-cell food
+  zone is completely depleted at tick 50 across the seeds-57..64
+  band as well).
+
+Substrate observations consistent with seeds 49..56 probe (which
+showed refill ticks 54..67) but extended: seeds-57..64 buckets at
+h=8 reach `max_tick=79`. The +25 delay shifts the first wave from
+54..79 (early window) into 79..104 (mid-to-late window, with seed
+63 hzd 8's max-delayed refill at tick 104, four ticks past the
+50-tick observation window's end at tick 100). Implication for
+the auxiliary: at h=8, the +25 delay pushes a non-negligible
+fraction of first-wave refills past the observation horizon end;
+DELAY_ABLATES_REPRODUCTION is plausibly reachable at h=8 (parallel
+to the design intent).
+
+The pre-reg's locked sweep can now proceed. **Implementation
+gate: not yet opened — awaiting user signoff that the preflight
+clears the way to begin v0.44 src/ + scripts/ + tests/
+implementation.**
+
 ### CI gate at pre-reg time
 
 ```
