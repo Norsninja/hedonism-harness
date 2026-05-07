@@ -23,10 +23,11 @@ from __future__ import annotations
 import csv
 import json
 from collections.abc import Callable, Iterable
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 
 from hedonism_harness.core.config import ChildFundingMode
+from hedonism_harness.core.interventions import InterventionConfig
 from hedonism_harness.core.traits import TraitConfig
 from hedonism_harness.experiments.fear_hunger_chamber import (
     ChamberRunResult,
@@ -140,6 +141,15 @@ class Arm:
     child_funding_mode: ChildFundingMode | None = None
     hazard_damage: float | None = None
     hazard_avoidance_weight: float | None = None
+    # v0.42: optional experimental intervention. ``None`` (default)
+    # preserves v0.7..v0.41 bit-identity by leaving the chamber driver's
+    # ``optional_intervention`` parameter unset. A finite value (one of
+    # KIND_NULL / KIND_KILL_LEADER / KIND_KILL_SMNONLEADER from
+    # core.interventions) fires the corresponding intervention at the
+    # tick-50/tick-51 boundary. KIND_NULL is also a no-op on the events
+    # stream — used by V0_42_INTERVENTION_ARMS to label the A_null arm
+    # without special-casing the wiring.
+    intervention_kind: str | None = None
 
 
 def _hedonism_policy_factory() -> Policy:
@@ -1282,6 +1292,69 @@ V0_41_TIGHT_H_ARMS: tuple[Arm, ...] = tuple(
 )
 
 
+# v0.42 — first causal intervention slice. Hard-kill of the tick-50 leader
+# lineage (necessity probe) at hazards {0, 8}, with three arms:
+#   A_null            : no intervention; substrate-byte-identity to V0_41
+#                       at h=0 / h=8 except for the new arm label.
+#   B_kill_leader     : extinct tick-50 leader at the tick-50/tick-51 boundary.
+#   C_kill_smnonleader: extinct size-matched non-leader at the same boundary.
+#
+# Substrate fields are inherited via ``dataclasses.replace`` from V0_25_ARMS'
+# h=0 / h=8 influx=1.0 anchors, so any future drift in those base arms would
+# halt the v0.42 audit's substrate-identity guards. The distinct ``label``s
+# keep per-arm output directories disjoint; the distinct ``intervention_kind``
+# values activate the chamber driver's optional intervention hook.
+#
+# A_null intentionally uses ``intervention_kind=KIND_NULL`` (not ``None``) so
+# the audit can affirm the arm's intent from the on-disk arm config; the
+# events.jsonl byte stream is identical to ``intervention_kind=None`` because
+# ``apply_intervention`` short-circuits on KIND_NULL without emitting events.
+#
+# Pre-reg: [[docs/experiments/fear_hunger_v0.42.md]].
+def _v0_42_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.42 arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v042-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_42_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_42_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_42_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_kill_leader (treatment)
+    _v0_42_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_kill_leader",
+        intervention_kind="kill_tick50_leader",
+    ),
+    _v0_42_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_kill_leader",
+        intervention_kind="kill_tick50_leader",
+    ),
+    # C_kill_smnonleader (size-matched non-leader placebo)
+    _v0_42_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_kill_smnonleader",
+        intervention_kind="kill_size_matched_nonleader",
+    ),
+    _v0_42_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_kill_smnonleader",
+        intervention_kind="kill_size_matched_nonleader",
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
@@ -1734,6 +1807,15 @@ def _run_one_arm_seed(
     use_memory = arm.memory_type is not None
     memory_type = arm.memory_type or "cell_exact"  # only consulted when use_memory=True
 
+    # v0.42: thread the optional intervention. ``None`` (default) preserves
+    # v0.7..v0.41 bit-identity — the chamber driver's ``optional_intervention``
+    # stays unset and the intervention block in the tick loop is skipped.
+    # A finite ``arm.intervention_kind`` constructs an InterventionConfig
+    # at the locked v0.42 anchors (tick 50 / tick 51).
+    optional_intervention: InterventionConfig | None = None
+    if arm.intervention_kind is not None:
+        optional_intervention = InterventionConfig(kind=arm.intervention_kind)
+
     result = run_chamber(
         seed=seed,
         runs_root=runs_root,
@@ -1754,6 +1836,7 @@ def _run_one_arm_seed(
         hazard_avoidance_weight=arm.hazard_avoidance_weight,
         condition=arm.label,
         setup_observer=setup,
+        optional_intervention=optional_intervention,
     )
 
     # Snapshot trait fingerprints from the run model and write per-run.

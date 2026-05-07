@@ -25,6 +25,7 @@ class DeathCause(IntEnum):
 
     STARVATION = 1
     INJURY = 2
+    INTERVENTION = 3  # v0.42: experimental intervention killed this agent.
 
 
 @dataclass(frozen=True)

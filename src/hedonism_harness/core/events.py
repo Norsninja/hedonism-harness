@@ -171,6 +171,35 @@ class BirthDeniedParentEnergy:
     tick: int
 
 
+@dataclass(frozen=True)
+class LineageKilledByIntervention:
+    """v0.42: emitted at the tick-50/tick-51 boundary when a leader-kill or
+    size-matched-non-leader-kill intervention extincts a lineage.
+
+    The intervention identifies the target lineage from tick-50 living-agent
+    state (anchor: ``intervention_tick=50``), then kills all of that lineage's
+    living agents before tick 51's first phase begins (anchor:
+    ``effective_tick=51``). Each killed agent additionally emits a normal
+    ``AgentDied(cause=DeathCause.INTERVENTION)`` event; this summary event
+    pairs with that group so downstream audits can identify the intervention's
+    target lineage and role without scanning every AgentDied.
+
+    ``lineage_role``: one of ``"leader"`` (arm B) or
+    ``"size_matched_nonleader"`` (arm C). Reported separately so audit code
+    can distinguish the placebo control from the leader-kill treatment.
+
+    ``n_killed``: count of agents extincted by this intervention. Equals
+    the number of paired ``AgentDied(cause=INTERVENTION)`` events at
+    ``effective_tick``.
+    """
+
+    lineage_id: int
+    n_killed: int
+    lineage_role: str  # "leader" | "size_matched_nonleader"
+    intervention_tick: int  # tick at which leader was identified (50)
+    effective_tick: int  # tick at which agents were killed (51)
+
+
 AnyEvent = (
     AgentMoved
     | AgentStayed
@@ -184,6 +213,7 @@ AnyEvent = (
     | PoolRespawnDenied
     | PoolBirthDenied
     | BirthDeniedParentEnergy
+    | LineageKilledByIntervention
 )
 
 
@@ -227,6 +257,7 @@ _SIGNAL_NAMES: dict[type, str] = {
     PoolRespawnDenied: "hh.pool_respawn_denied",
     PoolBirthDenied: "hh.pool_birth_denied",
     BirthDeniedParentEnergy: "hh.birth_denied_parent_energy",
+    LineageKilledByIntervention: "hh.lineage_killed_by_intervention",
 }
 
 

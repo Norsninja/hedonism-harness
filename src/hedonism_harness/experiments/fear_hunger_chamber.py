@@ -28,6 +28,7 @@ from hedonism_harness.core.config import (
     ReproductionConfig,
     WorldConfig,
 )
+from hedonism_harness.core.interventions import InterventionConfig, apply_intervention
 from hedonism_harness.core.traits import TraitConfig
 from hedonism_harness.core.world import CellKind
 from hedonism_harness.io.csv_writer import (
@@ -301,6 +302,7 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     hazard_avoidance_weight: float | None = None,
     setup_observer: Callable[[HHModel], None] | None = None,
     tick_observer: Callable[[HHModel], None] | None = None,
+    optional_intervention: InterventionConfig | None = None,
 ) -> ChamberRunResult:
     """Run one Fear-Hunger Chamber episode and (optionally) persist its outputs.
 
@@ -455,9 +457,24 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
         setup_observer(model)
 
     started_at = now_unix()
+    intervention_fired: bool = False
     try:
         for _ in range(n_ticks):
             model.step()
+            # v0.42: optional intervention. Fires exactly once at the
+            # tick-50/tick-51 boundary (i.e., when ``model.tick_count``
+            # first equals ``effective_tick``). Default ``None`` and
+            # ``kind="null"`` are no-ops; the events.jsonl byte stream
+            # is byte-identical to pre-v0.42 in both default-None and
+            # kind="null" configurations (regression-guarded by
+            # tests/test_world_intervention_hook.py).
+            if (
+                optional_intervention is not None
+                and not intervention_fired
+                and model.tick_count == optional_intervention.effective_tick
+            ):
+                apply_intervention(model, optional_intervention)
+                intervention_fired = True
             if tick_observer is not None:
                 tick_observer(model)
             if not _any_alive(model):

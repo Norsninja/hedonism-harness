@@ -806,5 +806,183 @@ uv run python scripts/core_smoke_test.py   ok
 
 ## Results
 
-_To be appended after the v0.42 sweep + audit run on the 48-run
-corpus._
+**Status:** sweep + audit executed 2026-05-07.
+
+### Verdict — `MECHANISM_NOT_NECESSARY` fires
+
+Primary test at h=8:
+
+| arm                     | mean post_intervention_top_lineage_b50_share |
+|-------------------------|---------------------------------------------:|
+| A_null                  | 0.652                                         |
+| B_kill_leader           | **0.733**                                     |
+| C_kill_smnonleader      | 0.742                                         |
+
+`delta(B − A) = +0.081` at h=8. The locked rule requires
+`delta(B − A) ≤ −0.15` for `b_passes`. **`b_passes = False`** —
+killing the tick-50 leader does NOT reduce post-50 dominance; it
+slightly INCREASES it.
+
+`delta(C − A) = +0.090` at h=8. Within the `±0.10` tolerance
+(`c_passes = True`), and below the C-rises-above-A halt guard
+(0.10).
+
+`primary_fires = False`. Verdict logic: `b_passes = False` →
+**MECHANISM_NOT_NECESSARY.**
+
+> **Locked phrase fires verbatim:** "Hard-killing the tick-50 leader
+> lineage does not materially disrupt the post-50 dominance pattern
+> at h=8. A surviving lineage reconstitutes concentration of
+> comparable share. The tick-50 leader's identity is not necessary
+> under the tested substrate; post-50 dominance is a property of the
+> chamber + population dynamics, not of the specific tick-50 leader
+> lineage. v0.34..v0.41's leader-advantage correlation reflects which
+> lineage HAPPENED to be ahead at tick 50, not a causal lever the
+> leader holds. v0.43 candidate: pivot to substrate-level
+> interventions (resource concentration shock, hazard relocation)
+> rather than lineage-level interventions."
+
+### Secondary test — does not fire
+
+`delta(B − A)` at h=0 = +0.085; at h=8 = +0.081. Neither is a
+reduction; the absolute magnitudes are similar.
+`hazard_amplified = False` (|+0.081| < |+0.085|), so
+`secondary_fires = False` — but secondary is descriptive only and
+gated on `primary_fires`, which is False regardless.
+
+### Per-(arm, hazard) shares (`runs/lineage-v0.42/per_arm_per_hazard.csv`)
+
+| arm                     | hazard | n_runs | n_used | mean_share | median_share |
+|-------------------------|-------:|-------:|-------:|-----------:|-------------:|
+| A_null                  | 0      | 8      | 8      | 0.701      | 0.649        |
+| A_null                  | 8      | 8      | 8      | 0.652      | 0.577        |
+| B_kill_leader           | 0      | 8      | 7      | 0.615      | 0.588        |
+| B_kill_leader           | 8      | 8      | 7      | 0.733      | 0.714        |
+| C_kill_smnonleader      | 0      | 8      | 8      | 0.804      | 0.881        |
+| C_kill_smnonleader      | 8      | 8      | 8      | 0.742      | 0.646        |
+
+Note: B arms have 7/8 used at both hazards; one run per B arm had
+0 post-50 surviving-lineage births (excluded as NaN). The audit's
+`n_excluded_zero_post50` field flags these. C arms have 8/8 used
+at both hazards.
+
+### C control availability (`runs/lineage-v0.42/c_control_availability.csv`)
+
+`n_runs_total_c = 16`. `n_control_unavailable = 0`.
+`availability_rate = 1.000`. The size-matched non-leader was
+present in every C run; no runs fell into the
+`control_unavailable` cell. The C arm's primary aggregation is
+fully populated.
+
+### Caveats reasserted (locked, must appear in Results)
+
+- **Per-arm n is 8.** Each arm × hazard mean is over 8 runs; B arms
+  effectively over 7 (one excluded per arm). Conservative on n=8
+  but not bullet-proof against noise excursions.
+- **Necessity only.** v0.42 does not test sufficiency.
+- **One seed band.** Seeds 41..48 only.
+- **Two hazards only.** {0, 8}.
+- **`control_unavailable` rate = 0** in this corpus; full C
+  aggregation is available.
+- **Intervention is hard kill.** No biological-realism claim.
+- **No mechanism declaration.** The verdict that fires is
+  **negative** for the leader-identity hypothesis. Even on
+  MECHANISM_NECESSITY_SUPPORTED (which did NOT fire here), the
+  pre-reg requires NO mechanism declaration.
+
+### Reachability — what we ruled out vs ruled in
+
+- **MECHANISM_NECESSITY_SUPPORTED was reachable but did not fire.**
+  Both b_passes and c_passes had to be True; b_passes fails because
+  B share rose rather than dropped.
+- **MECHANISM_GENERAL_DISRUPTION was reachable but did not fire.**
+  Required `b_passes=True AND c_passes=False` with C dropping below
+  A by >0.10. Neither B nor C dropped.
+- **MECHANISM_NOT_NECESSARY fires** because b_passes=False — the
+  necessary precondition for either of the other two verdicts
+  (B drops by ≥0.15) was not met.
+- **C-rises-above-A halt guard did not trigger.** delta(C−A) = +0.090,
+  below the 0.10 halt threshold. The substrate is internally
+  consistent with the v0.42 model; no unmodeled artefact surfaced.
+
+### Strategic update at v0.42 close
+
+This is a **negative causal result**, not a project failure. The
+v0.34..v0.41 correlational arc identified the tick-50 leader as
+**associated with** post-50 dominance across 4 of 5 streams. v0.42
+asked whether that association reflects a mechanism the leader
+actively holds, by removing the leader and checking whether
+post-50 dominance fails to reconstitute. **It reconstitutes.**
+
+The implication: post-50 dominance is a substrate-level emergent
+property — given the chamber, population dynamics, hazard
+configuration, and food layout, *some* lineage will dominate
+post-50, regardless of which specific lineage is the tick-50
+leader. The leader-advantage correlation reflects WHICH lineage
+HAPPENS to be the tick-50 leader (the one whose substrate-level
+position favors it), not a causal lever the leader's identity
+provides.
+
+This **rules out a class of mechanisms** that would have been
+plausible from the v0.34..v0.41 data alone:
+
+- "Reproductive priority" of the leader (incumbency advantage).
+- "Spatial position" carried by leader's agents.
+- "Energy stockpile" the leader has accumulated by tick 50.
+- "Local food control" the leader exerts.
+- "Founder traits" amplifying the leader's reproductive output.
+- "Descendants already distributed across the map" as the leader's
+  network.
+
+If any of these were the mechanism, removing the leader would
+disrupt post-50 dominance — the surviving 4 lineages would be
+unable to reconstitute the pattern. Instead they do reconstitute,
+suggesting these mechanisms are NOT load-bearing.
+
+What remains: the dominance pattern is driven by **substrate
+properties** that any sufficiently surviving lineage can exploit.
+The post-hoc reducer arc (v0.34..v0.41) was characterising a
+real correlational pattern, but the causal interpretation
+(leader-as-mechanism) is wrong.
+
+### Deferred (v0.43+ candidates, conditional on v0.42 outcome — fired)
+
+The locked v0.43 candidate under MECHANISM_NOT_NECESSARY is:
+
+> **Pivot to substrate-level interventions** (resource concentration
+> shock, hazard relocation) rather than lineage-level
+> interventions.
+
+Concrete v0.43+ candidates:
+
+- **(g) resource concentration shock.** At tick 50, randomly
+  redistribute existing food cells to test whether spatial
+  concentration of resources drives post-50 dominance.
+- **(h) hazard relocation.** At tick 50, swap the hazard band's
+  position to test whether dominance is driven by spatial niche
+  separation around the hazard.
+- **(i) chamber geometry sweep** (already adjacent to v0.42's
+  scope). Multiple chambers under the same intervention to
+  characterise where the substrate-level mechanism lives in the
+  geometry.
+- **(j) generalisation: cross-stream calibration of v0.42.** Run
+  the same intervention on a fresh seed band (49..56) to
+  disambiguate "MECHANISM_NOT_NECESSARY at n=8" from "noise-
+  driven null at n=8". This is the v0.41-style discipline cousin
+  to the v0.42 result: a single-stream causal probe could be
+  noise-driven.
+
+HedonismPolicy and Mesa remain deferred indefinitely.
+
+### CI gate at Results time
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1295 passed, 6 skipped (v0.23/v0.27 corpus
+                                skips; non-regression). +39 from v0.41 close.
+uv run python scripts/core_smoke_test.py                ok
+uv run python scripts/v0_42_intervention_audit.py
+                                MECHANISM_NOT_NECESSARY
+                                (re-runnable; idempotent on sealed inputs)
+```
