@@ -1,7 +1,10 @@
 # v0.43 — chamber-wide food-redistribution intervention (substrate causal probe)
 
-**Status:** pre-registered 2026-05-07; sweep + intervention extension +
-audit not yet executed.
+**Status:** pre-registered 2026-05-07; **HALTED PRE-SWEEP 2026-05-07**
+on substrate feasibility finding (see SUBSTRATE_PREFLIGHT_HALT
+addendum below). Sweep + audit not executed. Replacement pre-reg
+(v0.43R candidate) pending feasibility probe at multiple ticks +
+density-reduction variant.
 **Date:** 2026-05-07
 **Branch:** `claude/v0.43-resource-flattening-intervention`
 **Predecessors:** v0.21..v0.27 (aggregate-optimum audit, closed),
@@ -1041,10 +1044,128 @@ uv run python scripts/core_smoke_test.py   ok
 
 ## Results
 
-**Status:** pending sweep + audit execution.
+**Status:** sweep NOT executed. Pre-reg halted pre-sweep on the
+substrate feasibility finding documented in
+SUBSTRATE_PREFLIGHT_HALT below. **No verdict is emitted from the
+v0.43 design. In particular, no `RESOURCE_CONCENTRATION_NOT_NECESSARY`
+conclusion is drawn — the design's primary test cannot fire
+informatively because the intervention is a no-op at the primary
+hazard.**
 
-(To be appended verbatim after `scripts/v0_43_intervention_audit.py`
-runs, using the locked-phrase template above for whichever verdict
-fires. Auxiliary FLATTEN_ABLATES_REPRODUCTION findings reported
-alongside per hazard. Caveats reasserted verbatim. CI gate at
-Results time recorded.)
+## SUBSTRATE_PREFLIGHT_HALT (2026-05-07)
+
+After the additive `src/` extension landed (`core/events.py` +
+`core/interventions.py` + `comparison_grid.py` arms; tests passing)
+but **before** running the v0.43 sweep, a substrate feasibility
+probe was run with the locked v0.43 eligibility predicate
+(`kind ∈ {EMPTY, FOOD}` at tick 50) across the full v0.43 seed
+band 49..56 at both hazards.
+
+### Probe finding
+
+The `tight_gradient` chamber is fully painted: every cell is
+exactly one of {SAFE, HAZARD, FOOD}. There are no untyped EMPTY
+cells outside the food zone. The eligible footprint is therefore
+the food zone itself (24 cells), modulo any cells inside the zone
+whose kind has flipped to EMPTY from a recent EAT action.
+
+Per-hazard tick-50 substrate composition across seeds 49..56
+(measured via tick observer; eligibility predicate verbatim from
+the v0.43 implementation):
+
+| hazard | n_empty (in zone) | n_food (in zone) | total food | flatten mean | expected n_cells_changed | expected EMPTY→FOOD | expected FOOD-reduce |
+|---|---|---|---|---|---|---|---|
+| 0 | 5–14 | 10–19 | 200–380 | 8.3–15.8 | **24 every seed** | 5–14 | 10–19 |
+| 8 | **0** every seed | **24** every seed | **480** every seed | 20.0 | **0** every seed | 0 | 0 |
+
+At **h=8**, the food zone is saturated at tick 50 across all 8
+probed seeds (total food = 24 × 20.0 = 480.0). Flatten and shuffle
+are **both no-ops at the primary test hazard**: every eligible
+cell already holds the mean, the multiset is preserved trivially.
+The locked primary test (`b_share_h8 ≤ a_share_h8 - 0.15`) cannot
+distinguish B from A because their events.jsonl after tick 51 is
+byte-identical.
+
+At **h=0**, the substrate is heterogeneous (5–14 EMPTY cells in
+the zone from recent consumption); flatten is operative. But the
+v0.42 negative result was at h=8, which is the post-v0.42 target;
+shifting the primary to h=0 is not the right move (it dodges the
+post-v0.42 question).
+
+### Cause
+
+`food_respawn_cooldown=50`: a cell eaten at tick T flips to FOOD
+again at tick T+50. By tick 50, any cell eaten at tick 0 has just
+refilled. At h=8, agents avoid the hazard zone aggressively, food
+zone consumption is low, and respawn keeps up with consumption →
+all 24 cells either uneaten or already refilled at tick 50.
+
+### What this halt preserves
+
+- The pre-reg's locked phrases for
+  `RESOURCE_CONCENTRATION_NECESSARY` /
+  `SUBSTRATE_REWRITE_DISRUPTS_DOMINANCE` /
+  `RESOURCE_CONCENTRATION_NOT_NECESSARY` remain unfired. **None of
+  these phrases applies to a sweep that was never run**, and
+  applying them post-hoc to a no-op intervention would be a
+  silent repurpose.
+- The additive `src/` extension (`FoodRedistributedByIntervention`
+  event, `KIND_FLATTEN_FOOD` / `KIND_SHUFFLE_FOOD` kinds, the
+  `_eligible_cells` / `_flatten_food_over_eligible_cells` /
+  `_shuffle_food_over_eligible_cells` helpers) is **preserved**.
+  All v0.42 tests + 27 new v0.43 unit tests still pass. The
+  primitives are reusable for the v0.43R replacement pre-reg.
+- The `V0_43_INTERVENTION_ARMS` constant is **preserved** for the
+  same reason.
+
+### What the halt rules out scientifically
+
+- The v0.43 design as locked cannot test the
+  "tick-50 chamber-wide food-flatten" question on `tight_gradient`
+  at h=8. There is no eligible chamber-wide substrate beyond the
+  saturated food zone for the intervention to operate on.
+- The v0.43 design's `_eligible_cells` predicate is **literally
+  correct** w.r.t. its locked text (`kind ∈ {EMPTY, FOOD}`); the
+  scientific intent ("destroy chamber-wide food concentration")
+  assumed an EMPTY footprint outside the zone that does not exist
+  in `tight_gradient`'s painted layout.
+
+### Substrate-state finding — first-class result of the halt
+
+> **At the v0.34..v0.42 anchor moment (tick 50) under
+> `tight_gradient` + `food_respawn_cooldown=50` + `hazard_damage=8`,
+> the food zone is at maximum density across all probed seeds.**
+> The post-50 dominance pattern observed in v0.34..v0.41 emerges
+> from a substrate where, at the locking tick, food concentration
+> IS at its maximum. Whatever drives the dominance pattern reads
+> off a saturated food substrate, not a depleted or heterogeneous
+> one. This is descriptive context, not a verdict.
+
+### Replacement pre-reg track (v0.43R candidate)
+
+Two operational variants under consideration. Both preserve
+`tight_gradient` chamber, `food_respawn_cooldown=50`, hazards
+{0, 8}, seeds 49..56:
+
+1. **Early-flatten variant.** Move the intervention boundary
+   earlier (candidate tick 25/26), where the substrate is still
+   heterogeneous before respawn saturates. Tests:
+   "Is pre-anchor food-substrate disruption necessary for later
+   post-50 dominance?" Note: this is a question-shift, not a
+   parameter-shift — it intervenes on the trajectory, not on the
+   anchor moment.
+2. **Density-reduction-at-tick-50 variant.** Keep the tick-50
+   anchor for clean v0.42 comparability; instead of flattening,
+   multiply every eligible cell's `food_value` by a fixed factor
+   (e.g., 0.5). Multiset shifts, total drops, kind topology
+   preserved. Tests: "Is **food density** at tick 50 necessary
+   for post-50 dominance?" — concentration-as-magnitude rather
+   than concentration-as-spatial-gradient. Operative at h=8 (480
+   → 240; every cell changes).
+
+A broader feasibility probe (ticks 20/25/30/35 + density-reduction
+at tick 50) will run before locking the v0.43R design. The chosen
+variant will be locked in a NEW pre-reg
+(`docs/experiments/fear_hunger_v0.43R.md` or similar), not by
+editing this one. The v0.43 pre-reg stands as the historical
+record of the halted design.
