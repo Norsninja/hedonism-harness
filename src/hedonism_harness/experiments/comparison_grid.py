@@ -1355,6 +1355,61 @@ V0_42_INTERVENTION_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.43 — second causal intervention slice. Substrate-level food
+# redistribution at the tick-50/tick-51 boundary, hazards {0, 8}, three
+# arms:
+#   A_null            : no intervention; substrate-byte-identity to V0_42
+#                       at h=0 / h=8 (modulo arm label).
+#   B_flatten_food    : uniform-mean redistribute food across all eligible
+#                       cells (kind in {EMPTY, FOOD}).
+#   C_shuffle_food    : reverse-row-major permute food values across the
+#                       same eligible cells (multiset preserved).
+#
+# Pre-reg: [[docs/experiments/fear_hunger_v0.43.md]].
+def _v0_43_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.43 arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v043-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_43_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_43_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_43_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_flatten_food (treatment: chamber-wide uniform redistribution)
+    _v0_43_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_flatten_food",
+        intervention_kind="flatten_food_at_tick50",
+    ),
+    _v0_43_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_flatten_food",
+        intervention_kind="flatten_food_at_tick50",
+    ),
+    # C_shuffle_food (multiset-preserving location shuffle)
+    _v0_43_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_shuffle_food",
+        intervention_kind="shuffle_food_at_tick50",
+    ),
+    _v0_43_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_shuffle_food",
+        intervention_kind="shuffle_food_at_tick50",
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------

@@ -200,6 +200,58 @@ class LineageKilledByIntervention:
     effective_tick: int  # tick at which agents were killed (51)
 
 
+@dataclass(frozen=True)
+class FoodRedistributedByIntervention:
+    """v0.43: emitted at the tick-50/tick-51 boundary when a substrate-level
+    food redistribution intervention fires. Two kinds:
+
+    - ``"flatten_food_at_tick50"`` (arm B): uniform-mean redistribution of
+      food across all eligible cells (kind in {EMPTY, FOOD}). Total food
+      preserved within float-32 tolerance; multiset NOT preserved.
+    - ``"shuffle_food_at_tick50"`` (arm C): reverse-row-major permutation
+      of food values across (x, y)-sorted eligible cells. Total food and
+      multiset BOTH exactly preserved.
+
+    Both kinds preserve HAZARD and WALL cell positions and counts. Neither
+    emits ``AgentDied`` — no agents are killed by substrate rewrite (agents
+    that later starve emit ``AgentDied(cause=STARVATION)`` through the
+    existing path).
+
+    Digests (locked formats):
+
+    - ``eligible_cells_digest``: SHA-256 hex of
+      ``b"\\n".join(f"{x},{y}".encode() for (x, y) in sorted_eligible_cells)``.
+      Pure function of tick-50 chamber kind topology; identical across all
+      runs at the same chamber config (seed-independent).
+    - ``food_multiset_digest_before`` / ``food_multiset_digest_after``:
+      SHA-256 hex of ``struct.pack(f"<{n}f", *sorted_vals)`` where
+      ``sorted_vals`` is the float32 ``food_value`` vector over eligible
+      cells, sorted ascending. Equality across pre/post verifies multiset
+      preservation exactly without storing snapshots.
+
+    Audit conservation (v0.43):
+
+    - For B: ``digest_before != digest_after`` (flatten changes the multiset)
+      EXCEPT in the legitimate ``n_cells_changed == 0`` degenerate case
+      (substrate already uniform pre-intervention).
+    - For C: ``digest_before == digest_after`` (multiset preserved by
+      permutation).
+    - For both: ``abs(total_food_after - total_food_before)`` within
+      float-32 tolerance.
+    """
+
+    intervention_kind: str  # "flatten_food_at_tick50" | "shuffle_food_at_tick50"
+    intervention_tick: int  # 50
+    effective_tick: int  # 51
+    n_eligible_cells: int  # cells with kind in {EMPTY, FOOD} at tick 50
+    n_cells_changed: int  # cells whose food_value or kind changed
+    total_food_before: float
+    total_food_after: float
+    eligible_cells_digest: str
+    food_multiset_digest_before: str
+    food_multiset_digest_after: str
+
+
 AnyEvent = (
     AgentMoved
     | AgentStayed
@@ -214,6 +266,7 @@ AnyEvent = (
     | PoolBirthDenied
     | BirthDeniedParentEnergy
     | LineageKilledByIntervention
+    | FoodRedistributedByIntervention
 )
 
 
@@ -258,6 +311,7 @@ _SIGNAL_NAMES: dict[type, str] = {
     PoolBirthDenied: "hh.pool_birth_denied",
     BirthDeniedParentEnergy: "hh.birth_denied_parent_energy",
     LineageKilledByIntervention: "hh.lineage_killed_by_intervention",
+    FoodRedistributedByIntervention: "hh.food_redistributed_by_intervention",
 }
 
 

@@ -45,11 +45,19 @@ energy-drain, etc.) without modifying this module's existing logic.
 
 from __future__ import annotations
 
+import hashlib
+import struct
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
+import numpy as np
+
 from hedonism_harness.core.body import DeathCause, mark_dead
-from hedonism_harness.core.events import LineageKilledByIntervention
+from hedonism_harness.core.events import (
+    FoodRedistributedByIntervention,
+    LineageKilledByIntervention,
+)
+from hedonism_harness.core.world import CellKind
 
 if TYPE_CHECKING:
     from hedonism_harness.mesa_agents import HHAgent
@@ -68,13 +76,28 @@ DEFAULT_EFFECTIVE_TICK: int = 51  # tick at which agents are killed
 KIND_NULL: str = "null"
 KIND_KILL_LEADER: str = "kill_tick50_leader"
 KIND_KILL_SMNONLEADER: str = "kill_size_matched_nonleader"
+# v0.43 substrate-rewrite kinds (additive; no agent deaths emitted).
+KIND_FLATTEN_FOOD: str = "flatten_food_at_tick50"
+KIND_SHUFFLE_FOOD: str = "shuffle_food_at_tick50"
 
 ROLE_LEADER: str = "leader"
 ROLE_SMNONLEADER: str = "size_matched_nonleader"
 ROLE_NONE: str = "none"
 
+# v0.43: cells with kind in this set at tick 50 are eligible for food
+# redistribution. HAZARD, WALL, SAFE cells are preserved untouched.
+_ELIGIBLE_KINDS: frozenset[int] = frozenset({int(CellKind.EMPTY), int(CellKind.FOOD)})
 
-_VALID_KINDS: frozenset[str] = frozenset({KIND_NULL, KIND_KILL_LEADER, KIND_KILL_SMNONLEADER})
+
+_VALID_KINDS: frozenset[str] = frozenset(
+    {
+        KIND_NULL,
+        KIND_KILL_LEADER,
+        KIND_KILL_SMNONLEADER,
+        KIND_FLATTEN_FOOD,
+        KIND_SHUFFLE_FOOD,
+    }
+)
 
 
 @dataclass(frozen=True)
@@ -99,7 +122,13 @@ class InterventionConfig:
     v0.43+ can probe other boundaries without modifying this module.
     """
 
-    kind: Literal["null", "kill_tick50_leader", "kill_size_matched_nonleader"] = KIND_NULL
+    kind: Literal[
+        "null",
+        "kill_tick50_leader",
+        "kill_size_matched_nonleader",
+        "flatten_food_at_tick50",
+        "shuffle_food_at_tick50",
+    ] = KIND_NULL
     intervention_tick: int = DEFAULT_INTERVENTION_TICK
     effective_tick: int = DEFAULT_EFFECTIVE_TICK
 
@@ -260,6 +289,14 @@ def apply_intervention(model: HHModel, config: InterventionConfig) -> Interventi
       all of that lineage's living agents and emit the summary event
       with ``lineage_role=ROLE_SMNONLEADER``. If no non-leader has any
       living agents, set ``control_unavailable=True`` and emit no event.
+    - ``KIND_FLATTEN_FOOD`` (v0.43): redistribute food uniformly across
+      all eligible cells (kind in {EMPTY, FOOD}) and update kind to
+      FOOD where mean > 0 else EMPTY. Emit one
+      ``FoodRedistributedByIntervention`` event. No agents killed.
+    - ``KIND_SHUFFLE_FOOD`` (v0.43): reverse-row-major permutation of
+      food values across (x, y)-sorted eligible cells. Multiset
+      preserved exactly. Emit one ``FoodRedistributedByIntervention``
+      event. No agents killed.
     """
     if config.kind == KIND_NULL:
         return InterventionResult(
@@ -269,6 +306,9 @@ def apply_intervention(model: HHModel, config: InterventionConfig) -> Interventi
             n_killed=0,
             control_unavailable=False,
         )
+
+    if config.kind in {KIND_FLATTEN_FOOD, KIND_SHUFFLE_FOOD}:
+        return _apply_food_redistribution(model, config)
 
     buckets = _living_agents_by_lineage(model)
     leader_id = _identify_leader(buckets)
@@ -321,4 +361,160 @@ def apply_intervention(model: HHModel, config: InterventionConfig) -> Interventi
         lineage_role=target_role,
         n_killed=n_killed,
         control_unavailable=control_unavailable,
+    )
+
+
+# ---------------------------------------------------------------------------
+# v0.43 food-redistribution helpers
+# ---------------------------------------------------------------------------
+
+
+def _eligible_cells(model: HHModel) -> list[tuple[int, int]]:
+    """Return cells with ``kind in {EMPTY, FOOD}`` at the firing moment,
+    sorted by ``(x, y)`` ascending. Excludes HAZARD, WALL, SAFE cells.
+    Pure function of ``model.world.kind_layer``; no RNG.
+    """
+    kind_layer = model.world.kind_layer
+    width = model.world.width
+    height = model.world.height
+    out: list[tuple[int, int]] = []
+    # Iterate (x, y) ascending so the result is already sorted.
+    for x in range(width):
+        for y in range(height):
+            if int(kind_layer[x, y]) in _ELIGIBLE_KINDS:
+                out.append((x, y))
+    return out
+
+
+def _eligible_cells_digest(cells: list[tuple[int, int]]) -> str:
+    """SHA-256 hex of ``(x, y)`` pairs joined with newlines. Pure function
+    of the cell list; identical across runs at the same chamber config.
+    """
+    payload = b"\n".join(f"{x},{y}".encode() for (x, y) in cells)
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _food_multiset_digest(values: np.ndarray) -> str:
+    """SHA-256 hex over the float32 ``values`` vector, sorted ascending,
+    packed via ``struct.pack(f"<{n}f", *sorted_vals)``. Two arrays produce
+    the same digest iff they share the same multiset (exact float32
+    equality after sort).
+    """
+    vals_f32 = np.asarray(values, dtype=np.float32)
+    sorted_vals = np.sort(vals_f32)
+    packed = struct.pack(f"<{len(sorted_vals)}f", *sorted_vals.tolist())
+    return hashlib.sha256(packed).hexdigest()
+
+
+def _apply_food_redistribution(model: HHModel, config: InterventionConfig) -> InterventionResult:
+    """Apply a v0.43 substrate-rewrite intervention. Both kinds:
+
+    - Compute ``eligible`` (cells with kind in {EMPTY, FOOD}, sorted (x, y)).
+    - Snapshot pre-state: ``values_before``, ``digest_before``,
+      ``cells_digest``, ``total_food_before``.
+    - For B (flatten): write mean to every eligible cell.
+    - For C (shuffle): write reverse-row-major permutation.
+    - Recompute kind_layer for eligible cells based on new food_value
+      (FOOD if > 0 else EMPTY); HAZARD, WALL, SAFE cells untouched.
+    - Compute post-state digests and totals.
+    - Emit ``FoodRedistributedByIntervention``.
+
+    The intervention always fires (always emits the event), even in
+    degenerate cases (already-uniform food before flatten; reverse
+    permutation that fixes all values). ``n_cells_changed`` records
+    whether any cell's ``food_value`` or ``kind`` actually changed.
+    """
+    cells = _eligible_cells(model)
+    n_eligible = len(cells)
+
+    if n_eligible == 0:
+        # Pathological chamber: no eligible cells. Emit a degenerate event
+        # so the audit can detect the condition without a special path,
+        # then return fired=True (event emitted) with zero changes.
+        empty_digest = hashlib.sha256(b"").hexdigest()
+        summary = FoodRedistributedByIntervention(
+            intervention_kind=config.kind,
+            intervention_tick=config.intervention_tick,
+            effective_tick=config.effective_tick,
+            n_eligible_cells=0,
+            n_cells_changed=0,
+            total_food_before=0.0,
+            total_food_after=0.0,
+            eligible_cells_digest=empty_digest,
+            food_multiset_digest_before=empty_digest,
+            food_multiset_digest_after=empty_digest,
+        )
+        model.record_event(summary)
+        return InterventionResult(
+            fired=True,
+            lineage_id=None,
+            lineage_role=ROLE_NONE,
+            n_killed=0,
+            control_unavailable=False,
+        )
+
+    food_layer = model.world.food_value
+    kind_layer = model.world.kind_layer
+
+    xs = np.array([x for (x, _y) in cells], dtype=np.int64)
+    ys = np.array([y for (_x, y) in cells], dtype=np.int64)
+    values_before = food_layer[xs, ys].astype(np.float32, copy=True)
+    kinds_before = kind_layer[xs, ys].astype(np.uint8, copy=True)
+    total_before = float(values_before.sum(dtype=np.float64))
+    cells_digest = _eligible_cells_digest(cells)
+    digest_before = _food_multiset_digest(values_before)
+
+    if config.kind == KIND_FLATTEN_FOOD:
+        # Float32 division mirrors the storage type so the audit's
+        # tolerance is meaningful. mean is broadcast as float32.
+        mean_val = np.float32(total_before) / np.float32(n_eligible)
+        values_after = np.full(n_eligible, mean_val, dtype=np.float32)
+    elif config.kind == KIND_SHUFFLE_FOOD:
+        # Reverse the (x, y)-sorted vector in place.
+        values_after = values_before[::-1].copy()
+    else:  # pragma: no cover — guarded by InterventionConfig.__post_init__.
+        msg = f"unreachable food-redistribution kind {config.kind!r}"
+        raise AssertionError(msg)
+
+    # FOOD where new value > 0 else EMPTY. Excludes hazard/wall/safe (those
+    # cells were not in the eligible set).
+    kinds_after = np.where(
+        values_after > np.float32(0.0),
+        np.uint8(int(CellKind.FOOD)),
+        np.uint8(int(CellKind.EMPTY)),
+    ).astype(np.uint8)
+
+    # n_cells_changed counts cells whose food_value OR kind changed.
+    food_changed_mask = values_after != values_before
+    kind_changed_mask = kinds_after != kinds_before
+    changed_mask = food_changed_mask | kind_changed_mask
+    n_cells_changed = int(changed_mask.sum())
+
+    # Write back to the world layers.
+    food_layer[xs, ys] = values_after
+    kind_layer[xs, ys] = kinds_after
+
+    total_after = float(values_after.sum(dtype=np.float64))
+    digest_after = _food_multiset_digest(values_after)
+
+    summary = FoodRedistributedByIntervention(
+        intervention_kind=config.kind,
+        intervention_tick=config.intervention_tick,
+        effective_tick=config.effective_tick,
+        n_eligible_cells=n_eligible,
+        n_cells_changed=n_cells_changed,
+        total_food_before=total_before,
+        total_food_after=total_after,
+        eligible_cells_digest=cells_digest,
+        food_multiset_digest_before=digest_before,
+        food_multiset_digest_after=digest_after,
+    )
+    model.record_event(summary)
+
+    return InterventionResult(
+        fired=True,
+        lineage_id=None,
+        lineage_role=ROLE_NONE,
+        n_killed=0,
+        control_unavailable=False,
     )
