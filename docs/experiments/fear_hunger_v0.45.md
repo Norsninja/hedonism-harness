@@ -1277,11 +1277,30 @@ commit state.)
 
 **Status:** sweep + audit executed 2026-05-07. **Verdict:
 BIRTH_LOCALITY_NOT_NECESSARY.** All H2 invariants held; no halts.
-The locked phrase fires verbatim. The v0.42 → v0.43R → v0.44 → v0.45
-substrate-causal-probe arc closes with **four consecutive negative
-findings**: tick-50 leader identity not necessary, food-density
-probe disqualified (substrate depleted), respawn flow not necessary,
-post-50 birth-position locality not necessary.
+The locked phrase fires verbatim.
+
+**Headline finding (the relevant one).** Dominance share at h=8
+reconstitutes within 0.003 of A even when post-50 offspring spatial
+locality is materially destroyed (B's preserved-parent-adjacency
+fraction is 0.07–0.08; mean 24+ valid global cells per birth, ~1
+of which is parent-adjacent). **The post-50 dominance pattern is
+robust to spatial-cluster destruction at the offspring-placement
+layer.** This rules out "where children are placed after tick 50"
+as the necessary substrate; it does NOT rule out pre-50 spatial
+sorting, founder-position advantage, trait-linked reproduction
+readiness, or topology-mediated energy access.
+
+**Reading caveat.** v0.45 rules out post-50 parent-local birth
+placement as necessary for the observed dominance pattern under
+the tested V0_25 substrate. It does NOT close the substrate-causal
+investigation, and it does NOT claim that spatial mechanisms are
+impossible — only that the offspring-placement-after-tick-50 layer
+specifically is not the necessary mechanism. Causal candidates that
+remain live (and that v0.45 cannot adjudicate): founder-trait
+heritability, founder starting position before tick 50, parent
+energy / reproduction-readiness asymmetries at tick 50, action-order
+or reproduction-opportunity timing, and chamber-topology-mediated
+energy access during ticks 0..50.
 
 ### Per-(arm, hazard) post-intervention top-lineage b50 share
 
@@ -1297,8 +1316,8 @@ post-50 birth-position locality not necessary.
 ### Primary test (h=8)
 
 - `a_share_h8 = 0.818`, `b_share_h8 = 0.821`, `c_share_h8 = 0.808`.
-- `delta(B−A) = +0.003` (B *slightly increases* dominance, far above
-  the −0.15 threshold; `b_passes=False`).
+- `delta(B−A) = +0.003` (B *slightly increases* dominance share, far
+  above the −0.15 threshold; `b_passes=False`).
 - `delta(C−A) = −0.010` (within ±0.10 tolerance; `c_passes=True`).
 - `b_passes=False` → **BIRTH_LOCALITY_NOT_NECESSARY** verdict.
 - `primary_fires=False`.
@@ -1330,35 +1349,51 @@ in either arm.**
 | C_neighbor| 0 |  94 |  1.4 | 1.00 |
 | C_neighbor| 8 | 102 |  1.5 | 1.00 |
 
-**Striking diagnostic**: B's `fraction_b_preserved_adjacency` is
-only 7–8% — the global redirection is genuinely scattering offspring
-across the chamber (mean 24+ valid global cells per birth, only ~1
-of which is parent-adjacent on average). The adjacency invariant of
-the lineage-cluster mechanism is *materially broken* by B, yet
-post-50 dominance reconstitutes within 0.003 of A. **The dominance
-pattern is robust to spatial-cluster destruction.**
+**Explicit diagnostic**: B's `fraction_b_preserved_adjacency` is
+**only 0.07–0.08**. Global redirection is genuinely scattering
+offspring across the chamber — only ~7–8% of B redirects landed
+parent-adjacent by chance. The lineage-cluster mechanism is
+**materially broken** by B at the offspring-placement layer; yet
+post-50 dominance share reconstitutes within 0.003 of A. **Dominance
+share is robust to spatial-cluster destruction.**
+
+### Total post-50 birth volume — explicit note
+
+**B produced more total post-50 births than A**, at both hazards:
+
+| arm | h=0 b>50 | h=8 b>50 | total b>50 |
+|---|---:|---:|---:|
+| A_null    |  98 | 109 | **207** |
+| B_uniform | 127 | 148 | **275** |
+| C_neighbor|  94 | 102 | **196** |
+
+Likely reason: global safe placement reduces local crowding /
+same-tick contention by spreading newborns across the chamber, and
+the `_is_v045_birth_safe_placeable` predicate's HAZARD-exclusion
+also keeps newborns off lethal cells. **The primary result is about
+dominance share robustness, not equal birth volume.** B and A are
+not generating the same number of births; B is generating *more* —
+and yet share concentration is unchanged. This makes the share
+finding stronger, not weaker (the dominant lineage's share holds
+even with a substantially expanded post-50 birth pool).
 
 ### `GLOBAL_REDIRECT_ABLATES_REPRODUCTION` status
 
 **Did not fire** at either hazard (`b_n_excluded=0` on every bucket).
-B produced more total post-50 births than A (B: 127+148=275; A:
-98+109=207). Reproduction is fully sustained even under maximally-
-scattered placement; in fact **B reproduces *more* than A**, perhaps
-because freed parent-adjacent cells reduce same-tick contention.
-The `_is_v045_birth_safe_placeable` predicate's HAZARD-exclusion
-also helps newborns avoid hazard-placement mortality.
+B sustained reproduction across all 16 buckets without ablation.
+The auxiliary halt cell is cleanly empty.
 
 ### Placement conservation (per-(arm, hazard))
 
 - **B (uniform global)**: target_kind histogram across 275 redirected
   births = **EMPTY: 124, FOOD: 2, SAFE: 149**. Mean valid cells per
-  birth: 24–27. B-adjacency-fraction: 7–8%.
-- **C (uniform neighbor)**: target_kind histogram across 196 redirected
-  births = **EMPTY: 182, FOOD: 14, SAFE: 0**. Mean valid cells per
-  birth: 1.4–1.5 (parent often has only 1–2 valid neighbors at any
-  given tick). C-adjacency: 100% (by construction).
+  birth: 24–27. B-adjacency-fraction: 0.07–0.08.
+- **C (uniform neighbor)**: target_kind histogram across 196
+  redirected births = **EMPTY: 182, FOOD: 14, SAFE: 0**. Mean valid
+  cells per birth: 1.4–1.5 (parent often has only 1–2 valid neighbors
+  at any tick). C-adjacency: 1.00 (by construction).
 
-### Respawn / Birth event invariant summary
+### Birth event invariant summary
 
 H2 invariants verified across all 48 runs:
 
@@ -1417,6 +1452,22 @@ v0.21..v0.44 byte-identity exactly. Regression-tested via
 > (wall-adjacency, reachability). v0.46 candidate: founder-trait
 > lock-in or hazard-relocation intervention."
 
+### Conclusion (precise framing)
+
+**v0.45 rules out post-50 parent-local birth placement as necessary
+for the observed dominance pattern under the tested V0_25 substrate.
+It does not rule out pre-50 spatial sorting, founder-position
+advantage, trait-linked reproduction readiness, or topology-mediated
+energy access.**
+
+The natural next slice is **decomposition, not intervention**: a
+tick-50 readiness audit (energy by lineage, agents above
+reproduction threshold, age eligibility, valid adjacent reproduction
+cells, cumulative pre-50 births, food/energy acquired pre-50) on
+the existing corpus to test whether the eventual dominant lineage
+is already advantaged at tick 50 by reproduction readiness rather
+than spatial locality.
+
 ### Caveats (locked, repeated from pre-reg)
 
 - Per-arm n is 8.
@@ -1432,9 +1483,15 @@ v0.21..v0.44 byte-identity exactly. Regression-tested via
 - Pre-50 reproduction byte-identical to v0.44 (callback gated at
   call site; no events emitted pre-50).
 - No biological-realism claim.
-- No mechanism declaration even on a positive outcome.
+- **No mechanism declaration even on a positive outcome.**
 - Effect-size budget (0.15 / 0.10) inherited from v0.42 / v0.43R
   / v0.44 unchanged.
+- **No claim that "spatial mechanisms are impossible."** v0.45
+  rules out the post-50 offspring-placement layer specifically;
+  pre-50 spatial sorting, founder placement, and topology-mediated
+  energy access remain live candidates.
+- **No claim that the substrate-causal arc is closed.** v0.45 is
+  one negative finding at one layer; the investigation continues.
 
 ### Methodological note
 
