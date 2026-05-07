@@ -297,9 +297,12 @@ Outputs eight CSVs under `runs/lineage-v0.41/` (gitignored):
   locked_phrase (verbatim).
 - `stream_metric_table.csv` — wide table (5 streams × 3 metrics)
   reporting agreement boolean per cell.
-- `combined_summary.csv` — single row: v041_cell, n5_verdict, joint
-  headline (one of nine pairings, framed in the Results section
-  rather than a locked phrase).
+- `combined_summary.csv` — single row: v041_cell, n5_verdict,
+  joint_headline. Only reachable pairings are emitted; H7_N5 is
+  retained as a guardrail branch but should not fire under sealed
+  v0.40 inputs (see Reachability sanity check below). The joint
+  headline is framed in the Results section rather than a locked
+  phrase.
 
 ### Locked constants (committed in code at audit entry)
 
