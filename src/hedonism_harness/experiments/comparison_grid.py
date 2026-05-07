@@ -1355,6 +1355,160 @@ V0_42_INTERVENTION_ARMS: tuple[Arm, ...] = (
 )
 
 
+# v0.43 — second causal intervention slice. Substrate-level food
+# redistribution at the tick-50/tick-51 boundary, hazards {0, 8}, three
+# arms:
+#   A_null            : no intervention; substrate-byte-identity to V0_42
+#                       at h=0 / h=8 (modulo arm label).
+#   B_flatten_food    : uniform-mean redistribute food across all eligible
+#                       cells (kind in {EMPTY, FOOD}).
+#   C_shuffle_food    : reverse-row-major permute food values across the
+#                       same eligible cells (multiset preserved).
+#
+# Pre-reg: [[docs/experiments/fear_hunger_v0.43.md]].
+def _v0_43_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.43 arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v043-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_43_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_43_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_43_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_flatten_food (treatment: chamber-wide uniform redistribution)
+    _v0_43_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_flatten_food",
+        intervention_kind="flatten_food_at_tick50",
+    ),
+    _v0_43_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_flatten_food",
+        intervention_kind="flatten_food_at_tick50",
+    ),
+    # C_shuffle_food (multiset-preserving location shuffle)
+    _v0_43_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_shuffle_food",
+        intervention_kind="shuffle_food_at_tick50",
+    ),
+    _v0_43_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_shuffle_food",
+        intervention_kind="shuffle_food_at_tick50",
+    ),
+)
+
+
+# v0.43R — replacement for halted v0.43. Tick-50 food-density intervention.
+#   A_null                              : no intervention.
+#   B_reduce_food_density_50pct         : multiply every eligible cell's
+#                                         food_value by 0.5.
+#   C_density_preserving_perturbation   : per-pair 25/75 redistribution over
+#                                         (x, y)-sorted consecutive eligible
+#                                         cells; total density preserved.
+#
+# Operative at h=8 across seeds 49..56 per substrate feasibility probe (see
+# v0.43 SUBSTRATE_PREFLIGHT_HALT addendum). Pre-reg:
+# [[docs/experiments/fear_hunger_v0.43R.md]].
+def _v0_43r_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.43R arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v043R-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_43R_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_reduce_food_density_50pct (treatment: density halved)
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_reduce_food_density_50pct",
+        intervention_kind="reduce_food_density_50pct_at_tick50",
+    ),
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_reduce_food_density_50pct",
+        intervention_kind="reduce_food_density_50pct_at_tick50",
+    ),
+    # C_density_preserving_perturbation (multiset-shifting placebo, density preserved)
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_density_preserving_perturbation",
+        intervention_kind="density_preserving_perturbation_at_tick50",
+    ),
+    _v0_43r_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_density_preserving_perturbation",
+        intervention_kind="density_preserving_perturbation_at_tick50",
+    ),
+)
+
+
+def _v0_44_arm(*, base_label: str, arm_prefix: str, intervention_kind: str) -> Arm:
+    """Construct one v0.44 arm by reusing a V0_25 substrate row."""
+    base = next(arm for arm in V0_25_ARMS if arm.label == base_label)
+    new_label = f"v044-{arm_prefix}-{base_label.split('transfer-1500-')[1]}"
+    return replace(base, label=new_label, intervention_kind=intervention_kind)
+
+
+V0_44_INTERVENTION_ARMS: tuple[Arm, ...] = (
+    # A_null (no intervention; baseline)
+    _v0_44_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    _v0_44_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="A_null",
+        intervention_kind="null",
+    ),
+    # B_delay_respawn_schedule_plus_25 (treatment: +25-tick delay over scheduled cells)
+    _v0_44_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="B_delay_respawn_schedule_plus_25",
+        intervention_kind="delay_respawn_schedule_plus_25_at_tick50",
+    ),
+    _v0_44_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="B_delay_respawn_schedule_plus_25",
+        intervention_kind="delay_respawn_schedule_plus_25_at_tick50",
+    ),
+    # C_permute_respawn_schedule_reverse_row_major (multiset-preserving placebo)
+    _v0_44_arm(
+        base_label="transfer-1500-hzd0-influx-1.0",
+        arm_prefix="C_permute_respawn_schedule_reverse_row_major",
+        intervention_kind="permute_respawn_schedule_reverse_row_major_at_tick50",
+    ),
+    _v0_44_arm(
+        base_label="transfer-1500-hzd8-influx-1.0",
+        arm_prefix="C_permute_respawn_schedule_reverse_row_major",
+        intervention_kind="permute_respawn_schedule_reverse_row_major_at_tick50",
+    ),
+)
+
+
 # ---------------------------------------------------------------------------
 # Per-run analysis from events.jsonl (cheap, on already-written artifacts).
 # ---------------------------------------------------------------------------
