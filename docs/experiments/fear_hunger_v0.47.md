@@ -2,7 +2,7 @@
 
 **Slice:** v0.47
 **Type:** post-hoc reducer (decomposition over the modern A_null corpus, NOT intervention)
-**Predecessors:** v0.36 (founder-trait heritability decomposition over the v0.34 corpus, `metabolic_rate` fired under b50 label), v0.46 (`READINESS_PREDICTS_DOMINANCE` on the modern A_null corpus — readiness is a strong predictor of post-50 dominance), v0.42 / v0.43R / v0.44 / v0.45 (intervention slices that produced the modern A_null corpus).
+**Predecessors:** v0.36 (founder-trait heritability decomposition over the v0.34 corpus, `sensor_radius` fired as aligned-flat under the b50/winner label), v0.46 (`READINESS_PREDICTS_DOMINANCE` on the modern A_null corpus — readiness is a strong predictor of post-50 dominance), v0.42 / v0.43R / v0.44 / v0.45 (intervention slices that produced the modern A_null corpus).
 **Question being asked (locked):** Are founder traits at tick 0 predictive of which lineage carries the highest tick-50 reproduction-readiness *fraction* on the modern A_null corpus?
 
 v0.46 established that the eventual post-50 dominant lineage is already differentially advantaged at tick 50 along reproductive-momentum and reproduction-readiness axes (paired_d = +1.136 and +0.810; mean energy borderline at +0.452). v0.46 explicitly did not isolate WHY one lineage carries higher readiness than the others — that gap split into two live causal candidates: (a) heritable founder-trait advantage; (b) trajectory-dependent path advantage (founder spatial position, food-cluster proximity, etc.). v0.47 tests candidate (a) only. Candidate (b) is the natural v0.48 direction, contingent on v0.47's verdict.
@@ -77,7 +77,7 @@ Each is extracted from the founder agent of each lineage at tick 0 (locked, unmu
 | 2 | `metabolic_rate` | **−** | Lower metabolism → less per-tick energy decay → more agents pass the energy threshold at tick 50 → higher fraction. |
 | 3 | `sensor_radius` | **+** | Wider sensors → better food localisation → more food acquired → higher tick-50 energy → higher above-threshold fraction. (Sign net of `sensor_radius_metabolic_cost` per `core/body.py`; pre-committed positive on the prior that foraging gain dominates the per-radius metabolism cost.) |
 
-**Sign reversal vs. v0.36 — flagged.** v0.36 reported `metabolic_rate` as the firing trait under the b50 dominance label with a different sign convention (v0.36's pre-reg locked `metabolic_rate` as `+` because higher metabolic_rate correlated with more b50 births in that pooled v0.34 corpus — a counter-intuitive finding the v0.36 Results discusses). v0.47's locked sign for `metabolic_rate` is `−` because the *mechanism* under the readiness predicate is energy retention, not reproduction throughput. The two findings can both hold (different labels, different mechanisms); the v0.47 sign is locked from mechanistic priors before any data is read, per pre-reg discipline.
+**v0.36 comparison note.** v0.36 used the same expected sign for `metabolic_rate` (`−`), but targeted winner / non-winner founder traits on the older v0.34 corpus. v0.47 retargets the modern A_null corpus and the tick-50 readiness-fraction label. Therefore v0.47 should be read as a new-corpus / new-label decomposition, not as a direct replication of v0.36.
 
 ## Effect-size rule (locked, matches v0.46)
 
@@ -114,9 +114,9 @@ Same protocol as v0.46. Inherits the cross-version-pool sanity check; layer-2 ow
 
 ## NaN handling (locked, matches v0.46)
 
-A lineage with 0 living agents at tick 50 contributes NaN to `tick50_above_threshold_fraction` and `tick50_above_threshold_count`. Such lineages are excluded from the argmax pool for both primary and secondary labels.
+A lineage with 0 living agents at tick 50 contributes NaN to `tick50_above_threshold_fraction` and `0` to `tick50_above_threshold_count`. Such lineages are excluded from the fraction-label argmax pool. For the count-label argmax, they remain `count = 0` unless all lineages are zero-living, which halts/drops as no comparison possible.
 
-If a run has 0 or 1 lineages with non-NaN readiness values, no paired comparison is possible and the run drops from every primary observable's pool with the count reported in the audit (`n_runs_dropped_no_pair`).
+If a run has 0 or 1 lineages with non-NaN fraction values, no paired comparison is possible for the primary fraction label and the run drops from every primary observable's pool with the count reported in the audit (`n_runs_dropped_no_pair`).
 
 ## Verdicts (locked, 3-way + 2 halts)
 
@@ -221,7 +221,7 @@ Wall time: ~5–10 minutes for 64 A_null re-executions (matches v0.46).
 
 - **Founder-trait extraction must happen before `model.step()` runs.** The `setup_observer` is called by `run_chamber` after model construction but before the first step; `model.agents` already contains the 5 founders at this point, with their unmutated initial trait draws. Capturing later (e.g., at tick_50 observer time) would risk reading mutated descendants if any founder died and was excluded from the iterable.
 - **`sensor_radius` is integer.** Coerce to `float` in the paired_d arithmetic; mean of integer deltas as float division. Test #1 covers this implicitly.
-- **`metabolic_rate` sign reversal vs. v0.36 is intentional.** v0.36's pre-reg locked `+` for `metabolic_rate` under the b50 dominance label; v0.47's pre-reg locks `−` under the readiness fraction label. Different mechanisms (reproduction throughput vs. energy retention). Future readers should not assume sign continuity across versions.
+- **`metabolic_rate` sign continuity with v0.36, but different corpus + label.** v0.36 also locked `metabolic_rate` as `−` against winner / non-winner founder traits on the v0.34 corpus. v0.47 retargets the modern A_null corpus and the readiness-fraction label. Future readers: this is a new-corpus / new-label decomposition, not a direct replication of v0.36; the sign convention happens to coincide.
 - **Re-anchor reference values are hardcoded** (0.652 / 0.878 / 0.818). v0.43R has no published value; logged informationally. If a future correction to a prior version's Results changes those numbers, this slice's pre-reg becomes drift-positive and must be amended.
 - **Pre-50 reproduction byte-identity** through v0.47 is preserved by construction: v0.47 makes no `src/` change.
 - **NaN runs with only 1 lineage living at tick 50 drop from the pool.** Should not occur on the V0_25 anchor (which sustains all 5 founders' lineages with at least some descendants by tick 50 in every observed run), but reported in `n_runs_dropped_no_pair` if it ever fires.
