@@ -245,6 +245,8 @@ No other files modified.
 
 One of three primary traits fires above the locked sign-aware Cohen's d threshold of +0.5; zero traits fire wrong-sign.
 
+**`READINESS_TRAITS_PARTIALLY_PREDICTIVE` does not mean the whole founder-trait hypothesis is confirmed. It means one pre-committed founder trait, `sensor_radius`, predicts the tick-50 readiness label under the locked threshold.** `reproduction_drive` and `metabolic_rate` did not fire, so the headline is specifically a `sensor_radius` signal — not a generic "founder traits broadly predict readiness" claim.
+
 ### Fraction-label paired_d per primary trait (PRIMARY)
 
 | trait | sign | paired_d | signed_d | delta_mean | delta_sd | delta_min | delta_max | n | fires |
@@ -307,6 +309,7 @@ v0.36 reported `sensor_radius` as the firing aligned-flat trait under the b50/wi
 - **`reproduction_drive` lever.** Under the V0_25 anchor's `auto_reproduction=True`, the reproduction-trigger pathway bypasses agent-level deliberation; `reproduction_drive` plausibly has its strongest behavioural effect when policies consult it as an action-utility weight. A v0.47-style decomposition under `auto_reproduction=False` (different anchor) would test this.
 - **`sensor_radius` is integer.** Coerced to float in paired_d arithmetic. Its delta_min = −3.5 and delta_max = +4.25 reflect the discrete trait range. The relatively large delta_sd = 1.705 and the strong paired_d = +0.937 together suggest a real signal, not a numerical artefact.
 - **The 11 zero-count runs.** Excluded from the count-label pool but included in the fraction-label pool with `tick50_above_threshold_fraction = 0.0` for every lineage. The fraction-label argmax in those runs is degenerate (lowest `lineage_id` wins by tier-3 tiebreak); the per-trait paired_d treats the assigned lineage as the "high" one and pools normally. This adds noise to the fraction-label paired_d but does not bias it (the assigned lineage is randomized w.r.t. founder trait values by the `lineage_id`-only tiebreak — no founder-trait correlation with `lineage_id` at setup time).
+- **Sensitivity note (zero-count attenuation).** The 11 all-zero-count runs are degenerate for the fraction label (every lineage is assigned `fraction = 0.0`; tier-3 tiebreak picks the lowest `lineage_id`), but they likely **attenuate rather than create** the `sensor_radius` signal. Evidence: the descriptive count-label result excludes those 11 runs entirely and still shows a stronger `sensor_radius` signal (`signed_d = +1.675` over n=53) than the fraction-label result (`signed_d = +0.937` over n=64). Removing the noise-only runs strengthens the trait paired_d rather than weakening it. The fire is not an artefact of zero-count run inclusion.
 - **Cross-version pooling.** The 64 runs span 4 versions whose substrate `src/` extensions accumulated additively. v0.46's H2e re-anchor confirmed cross-version pool validity; v0.47 inherits.
 
 ### v0.48 candidate (open; not locked)
