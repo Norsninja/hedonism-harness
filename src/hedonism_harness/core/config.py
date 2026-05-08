@@ -154,6 +154,19 @@ class BodyConfig(BaseModel):
             "(SPEC §22 recommendation: high sensor radius costs more)."
         ),
     )
+    effective_sensor_radius_override: int | None = Field(
+        default=None,
+        ge=0,
+        description=(
+            "v0.52 information-vs-cost decoupling seam. When set, "
+            "sensors.observe and _read_memory_directional (ValenceMemory "
+            "branch) consult this value as the effective sensing radius "
+            "for every agent, bypassing body.traits.sensor_radius for the "
+            "information channel only. apply_metabolism is not affected — "
+            "the metabolic-cost channel remains tied to the trait. "
+            "Default None preserves byte-identity for v0.1..v0.51."
+        ),
+    )
 
     @model_validator(mode="after")
     def _check_starting_within_max(self) -> BodyConfig:

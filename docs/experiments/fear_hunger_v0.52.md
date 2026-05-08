@@ -5,7 +5,7 @@
 **Predecessors:** v0.21..v0.27 (substrate / aggregate-optimum), v0.34..v0.36 (lineage observability + heritability), v0.42..v0.45 (substrate-causal arc), v0.46 (`READINESS_PREDICTS_DOMINANCE`), v0.47 (`READINESS_TRAITS_PARTIALLY_PREDICTIVE`), v0.48 (`SENSOR_RADIUS_SPATIAL_BRIDGE_PRESENT`), v0.49 (`SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED`), v0.50 (`SENSOR_RADIUS_ROBUST_TO_POSITION`), v0.51 (`FOUNDER_CLAMP_REPRODUCED`).
 **Question being asked (locked):** Does the v0.48 / v0.49 sensor_radius bridge depend on **information radius**, **metabolic cost**, or their **coupling**?
 
-The v0.49 founder-clamp + permutation evidence implicates founder `sensor_radius` as causally contributing to the v0.48 spatial / foraging bridge, and v0.50 / v0.51 confirm that contribution survives founder-position controls and lineage-wide clamping. But "higher `sensor_radius`" means two things simultaneously in the V0_25 simulator:
+The v0.49 founder-clamp + permutation evidence implicates founder `sensor_radius` as causally contributing to the v0.48 spatial / foraging bridge. v0.50 confirms that the contribution survives the locked founder-position interventions, and v0.51 reproduces the v0.49 founder-clamp result while showing that descendant `sensor_radius` drift does not occur under V0_25 after founder clamp. But "higher `sensor_radius`" means two things simultaneously in the V0_25 simulator:
 
 1. **Information radius** — wider sensing footprint at every step, via `sensors.observe` and `_read_memory_directional` (ValenceMemory directional scan).
 2. **Metabolic cost** — proportionally higher per-tick energy drain, via `apply_metabolism`'s `body_config.sensor_radius_metabolic_cost * body.traits.sensor_radius` term.
@@ -404,4 +404,143 @@ No other files modified.
 
 ## Results
 
-**Status:** pending reducer run.
+**Status:** reducer executed 2026-05-08 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~10 minutes. **Tier-1 bridge re-anchor PASSES** (A_null arm reproduces v0.48's six published signed_d cells within max drift 0.0004 ≪ 1e-3 tolerance). The corpus re-anchor passes within 0.0003. **The slice halts loud at priority 2** (`INTERVENTION_OPPOSITE_SIGN_HALT`) — three Label B gating cells under arm C fire wrong-sign. The halt is the pre-reg's locked priority-2 outcome and is itself the headline finding.
+
+### Rollup verdict — `INTERVENTION_OPPOSITE_SIGN_HALT` fires
+
+> **Locked phrase fires verbatim:** "Halt: a v0.52 spatial / foraging primary fires in the WRONG direction under a gating label; the channel-decoupling intervention is incompatible with the locked expected signs."
+
+Sub-verdicts:
+
+| arm | sub-verdict |
+|---|---|
+| A_null | `A_NULL_BRIDGE_PRESENT` |
+| B_zero_sensor_cost | `B_ZERO_COST_BRIDGE_PRESENT` |
+| C_uniform_effective_radius_6 | `C_UNIFORM_RADIUS_OPPOSITE_SIGN_HALT` |
+
+### Headline reading (read this before the rest of Results)
+
+The (PRESENT, PRESENT, OPPOSITE_SIGN_HALT) triple is **not one of v0.52's load-bearing-channel verdicts** — those are unreachable when any gating-label primary fires wrong-sign on any arm. The halt is interpretively informative on its own terms but does NOT support a clean `INFORMATION_RADIUS_LOAD_BEARING` reading despite C arm's bridge collapse, because the bridge under C did not merely fail to fire — it actively reversed direction. v0.52 splits into two distinct findings:
+
+1. **B confirms the metabolic-cost channel can be flattened cleanly without breaking the bridge.** The B arm fires `B_ZERO_COST_BRIDGE_PRESENT` (3/3 under both labels) with effect sizes comparable to A_null. Setting `sensor_radius_metabolic_cost = 0.0` removes the cost-asymmetry channel of `sensor_radius` variation; the v0.48 spatial / foraging bridge survives that intervention at near-full strength. **The metabolic-cost channel is not necessary for the bridge** under the locked V0_25 anchor.
+2. **C does NOT cleanly probe the information-radius channel.** The `effective_sensor_radius_override = 6` intervention produces wrong-sign behavior under Label B, which means the C arm is doing something more than (or different from) "flattening between-agent information variation". The pre-reg's headline caveat about C being "an equalizing uplift to max-radius information, not a neutral subtraction" is the most likely culprit: raising every agent to radius 6 changes pre-50 dynamics globally (food depletion, agent crowding, memory-scan clutter, etc.) in a way that decouples Label B from the spatial / foraging primaries it tracked under A_null and B.
+
+The locked phrase fires verbatim because the pre-reg was correct to halt rather than fire a misleading load-bearing verdict on wrong-sign data.
+
+### Tier-1 bridge re-anchor — A_null reproduces v0.48 within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 ≪ 1e-3. v0.52's A_null arm is byte-compatible with v0.48 / v0.49 / v0.50 / v0.51 A_null path. The `src/` change preserves byte-identity for `override=None` + `cost=0.05` defaults (corpus-level evidence: all 1664 prior tests + smoke test pass without modification under the modified `sensors.py`).
+
+### Per-arm signed_d (sign-aware)
+
+#### Arm A_null — sub-verdict `A_NULL_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | **+1.066** | YES |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | **+1.066** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **+1.916** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.916** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.916** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.179** | YES |
+
+#### Arm B_zero_sensor_cost — sub-verdict `B_ZERO_COST_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | **+1.066** | YES |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | **+1.066** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **+1.909** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+1.067** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+1.067** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.735** | YES |
+
+3/3 primaries fire under both labels with 0 wrong-sign. Effect sizes are comparable to or slightly stronger than A_null (Label B observable 3 jumps from +1.179 to +1.735 — a non-trivial uplift, not part of the locked verdict but worth flagging). The bridge survives flattening of the metabolic-cost channel.
+
+#### Arm C_uniform_effective_radius_6 — sub-verdict `C_UNIFORM_RADIUS_OPPOSITE_SIGN_HALT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | +0.168 | no |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | +0.168 | no |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | −0.046 | no |
+| label_b_readiness_fraction | pre50_food_events_count | + | **−0.688** | **WRONG-SIGN** |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **−0.688** | **WRONG-SIGN** |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **−1.286** | **WRONG-SIGN** |
+
+Three wrong-sign firings under Label B (the gating label). All three Label B cells reverse direction relative to A_null and B: under C, the lineage with the highest tick-50 readiness fraction has on average **fewer pre-50 food events, less pre-50 food energy, and is farther from food cells than its peers**. This is the opposite of what Label B predicts under A_null and B.
+
+Label A under C is essentially flat (signed_d ≈ +0.17 / +0.17 / −0.05) — founder `sensor_radius` no longer predicts the spatial / foraging primaries because every agent senses the same. That is the *expected* signature of flattening between-agent information variation under Label A. But the wrong-sign Label B cells are a *different* effect entirely.
+
+### What v0.52 establishes (despite the halt)
+
+- ✓ **The metabolic-cost channel is not necessary for the bridge** under the locked V0_25 anchor. Setting `sensor_radius_metabolic_cost = 0.0` (B arm) leaves the v0.48 spatial / foraging bridge firing at near-full strength under both labels. This is a clean positive finding — the locked B sub-verdict is `B_ZERO_COST_BRIDGE_PRESENT`.
+- ✓ **Tier-1 re-anchor passes**, confirming the modified `sensors.py` resolver pattern is byte-equivalent for `override=None` (default behavior preserved). The 1664-test pytest suite passing without modification is the corpus-level enforcement.
+- ✓ **The pre-reg's halt-loud discipline worked as designed.** v0.52 anticipated the possibility that wrong-sign data would force a halt rather than a load-bearing verdict; the priority-2 halt fires verbatim and prevents v0.52 from prematurely declaring a `METABOLIC_COST_LOAD_BEARING` verdict on wrong-sign Label B data.
+
+### What v0.52 does NOT establish
+
+- ✗ **`INFORMATION_RADIUS_LOAD_BEARING`** is NOT supported by v0.52's data even though C's bridge "fails to fire". The verdict structure was locked to require both arms to clear PRESENT or NOT_FOUND on the locked +0.5 / −0.5 thresholds without wrong-sign firings under the gating labels. C produced wrong-sign — that is a structurally distinct outcome from "bridge does not fire", and the pre-reg correctly halts rather than coercing it into the load-bearing matrix.
+- ✗ **The information-radius channel's role in the bridge is undetermined by v0.52.** What v0.52 establishes is that the *specific* C intervention used here (uniform effective radius 6, V0_25 max) does not cleanly flatten the information channel — it perturbs the simulation in a way that reverses Label B's direction. A future v0.52b / v0.55 with different override semantics (e.g., uniform radius at the population-mean 4, agent-by-agent shuffled radii, or a "sense at trait but pay zero cost" resolver applied per-tick) is needed to probe the information channel cleanly.
+- ✗ **Mechanism behind C's wrong-sign Label B**. v0.52 produces a striking negative-correlation finding (high readiness fraction lineages eat less, acquire less food, and are farther from food under uniform-max sensing) but does NOT identify *why*. Plausible candidates include (a) crowding at common food sites once everyone navigates with full vision, (b) survivor-selection on conservative agents who avoided depleted food zones, (c) memory-scan clutter that overwhelms low-trait agents, or (d) a shift in pre-50 reproduction timing under altered food access. v0.52 does not distinguish these.
+- ✗ **Generalisation beyond V0_25 / tight_gradient / 5 founders / height-6 grid**. As locked.
+
+### Reading the C arm wrong-sign result correlationally
+
+The pre-reg's elevated headline caveat is the right interpretive frame: **C is not a neutral subtraction of information from high-radius agents**. It uplifts every agent to V0_25's max radius (6). Under C, the simulation is a fundamentally different food-economy than under A_null:
+
+- Every agent sees food at distance up to 6 (vs. average ~3.5 under A_null), so food locations are uniformly visible from across the grid.
+- Memory directional scans (`ValenceMemory`) similarly extend out to radius 6, so every agent's pleasure / pain signal aggregates over a wider neighborhood.
+- `apply_metabolism` continues to pay `sensor_radius_metabolic_cost * trait_sensor_radius`, so high-trait founders still pay more per tick — but now they don't get any information advantage from doing so.
+
+The Label B wrong-sign reading is then plausibly: when sensing is uniformly maximised, the lineage that ends up with the highest tick-50 readiness fraction is NOT the lineage that converged on food sources; it's the lineage that **conserved energy by NOT chasing the now-depleted-by-everyone food**. Lineages that aggressively foraged under uniform max sensing depleted shared food and ended up with lower readiness fractions; lineages that stayed put or wandered elsewhere preserved energy. Under A_null and B, sensing variation creates differential food access; under C, sensing variation is gone and the surviving-via-frugality strategy dominates.
+
+This is one plausible reading; v0.52 does NOT confirm it. The headline interpretation is simply: **the C intervention as designed is not a clean information-radius probe**, and the pre-reg's halt is the correct way to surface this.
+
+### Caveats
+
+- **C's wrong-sign Label B is not an implementation bug.** Test #4 (default-equivalence), test #5 (override reaches observe axial scan), test #6 (override reaches ValenceMemory directional scan), test #7 (override does NOT affect apply_metabolism), test #8 (override does NOT affect DirectionalMemory), and test #9 (no RNG offset) all pass. The `src/` resolver pattern is correct; the C arm's behavior is the simulator's actual response to uniform max sensing, not a code bug.
+- **B's slight uplift in Label B observable 3** (signed_d = +1.735 under B vs. +1.179 under A_null on `mean_distance_to_nearest_food_cell`) is descriptive, not verdict-firing. It suggests that removing the metabolic-cost penalty for high `sensor_radius` may slightly *strengthen* the bridge — high-trait founders no longer pay an energy penalty for their sensing advantage, and the readiness-fraction lineage's spatial advantage at tick 50 is correspondingly cleaner. Not a locked finding; logged for transparency.
+- **The Tier-1 re-anchor passing within 0.0004 confirms** that the `src/` change is default-preserving. The 1664-test pytest suite passing without modification under the modified `sensors.py` is the corpus-level enforcement. There is no determinism regression from the v0.52 `src/` change.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED; descendant-drift channel empirically zero) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge (B PRESENT); C arm halt-loud | interventional (B confirms metabolic-cost is dispensable; C is not a clean information-channel probe) |
+
+The v0.46→v0.52 stack now reads: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → that contribution survives shifted-top + permuted founder positions → and the founder-clamp NOT_FOUND result is preserved under lineage-wide clamping → and the metabolic-cost channel of `sensor_radius` is NOT necessary for the bridge to fire (the bridge survives `sensor_radius_metabolic_cost = 0` cleanly), but the information-radius channel could not be cleanly probed by uniform-max-radius and the locked halt fires.
+
+### Next-step candidates (open; not locked)
+
+The v0.52 halt-loud outcome reshapes the next-step priorities. The "load-bearing channel" question remains unresolved on the information side; the metabolic-cost side is now substantially closed.
+
+- **v0.52b — alternative information-channel probe.** The natural follow-up is a different way to flatten between-agent information variation that does NOT change the absolute amount of information available to each agent. Two candidate designs: (1) **uniform radius at population mean** (effective_sensor_radius_override = 4), explicitly buff/nerf-symmetric — does it produce the same wrong-sign Label B as v0.52's max-radius arm, suggesting "any information uniformity reverses the bridge", or does it produce a clean NOT_FOUND, suggesting "max-radius specifically caused crowding"; (2) **per-agent radius shuffle** (assign each agent the sensor_radius of a randomly-paired agent, preserving the population distribution of sensing radii but breaking the trait↔agent link) — flattens between-lineage variation while preserving total information.
+- **v0.53 — cross-layout generalisation.** Run v0.48–v0.52 on `widened_gradient` and / or `food_ladder`. Layout differences may reveal whether C's wrong-sign reading is geometry-specific.
+- **v0.54 — joint ablation.** `sensor_radius_metabolic_cost = 0` AND `effective_sensor_radius_override = 6`. Tests for higher-order interactions; if both ablations together produce wrong-sign too, the C-arm crowding hypothesis is plausibly mechanism. Optional.
+- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.52 conclusion stack — needed for any "mechanism" declaration. Longer-horizon.
+
+### CI gate at v0.52 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1680 passed, 7 skipped (was 1664; +16 v0.52)
+uv run python scripts/core_smoke_test.py                  ok (default behavior preserved)
+uv run python scripts/v0_52_information_vs_cost_audit.py  INTERVENTION_OPPOSITE_SIGN_HALT (priority 2)
+```
