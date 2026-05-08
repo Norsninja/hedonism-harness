@@ -311,4 +311,126 @@ No other files modified.
 
 ## Results
 
-(appended after reducer execution)
+**Status:** reducer executed 2026-05-08 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~10 minutes. **All bridge re-anchor cells PASS** (A_null arm reproduces v0.48's six published signed_d cells within 0.0004 ≪ 1e-3 tolerance). All A_null arm `a_share_h8` values reproduce v0.42 / v0.44 / v0.45 published references within 0.0003. No opposite-sign firings under any gating label. **Every single one of the 18 paired_d cells (3 arms × 2 labels × 3 observables) fires in the expected direction with signed_d ≥ +0.5.**
+
+### Rollup verdict — `SENSOR_RADIUS_ROBUST_TO_POSITION` fires
+
+> **Locked phrase fires verbatim:** "v0.49's sensor_radius causal contribution survives founder-position controls on the modern A_null corpus: the v0.48 spatial / foraging bridge fires under both shifted-top and permuted founder positions."
+
+Sub-verdicts:
+
+| arm | sub-verdict |
+|---|---|
+| A_null | `A_NULL_BRIDGE_PRESENT` |
+| B_position_shifted_top | `B_POS_SHIFTED_TOP_BRIDGE_PRESENT` |
+| C_position_permuted | `C_POS_PERM_BRIDGE_PRESENT` |
+
+The (PRESENT, PRESENT, PRESENT) triple is the ROBUST pattern — the strongest possible support for v0.49's `SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED` claim under v0.50's locked criteria.
+
+### Bridge re-anchor — A_null arm reproduces v0.48 within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 ≪ 1e-3. v0.50's A_null arm is byte-compatible with v0.48 / v0.49's A_null path; B / C interpretations are anchored at the same baseline.
+
+### Per-arm signed_d (sign-aware, all firing)
+
+| arm | label | obs1: events | obs2: energy | obs3: distance |
+|---|---|:-:|:-:|:-:|
+| A_null | label_a_sensor_radius | +1.066 | +1.066 | +1.916 |
+| A_null | label_b_readiness_fraction | +0.916 | +0.916 | +1.179 |
+| B_position_shifted_top | label_a_sensor_radius | **+1.168** | **+1.168** | **+2.115** |
+| B_position_shifted_top | label_b_readiness_fraction | **+1.041** | **+1.041** | **+1.452** |
+| C_position_permuted | label_a_sensor_radius | +1.073 | +1.073 | +1.987 |
+| C_position_permuted | label_b_readiness_fraction | +0.899 | +0.899 | +1.078 |
+
+Notable: B's signed_d's are *higher* than A_null's on every label A cell (+1.168 vs +1.066; +2.115 vs +1.916), and on label B observables 1/2 (+1.041 vs +0.916). The shifted-top reflection does not weaken the bridge — it modestly strengthens it. See "Reading the result correlationally" for one plausible interpretation.
+
+### Corpus re-anchor
+
+A_null arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+B and C arms (informational only — different counterfactual worlds):
+
+| arm | v0.42 | v0.43R | v0.44 | v0.45 |
+|---|:-:|:-:|:-:|:-:|
+| B_position_shifted_top | 0.718 | 0.591 | 0.798 | 0.776 |
+| C_position_permuted | 0.638 | 0.606 | 0.896 | 0.805 |
+
+B's `a_share_h8` is generally higher than A_null's at v0.42 / v0.44 (0.718 / 0.798 vs 0.652 / 0.878 — comparable to higher); v0.43R drops from 0.674 to 0.591 and v0.45 drops from 0.818 to 0.776 — small movements consistent with B being a different counterfactual world.
+
+### Reading the result correlationally
+
+The locked phrase is **correlational, not causal**. v0.50 establishes that the v0.48 spatial / foraging bridge **survives** two specific position interventions; it does NOT prove position is causally irrelevant. Several interpretations are consistent with the data:
+
+- **Most parsimonious**: founder `sensor_radius` variation is the dominant within-run driver of the spatial / foraging bridge. The lineage-id ↔ position structure (V0_25's `[0..4]` band, lineage 0 at the global y=0 edge) does not contribute meaningfully on this corpus.
+- **B's bridge strengthens slightly under shifted-top.** One plausible reading: V0_25's lineage 0 (at y=0) carries an edge-topology drag (only y=1 as a y-neighbor; cannot move y-down) that *weakens* the bridge when the high-`sensor_radius` lineage happens to be lineage 0. Reflecting the band to `[1..5]` (lineage 4 at the global y=5 edge) preserves *one* edge-disadvantaged founder but moves it from lineage 0 to lineage 4 — and label A's argmax-with-min-id-tiebreak no longer disproportionately picks the disadvantaged lineage. Bridge cells become slightly cleaner. **This is interpretation, not a verdict-firing finding** — the locked criteria do not distinguish "ROBUST" from "ROBUST-and-stronger".
+- **C's bridge tracks A_null almost exactly.** Permuting founder positions among themselves preserves the bridge structure within ±0.1 signed_d on every cell. The bridge does not depend on which founder gets which V0_25 spawn slot.
+
+### What v0.50 establishes (within the locked V0_25 + tight_gradient + 5-founder anchor)
+
+- ✓ The v0.48 spatial / foraging bridge **fires under shifted-top reflection** of the V0_25 founder band, with effect sizes comparable to or slightly larger than A_null. Founder-band placement, narrowly defined as one of the two contiguous-5-cell options on a height-6 grid, does not break the bridge.
+- ✓ The v0.48 spatial / foraging bridge **fires under within-band founder permutation**, with effect sizes within ±0.1 of A_null. The lineage-id ↔ position assignment under V0_25 is not the bridge's source.
+- ✓ A_null arm is byte-compatible with v0.48 / v0.49 (bridge re-anchor max drift 0.0004; corpus re-anchor max drift 0.0003).
+- ✓ Combined with v0.49's `SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED`, the conclusion stack now reads: founder `sensor_radius` variation supports a causal contribution to the bridge, AND that conclusion survives shifted-top and permuted founder-position interventions on the modern A_null corpus.
+
+### What v0.50 does NOT establish
+
+- ✗ **General position-irrelevance**. v0.50 tests two specific position interventions (shifted-top reflection, within-band permutation). It does NOT test: cross-x positioning (e.g., founders at x=0 or x=2), cross-band positioning (e.g., scattered around the layout), founders inside the food zone, founders with different (x, y) offsets, or any position pattern outside the contiguous-5-cell-at-spawn_x band.
+- ✗ **Cross-layout generalisation**. Tight_gradient height=6 only.
+- ✗ **Trait-position interaction**. v0.50 holds traits at the model's normal draw; if `sensor_radius` interacts with founder position non-trivially in some untested geometry, v0.50 cannot detect it.
+- ✗ **Mechanism for B's modest signed_d uplift.** The +1.168 / +2.115 vs A_null's +1.066 / +1.916 is consistent with multiple stories; v0.50 does not distinguish them.
+- ✗ **Cross-anchor / cross-policy generalisation**. V0_25 anchor only.
+- ✗ **Causality for post-tick-50 dominance**. v0.50 measures the v0.48 bridge cells; the v0.46 dominance question remains observational.
+
+### Caveats
+
+- **B is not a "no-position-variance" arm.** Both `[0..4]` and `[1..5]` have identical pairwise y-distances (just shifted by one row); the population variance of y is `Var([0..4]) = Var([1..5]) = 2.0`. v0.50's B arm tests **band reflection**, not "position equalisation". A future slice could probe true position equalisation by, for example, placing 5 founders at distinct cells with minimal pairwise y-spread (which is impossible given capacity=1 in a column-only spawn pattern).
+- **Trait-covariance preflight is descriptive only.** Pearson and Spearman correlations were small (max |ρ| = 0.144) but pairwise correlations do not exclude nonlinear or interaction effects. Trait covariance remains a deferred consideration for future slices.
+- **Hazard-paired runs share permutation maps for arm C.** Per pre-reg watch-out: the helper RNG is seeded from `seed` alone (not `(seed, hazard)`), so for a given (version, seed) the C-arm runs at h=0 and h=8 receive identical permutations.
+- **Cross-arm signed_d differences are descriptive, not verdict-firing.** The locked verdict structure says "PRESENT vs PARTIAL vs NOT_FOUND", which captures the +0.5 threshold crossing. Magnitude differences within "PRESENT" (e.g., +1.066 vs +1.168) are not part of the locked criteria.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL — only `sensor_radius` fires) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED via clamp + permutation) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST under shifted-top + permutation) |
+
+Each subsequent slice tightens the inferential chain. The v0.46→v0.50 stack is now: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → and that causal contribution survives shifted-top + permuted founder positions.
+
+### v0.51 candidates (open; not locked)
+
+Per the pre-reg's "Open framing" + new follow-ups suggested by the v0.50 finding:
+
+- **v0.51 — clamp `sensor_radius` throughout the lineage** (close descendant-drift channel from v0.49). Tests whether the bridge depends on *founder-only* `sensor_radius` variation or on lineage-wide `sensor_radius` heterogeneity.
+- **v0.52 — `sensor_radius_metabolic_cost = 0`**. Decouples sensing radius from metabolic cost. Distinguishes "information radius" from "metabolic burden".
+- **v0.53 — cross-layout generalisation**. Run v0.48–v0.50 on `widened_gradient` and / or `food_ladder`. Tests whether the bridge claim is layout-invariant.
+- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.50 stack — needed for any "mechanism" declaration; currently all claims are correlational or causal-with-confound-disclosed.
+
+### CI gate at v0.50 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1648 passed, 7 skipped (was 1632, +16 v0.50)
+uv run python scripts/core_smoke_test.py                      ok
+uv run python scripts/v0_50_founder_position_audit.py         SENSOR_RADIUS_ROBUST_TO_POSITION
+```
