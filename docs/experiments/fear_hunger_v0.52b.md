@@ -381,4 +381,137 @@ No other files modified.
 
 ## Results
 
-**Status:** pending reducer run.
+**Status:** reducer executed 2026-05-08 against the 128-run corpus (2 arms × 64 (version, seed, hazard) tuples). Wall time ~7 minutes. **Tier-1 bridge re-anchor PASSES** (A_null arm reproduces v0.48's six published signed_d cells within max drift 0.0004 ≪ 1e-3 tolerance). Corpus re-anchor (`a_share_h8`) max drift 0.0003. **Descendant inheritance audit PASSES** (1667 / 1667 B-arm newborns inherited the override; 0 missing). No opposite-sign firings under any gating label.
+
+### Rollup verdict — `INFORMATION_RADIUS_FOLLOWS_ASSIGNMENT` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with global information economy preserved (between-lineage shuffle of effective `sensor_radius` over a corpus-wide preserved distribution), the v0.48 spatial / foraging bridge follows the assigned effective information radius. The information-radius assignment is sufficient to track the bridge under the locked V0_25 anchor."
+
+Sub-verdicts:
+
+| arm | sub-verdict |
+|---|---|
+| A_null | `A_NULL_BRIDGE_PRESENT` |
+| B_effective_radius_shuffle_distribution | `B_SHUFFLE_BRIDGE_PRESENT` |
+
+The (PRESENT, PRESENT) triple is the FOLLOWS_ASSIGNMENT pattern — both labels under B fire 3/3 with effect sizes comparable to A_null, despite the trait↔lineage link being broken by the per-founder shuffle. Label A under B picks by the *assigned* effective override (not the original trait `sensor_radius`); the bridge primaries fire cleanly against this re-pointed label.
+
+### Tier-1 bridge re-anchor — A_null reproduces v0.48 within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_information_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_information_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_information_radius | mean_distance_to_nearest_food_cell | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 ≪ 1e-3. v0.52b's A_null arm is byte-compatible with v0.48 / v0.49 / v0.50 / v0.51 / v0.52 A_null path. The src/ extension (one new optional `Traits` field + `TRAIT_NAMES` filter + `mutate_traits` `dataclasses.replace` widening + sensors.py resolver update) is default-preserving — corpus-level enforcement is the 1680 prior tests passing without modification.
+
+### Per-arm signed_d (sign-aware)
+
+#### Arm A_null — sub-verdict `A_NULL_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_information_radius | pre50_food_events_count | + | **+1.066** | YES |
+| label_a_information_radius | pre50_food_energy_acquired | + | **+1.066** | YES |
+| label_a_information_radius | mean_distance_to_nearest_food_cell | − | **+1.916** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.916** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.916** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.179** | YES |
+
+#### Arm B_effective_radius_shuffle_distribution — sub-verdict `B_SHUFFLE_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_information_radius (assigned) | pre50_food_events_count | + | **+1.057** | YES |
+| label_a_information_radius (assigned) | pre50_food_energy_acquired | + | **+1.057** | YES |
+| label_a_information_radius (assigned) | mean_distance_to_nearest_food_cell | − | **+1.689** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.983** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.983** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.391** | YES |
+
+3/3 primaries fire under both labels with 0 wrong-sign. Effect sizes are comparable to A_null on Label A observables 1/2 (+1.057 vs +1.066) and slightly weaker on observable 3 (+1.689 vs +1.916). Label B observables 1/2 show a small uplift under B (+0.983 vs +0.916); observable 3 also uplifted (+1.391 vs +1.179). The shuffle preserves the bridge's directional structure with magnitude shifts within ±0.3 of A_null on all six cells.
+
+### Descendant audit — perfect lineage coherence
+
+| arm | n_births_seen | n_overrides_inherited | n_overrides_missing |
+|---|:-:|:-:|:-:|
+| A_null | n/a (audit only meaningful under B) | n/a | n/a |
+| B_effective_radius_shuffle_distribution | **1667** | **1667** | **0** |
+
+Every newborn under arm B across the 64-run corpus inherited a non-None `effective_sensor_radius_override` from its parent, via the widened `mutate_traits` (`dataclasses.replace(parent, **values)` preserves the field through reproduction). The locked priority-4 `SHUFFLE_DESCENDANT_INHERITANCE_HALT` invariant did not fire. **Lineage-coherent inheritance via `mutate_traits` works as designed.**
+
+### Corpus re-anchor
+
+A_null arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+B arm (informational only — different counterfactual):
+
+| version | B `a_share_h8` |
+|---|:-:|
+| v0.42 | 0.691 |
+| v0.43R | 0.619 |
+| v0.44 | 0.765 |
+| v0.45 | 0.822 |
+
+B's `a_share_h8` shifts modestly relative to A_null in both directions (v0.42 +0.039, v0.43R −0.055, v0.44 −0.113, v0.45 +0.004) — consistent with a different counterfactual world rather than a systematic change in dominance dynamics.
+
+### What v0.52b can safely claim
+
+- ✓ **A_null replicated.** Tier-1 re-anchor reproduces v0.48's six published signed_d cells within 0.0004. The corpus re-anchor reproduces v0.42 / v0.44 / v0.45 within 0.0003. The src/ extension is byte-equivalent to default v0.48–v0.52 behavior under both per-agent and per-model overrides at None.
+- ✓ **B_effective_radius_shuffle_distribution remained PRESENT** (3/3 under both labels, 0 wrong-sign). Effect sizes within ±0.3 of A_null across all six cells.
+- ✓ **Therefore, between-lineage information-radius assignment over a preserved global distribution is sufficient to track the v0.48 spatial / foraging bridge on this corpus.** The bridge follows the *assigned* effective information radius, not the original trait `sensor_radius` (Label A under B picks by assigned override, and the primaries still fire 3/3).
+- ✓ **Lineage-coherent inheritance via `mutate_traits` (Option α) works as designed.** Every newborn (1667/1667) inherited the override; halt-loud invariant did not fire. The `dataclasses.replace(parent, **values)` widening cleanly propagates the experimental override through reproduction without modifying the biological mutation pipeline.
+- ✓ **Combined with v0.52's findings**: v0.52 B (zero cost) showed the metabolic-cost channel is not necessary for the bridge; v0.52b B (shuffle) shows the bridge follows the assigned information-radius distribution under preserved global ecology. The information-radius channel does positive work in tracking the bridge — but see "What v0.52b cannot claim" for the discipline limits.
+
+### What v0.52b cannot claim
+
+- ✗ **"The information-radius channel IS load-bearing for the bridge."** v0.52b's evidence is that information-radius *assignment* tracks the bridge under preserved global ecology. That is not the same as proving the channel is causally load-bearing — there could be other channels that co-track the assignment under shuffle (e.g., correlations between assigned override and original trait values that survive permutation). v0.52b's verdict is "follows the assigned" (correlational, locked phrase), not "is causally load-bearing".
+- ✗ **"Information-radius assignment is necessary for the bridge."** v0.52b only tested whether shuffle preserves the bridge; it did not test removing assignment entirely (which would be logically equivalent to A_null minus information-radius variation, and not separately probed).
+- ✗ **Mechanism behind the bridge's response to assignment**. The route from "lineage gets reassigned a high effective radius" → "lineage achieves higher pre-50 spatial / foraging primaries" is not isolated. Plausible: wider effective sensing → earlier food detection → more pre-50 food events / energy / shorter distance. v0.52b is consistent with this but does not establish it.
+- ✗ **Generalisation beyond V0_25 / tight_gradient / 5 founders / height-6 grid**. As locked.
+- ✗ **Causality for post-tick-50 dominance**. v0.52b measures the v0.48 bridge cells; v0.46's b50-share dominance question remains separate.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED; descendant-drift channel empirically zero under V0_25) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge (B PRESENT); C arm halt-loud | interventional (B PRESENT confirms cost dispensable; C uniform-max regime-shift halt) |
+| v0.52b | modern A_null | bridge follows between-lineage information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT; lineage-coherent inheritance verified clean) |
+
+The v0.46→v0.52b stack now reads: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → that contribution survives shifted-top + permuted founder positions → and the founder-clamp NOT_FOUND result is preserved under lineage-wide clamping → and the metabolic-cost channel of `sensor_radius` is not necessary for the bridge → and the bridge follows the assigned effective information radius when global information economy is preserved (information-radius assignment is sufficient to track the bridge).
+
+### Next-step candidates (open; not locked)
+
+The v0.52b primary arm fired PRESENT cleanly; the planned uniform-4 secondary follow-up (which would have triggered on PARTIAL) is therefore NOT activated and remains a deferred candidate only if a future question demands disambiguating "any information uniformity" vs "max-radius specifically".
+
+- **v0.52b uniform-4 secondary (deferred).** Documented in pre-reg; not run. Available if a follow-up question demands probing whether the uniform-4 case behaves like the shuffle (PRESENT, supports preserved-distribution reading) or like v0.52's uniform-6 (regime-shift halt, suggests max-radius specifically caused the wrong-sign). Optional.
+- **v0.53 — cross-layout generalisation.** Run v0.48–v0.52b on `widened_gradient` and / or `food_ladder`. Layout differences may reveal whether the FOLLOWS_ASSIGNMENT result is geometry-specific.
+- **v0.54 — joint ablation.** `sensor_radius_metabolic_cost = 0` AND between-lineage shuffle of `effective_sensor_radius_override`. Tests for higher-order interactions between the two channels v0.52 + v0.52b separately addressed.
+- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.52b conclusion stack — needed for any "mechanism" declaration. Longer-horizon.
+
+### CI gate at v0.52b close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1696 passed, 7 skipped (was 1680; +16 v0.52b)
+uv run python scripts/core_smoke_test.py                              ok (default behavior preserved)
+uv run python scripts/v0_52b_information_radius_shuffle_audit.py      INFORMATION_RADIUS_FOLLOWS_ASSIGNMENT
+```

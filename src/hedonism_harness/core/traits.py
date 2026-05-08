@@ -27,7 +27,7 @@ v0.2 / v0.14 addition — unbounded mutation:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, fields
+from dataclasses import dataclass, fields, replace
 
 import numpy as np
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -50,9 +50,25 @@ class Traits:
     memory_decay_rate: float
     sensor_radius: int
     metabolic_rate: float
+    # v0.52b experimental seam: per-agent effective sensing radius override.
+    # When set (default ``None``), ``sensors.observe`` and
+    # ``_read_memory_directional`` (ValenceMemory branch) consult this value
+    # as the effective sensing radius for the information-radius reads ONLY,
+    # bypassing ``traits.sensor_radius`` for those reads. ``apply_metabolism``
+    # still reads ``traits.sensor_radius`` directly, so the metabolic-cost
+    # channel remains trait-tied. NOT a biologically-mutable trait — filtered
+    # out of ``TRAIT_NAMES`` so ``random_traits`` / ``mutate_traits`` /
+    # ``validate_traits`` / archetype-builder / metrics collectors never
+    # iterate over it. Inherited automatically through reproduction via
+    # ``mutate_traits``'s ``dataclasses.replace(parent, **values)`` (the field
+    # is on ``parent`` and not in ``values``, so ``replace`` preserves it).
+    # Default ``None`` preserves byte-identity for v0.1..v0.52.
+    effective_sensor_radius_override: int | None = None
 
 
-TRAIT_NAMES: tuple[str, ...] = tuple(f.name for f in fields(Traits))
+TRAIT_NAMES: tuple[str, ...] = tuple(
+    f.name for f in fields(Traits) if f.name != "effective_sensor_radius_override"
+)
 INTEGER_TRAITS: frozenset[str] = frozenset({"sensor_radius"})
 
 
@@ -204,6 +220,13 @@ def mutate_traits(parent: Traits, config: TraitConfig, rng: np.random.Generator)
         to semantically-bounded traits (tolerances, memory_*).
 
     Integer traits are rounded after clamping.
+
+    v0.52b: uses ``dataclasses.replace(parent, **values)`` so any field on
+    ``parent`` not in ``TRAIT_NAMES`` (e.g., ``effective_sensor_radius_override``)
+    is preserved through reproduction. Functionally identical to
+    ``Traits(**values)`` when ``values`` covers all biologically-mutable
+    fields — the change is forward-compatibility for non-mutable Traits
+    fields like the v0.52b experimental override seam.
     """
     values: dict[str, float | int] = {}
     for name in TRAIT_NAMES:
@@ -233,7 +256,7 @@ def mutate_traits(parent: Traits, config: TraitConfig, rng: np.random.Generator)
                 values[name] = max(int(rng_range.min), min(int(rng_range.max), rounded))
         else:
             values[name] = clamped
-    return Traits(**values)  # type: ignore[arg-type]
+    return replace(parent, **values)
 
 
 def validate_traits(traits: Traits, config: TraitConfig) -> None:

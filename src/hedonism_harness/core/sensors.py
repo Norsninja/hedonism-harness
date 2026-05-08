@@ -120,13 +120,25 @@ def observe(
 
     Pure: does not mutate any input.
 
-    v0.52 information-channel seam: when ``body_config.effective_sensor_radius_override``
-    is set (default ``None``), the override value is used as the sensing
-    radius for the four axial scans below AND for ``_read_memory_directional``'s
-    ValenceMemory branch (via the same body_config). ``apply_metabolism`` is
-    NOT affected — it continues to read ``body.traits.sensor_radius`` directly.
+    Information-channel seams (default ``None`` → falls through to
+    ``int(body.traits.sensor_radius)`` exactly as v0.1..v0.51):
+      - **v0.52b per-agent override** (``body.traits.effective_sensor_radius_override``)
+        takes precedence when set — supports per-lineage information-radius
+        assignment under v0.52b's between-lineage shuffle, with descendants
+        inheriting the parent's override via ``mutate_traits``.
+      - **v0.52 per-model override** (``body_config.effective_sensor_radius_override``)
+        applies model-wide when the per-agent override is ``None``.
+      - Both ``None`` → sensing radius = ``int(body.traits.sensor_radius)``.
+
+    Affects the four axial scans below AND ``_read_memory_directional``'s
+    ValenceMemory branch (same resolver). ``apply_metabolism`` is NOT
+    affected — it continues to read ``body.traits.sensor_radius`` directly.
     """
-    override = body_config.effective_sensor_radius_override
+    override = (
+        body.traits.effective_sensor_radius_override
+        if body.traits.effective_sensor_radius_override is not None
+        else body_config.effective_sensor_radius_override
+    )
     radius = override if override is not None else int(body.traits.sensor_radius)
     energy_ratio = body.energy / body_config.max_energy
     health_ratio = body.health / body_config.max_health
@@ -195,15 +207,21 @@ def _read_memory_directional(
 
       - ``None`` -> all zeros (no memory, the v0.1 default).
       - ``ValenceMemory`` (cell-exact) -> axial scan of ``pleasure_ema /
-        distance`` and ``pain_ema / distance`` to ``traits.sensor_radius``
-        (or to ``body_config.effective_sensor_radius_override`` when set;
-        v0.52 information-channel seam).
+        distance`` and ``pain_ema / distance`` to the resolved sensing
+        radius. Resolver (default ``None`` → trait):
+          1. ``body.traits.effective_sensor_radius_override`` (v0.52b)
+          2. ``body_config.effective_sensor_radius_override`` (v0.52)
+          3. ``int(body.traits.sensor_radius)`` (v0.1 default)
       - ``DirectionalMemory`` (v0.11 chemotaxis-style) -> direct read
         of the 4-vector tendencies; no spatial scan; ``body_config`` and
         ``body`` are unused on this branch.
     """
     if isinstance(memory, ValenceMemory):
-        override = body_config.effective_sensor_radius_override
+        override = (
+            body.traits.effective_sensor_radius_override
+            if body.traits.effective_sensor_radius_override is not None
+            else body_config.effective_sensor_radius_override
+        )
         radius = override if override is not None else int(body.traits.sensor_radius)
         return directional_signals(memory, body.x, body.y, radius)
     if isinstance(memory, DirectionalMemory):
