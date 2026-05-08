@@ -313,7 +313,7 @@ Outcome 6's locked phrase explicitly flags that an ALTERS firing demands follow-
 
 ## Cautious framing (per CLAUDE.md)
 
-- "**Reproduces**", "**additional weakening**", "**no additional weakening**" — NOT "**proves**", "**causes**", or "**rules out**".
+- "**Reproduces**", "**alters**" — NOT "**proves**", "**causes**", or "**rules out**".
 - "**Founder + descendant `sensor_radius` clamped**" — NOT "**no `sensor_radius` variation in the lineage**" (the mutation pipeline still draws variant values; the listener overwrites them).
 - "**On the modern A_null corpus**" / "**under the locked V0_25 anchor**" — NOT a chamber-config-independent claim.
 - v0.51 explicitly does not establish: cross-layout generalisation, mechanism (information vs cost), trait-covariance with non-`sensor_radius` fields, or post-tick-50 dominance dynamics.
@@ -469,6 +469,10 @@ Sub-verdicts:
 
 The (PRESENT, NOT_FOUND, NOT_FOUND) triple is the REPRODUCED pattern — clamping descendants in addition to founders did not change the categorical verdict on the modern A_null corpus.
 
+### Headline caveat (read this before the rest of Results)
+
+`C_lineage_clamp_4` was behaviorally equivalent to `B_founder_clamp_4` at the paired_d level because all 1539 C-arm newborns across the 64-run corpus arrived at `sensor_radius=4` *before* the listener patched. **v0.51 cannot distinguish "descendant `sensor_radius` variation is irrelevant to the bridge" from "descendant `sensor_radius` variation did not occur under V0_25 after founder clamp."** The C arm's lineage-wide clamp *would have* blocked descendant drift had any occurred, but no drift was observed pre-patch in this corpus. The locked phrase still fires verbatim — categorical preservation under lineage-wide clamping is the empirical finding — but the *evidence* rests on B-equivalence rather than on a counterfactual descendant-drift channel that v0.51 actively neutralised. v0.49's founder-only clamp was not secretly leaking meaningful descendant `sensor_radius` variation under V0_25; it did not leak because the integer-quantized mutation pipeline kept children of clamped-4 parents at 4 with empirical probability 1 across all 1539 reproductive events. See "Structural finding" below for the per-listener counters and the implication for v0.51's interpretive scope.
+
 ### Tier-1 bridge re-anchor — A_null arm reproduces v0.48 within 1e-3
 
 | label | observable | published | derived | drift |
@@ -592,8 +596,8 @@ B and C have byte-identical `a_share_h8` values across every (version, h=8) buck
 The locked phrase says **"reproduces"** — not "rules out", not "proves", not "is causal for". v0.51 establishes:
 
 - ✓ The v0.49 founder-clamp NOT_FOUND verdict reproduces under v0.51's B arm (Tier-2 re-anchor passes within 0.0004).
-- ✓ Adding lineage-wide descendant clamping to the founder clamp does not change the categorical verdict — the bridge remains NOT_FOUND under Label B.
-- ✓ The descendant-clamp listener fires on every newborn (1539/1539), single-channel-patches every body, halts loud on any non-`sensor_radius` field difference (zero failures across the corpus), and disconnects in `finally` blocks.
+- ✓ The categorical verdict does not change between founder-only clamp (B) and lineage-wide clamp (C) — both NOT_FOUND under Label B. **Caveat:** see the Headline caveat above; B and C produced byte-identical paired_d cells because no descendant drift occurred pre-patch.
+- ✓ The descendant-clamp listener fires on every newborn (1539/1539), executes a single-channel `dataclasses.replace` write on every body, runs the single-channel invariant on each (zero failures across the corpus), and disconnects in `finally` blocks. **Caveat:** every one of the 1539 writes was a no-op — the body's `sensor_radius` was already 4 before the patch ran, so the post-patch body is byte-identical to the pre-patch body. The listener's *implementation* is sound; the listener's *empirical workload* on this corpus was zero meaningful patches.
 - ✓ The `model.trait_fingerprints` audit-truth lock holds (test #9 enforces zero AST references in the v0.51 audit script).
 
 What v0.51 does NOT establish:
@@ -622,14 +626,14 @@ What v0.51 does NOT establish:
 
 The v0.46→v0.51 stack: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → that contribution survives shifted-top + permuted founder positions → and the founder-clamp NOT_FOUND result is preserved under lineage-wide clamping (with the structural caveat that descendants did not drift to non-4 values in the first place).
 
-### v0.52 candidates (open; not locked)
+### Next-step candidates (open; not locked)
 
-Per the pre-reg's "Open framing" + new follow-ups suggested by v0.51's structural finding:
+Per the pre-reg's "Open framing" + new follow-ups suggested by v0.51's structural finding. Recommended next slice is **v0.52 metabolic-cost decoupling** — the next mechanistic ambiguity in the v0.49–v0.51 stack. The descendant-drift calibration follow-up is optional and only needs running if the descendant-drift question itself is judged worth re-opening.
 
-- **v0.52 — `sensor_radius_metabolic_cost = 0`**. Decouples sensing radius from metabolic burden; isolates "information radius" from "metabolic cost". Independent of v0.51's descendant-drift question.
-- **v0.53 — cross-layout generalisation**. Run v0.48–v0.51 on `widened_gradient` and / or `food_ladder`. Layouts with different reproduction schedules may produce non-zero descendant drift in `sensor_radius` and let v0.51's C-vs-B contrast become live.
-- **Larger mutation-noise calibration probe**. A slice that runs the v0.51 listener under a perturbed `TraitConfig` with elevated `sensor_radius` mutation noise would probe whether the C arm's empirical equivalence to B is V0_25-specific or a general feature of the integer-quantized mutation pipeline.
-- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.51 conclusion stack — needed for any "mechanism" declaration.
+- **v0.52 — `sensor_radius_metabolic_cost = 0` (recommended next).** Decouples sensing radius from metabolic burden; isolates "information radius" from "metabolic cost". v0.49–v0.51 strongly implicate `sensor_radius`, but `sensor_radius` still means two things at once: (1) wider sensing / information access, (2) higher metabolic cost. v0.52 distinguishes these channels and is independent of v0.51's descendant-drift question.
+- **v0.53 — cross-layout generalisation.** Run v0.48–v0.51 on `widened_gradient` and / or `food_ladder`. Layouts with different reproduction schedules may produce non-zero descendant drift in `sensor_radius` and would let v0.51's C-vs-B contrast become live, independent of any new intervention.
+- **Calibration follow-up only — elevated mutation-noise probe.** A slice that re-runs the v0.51 listener under a perturbed `TraitConfig` with elevated `sensor_radius` mutation noise would probe whether the C arm's empirical equivalence to B is V0_25-specific or a general feature of integer-quantized mutation. **Optional**; only worth running if the descendant-drift question is judged worth re-opening as a first-class slice. Not a blocker for v0.52.
+- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.51 conclusion stack — needed for any "mechanism" declaration. Not next-step; longer-horizon.
 
 ### CI gate at v0.51 close
 
