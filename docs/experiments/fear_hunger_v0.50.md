@@ -30,7 +30,7 @@ The v0.50 design follows v0.49's **post-`HHModel`-construction body-patch patter
 
 ## Trait-covariance preflight (already completed)
 
-A descriptive preflight (`scripts/v0_50_founder_trait_covariance_preflight.py`, committed at `d8c3e20` on this branch) computed Pearson and Spearman correlations between `founder_sensor_radius` and the other 12 founder trait fields across 160 unique founder rows (32 unique seeds × 5 founders). All correlations |ρ| < 0.15 (max: `metabolic_rate` ρ = −0.144, `novelty_drive` ρ = −0.136, `pain_tolerance` ρ = +0.134). **v0.49's "trait covariance" confound is closed cheaply**; v0.50 can focus purely on the position confound without worrying about other founder traits piggybacking on `sensor_radius` variation.
+A descriptive preflight (`scripts/v0_50_founder_trait_covariance_preflight.py`, committed at `d8c3e20` on this branch) computed Pearson and Spearman correlations between `founder_sensor_radius` and the other 12 founder trait fields across 160 unique founder rows (32 unique seeds × 5 founders). All correlations |ρ| < 0.15 (max: `metabolic_rate` ρ = −0.144, `novelty_drive` ρ = −0.136, `pain_tolerance` ρ = +0.134). **Trait covariance is low-priority for v0.50**: pairwise founder-trait correlations with `sensor_radius` are small in this corpus, so v0.50 focuses on the position confound. Pairwise correlations do not exclude nonlinear or interaction effects; trait covariance remains a deferred consideration for future slices, just not the next-step priority.
 
 ## Corpus (locked, 64 × 3 arms = 192 runs)
 
@@ -56,7 +56,7 @@ lineage 3 → (x=1, y=3)
 lineage 4 → (x=1, y=4)
 ```
 
-All 5 founders share `x=1`, distance 4 (Manhattan) from nearest food cell at tick 0. Food fills `x∈[5,8]` for ALL y, so tick-0 distance is uniform. The y-coordinate matters only via post-tick dynamics: edge topology (lineage 0 at y=0 has only y=1 as a y-neighbor; lineages 1..3 have both y±1; lineage 4 at y=4 has y=3 and y=5), capacity-1 contention, and asymmetric placement vs the layout center y=3 (V0_25's set has mean y=2.0, which is one below center).
+All 5 founders share `x=1`, distance 4 (Manhattan) from nearest food cell at tick 0. Food fills `x∈[5,8]` for ALL y, so tick-0 distance is uniform. The y-coordinate matters only via post-tick dynamics: **edge topology** (lineage 0 at the global y=0 grid edge has only y=1 as a y-neighbor; lineages 1..3 have both y±1; lineage 4 at y=4 has y=3 and y=5 — non-edge), capacity-1 contention, and bottom-skewed placement vs the geometric mid-row of the height-6 grid (which lies between y=2 and y=3 at 2.5; V0_25's mean y=2.0 sits half a row below). A height-6 grid cannot host a perfectly centered contiguous 5-row band: the only two contiguous options are `[0,1,2,3,4]` (bottom-skewed; mean 2.0) and `[1,2,3,4,5]` (top-skewed; mean 3.0). Neither is "centered" in the geometric sense.
 
 ## Arms (locked, 3)
 
@@ -64,23 +64,23 @@ All 5 founders share `x=1`, distance 4 (Manhattan) from nearest food cell at tic
 
 No patch. Founder positions per V0_25 default. Byte-identical to v0.48/v0.49 A_null.
 
-### B_position_centered
+### B_position_shifted_top
 
 For each (version, seed, hazard) tuple, after `HHModel(...)` returns and inside `setup_observer`:
 
 1. Identify the 5 founders sorted by `body.lineage_id`.
-2. Patch each founder to a centered y-position at the same `spawn_x`:
+2. Patch each founder to a top-shifted y-position at the same `spawn_x`:
    ```
-   centered_y = [1, 2, 3, 4, 5]  # symmetric around layout center y=3
+   shifted_y = [1, 2, 3, 4, 5]  # contiguous top-shifted band; reflects V0_25's [0..4] band
    for i, agent in enumerate(founders):
-       new_x, new_y = layout.spawn_x, centered_y[i]   # = 1, centered_y[i]
+       new_x, new_y = layout.spawn_x, shifted_y[i]   # = 1, shifted_y[i]
        agent.body = dataclasses.replace(agent.body, x=new_x, y=new_y)
        agent.cell = model.cell_at(new_x, new_y)
    ```
 3. Assert single-channel invariant: every non-(x,y) field of original body equals the corresponding field of patched body. Assert all 5 patched cells are distinct.
 4. Capture per-founder `original_x`, `original_y`, `assigned_x`, `assigned_y` to the v0.50 audit.
 
-**Choice rationale (locked, pre-data).** V0_25's default places founders at y ∈ [0,1,2,3,4] — asymmetric (mean y=2.0; one below the layout center y=3). The "centered" pattern y ∈ [1,2,3,4,5] is the contiguous-5-cell arrangement whose y-distribution is symmetric around y=3 (mean y=3.0). It minimizes the position asymmetry that drives V0_25's lineage-id ↔ structural-y correlation while preserving capacity-1 distinctness. Both edges of the height-6 grid still hold one founder each (y=1 and y=5 each have one extreme position), but neither lineage 0 nor lineage 4 carries a unique edge-topology asymmetry the way V0_25's lineage 0 does (y=0 is the only founder at the global y=0 edge).
+**Choice rationale (locked, pre-data).** A height-6 grid cannot perfectly center a contiguous 5-row band; the geometric mid-row is at y=2.5. The only two contiguous-5-cell options are `[0,1,2,3,4]` (V0_25 default — bottom-skewed, mean 2.0) and `[1,2,3,4,5]` (this arm — top-shifted, mean 3.0). `B_position_shifted_top` is **NOT** an "equalized" or "centered" placement. It is a **reflected band**: it transfers global-edge exposure from lineage 0 (which sits at y=0 in V0_25, the only founder touching the bottom grid edge) to lineage 4 (which sits at y=5 under shifted-top, the only founder touching the top grid edge). Other edge-topology asymmetries are mirrored. If the v0.48 bridge was driven by a *specific* lineage-id ↔ position structure under V0_25, B's reflected placement should perturb it; if the bridge depends on the underlying band geometry rather than its lineage-id assignment, B's signal will mirror A_null's. v0.50 thus tests whether the bridge is invariant under band reflection.
 
 ### C_position_permuted
 
@@ -139,7 +139,7 @@ Each arm gates on Label A AND Label B (no Label A degeneracy in v0.50 since `sen
 | arm | sub-verdicts |
 |---|---|
 | A_null | `A_NULL_BRIDGE_PRESENT` / `_PARTIAL` / `_NOT_FOUND` / `_OPPOSITE_SIGN_HALT` |
-| B_position_centered | `B_POS_CENTERED_BRIDGE_PRESENT` / `_PARTIAL` / `_NOT_FOUND` / `_OPPOSITE_SIGN_HALT` |
+| B_position_shifted_top | `B_POS_SHIFTED_TOP_BRIDGE_PRESENT` / `_PARTIAL` / `_NOT_FOUND` / `_OPPOSITE_SIGN_HALT` |
 | C_position_permuted | `C_POS_PERM_BRIDGE_PRESENT` / `_PARTIAL` / `_NOT_FOUND` / `_OPPOSITE_SIGN_HALT` |
 
 Conditions per sub-verdict (identical for all three arms; no diagnostic-only label):
@@ -164,11 +164,11 @@ Priority order (first-matching wins):
 | 1 | `CORPUS_REDERIVE_DRIFT_HALT` | A_null arm `a_share_h8` drifts > 1e-3 from v0.42/44/45 published | "Halt: A_null re-anchor drifted from the published Results value for {version}; v0.50's deterministic re-execution does not reproduce the published metric within 1e-3." |
 | 2 | `INTERVENTION_OPPOSITE_SIGN_HALT` | any arm gating-label primary signed_d ≤ −0.5 | "Halt: a v0.50 spatial / foraging primary fires in the WRONG direction under a gating label; the founder-position intervention is incompatible with the locked expected signs." |
 | 3 | `BRIDGE_REPLICATION_HALT` | A_null cell drift > 1e-3 vs v0.48 published OR A_null sub-verdict ≠ PRESENT | "Halt: v0.50's A_null arm does not reproduce v0.48's spatial bridge — either a paired_d cell drifts beyond 1e-3 of the published value, or the A_null sub-verdict does not resolve to PRESENT. v0.50 cannot interpret the B / C arms without an established baseline." |
-| 4 | `SENSOR_RADIUS_ROBUST_TO_POSITION` | (A_null PRESENT, B PRESENT, C PRESENT) | "v0.49's sensor_radius causal contribution survives founder-position controls on the modern A_null corpus: the v0.48 spatial / foraging bridge fires under both centered and permuted founder positions." |
-| 5 | `SENSOR_RADIUS_POSITION_INTERACTION_SUPPORTED` | A_null PRESENT AND (B sub-verdict ∈ {NOT_FOUND, PARTIAL} OR C sub-verdict ∈ {NOT_FOUND, PARTIAL}) | "v0.49's sensor_radius causal contribution shows position interaction on the modern A_null corpus: the v0.48 spatial / foraging bridge weakens under at least one position intervention." |
-| 6 | `SENSOR_RADIUS_POSITION_INTERACTION_MIXED` | A_null PRESENT AND any other non-halt (B, C) combination | "v0.49's sensor_radius causal contribution shows mixed evidence under founder-position controls; the v0.48 spatial / foraging bridge does not resolve cleanly under the locked criteria." |
+| 4 | `SENSOR_RADIUS_ROBUST_TO_POSITION` | (A_null PRESENT, B PRESENT, C PRESENT) | "v0.49's sensor_radius causal contribution survives founder-position controls on the modern A_null corpus: the v0.48 spatial / foraging bridge fires under both shifted-top and permuted founder positions." |
+| 5 | `SENSOR_RADIUS_POSITION_INTERACTION_SUPPORTED` | A_null PRESENT AND BOTH (B sub-verdict ∈ {PARTIAL, NOT_FOUND}) AND (C sub-verdict ∈ {PARTIAL, NOT_FOUND}) | "v0.49's sensor_radius causal contribution shows position interaction on the modern A_null corpus: the v0.48 spatial / foraging bridge weakens under both shifted-top and permuted founder-position interventions." |
+| 6 | `SENSOR_RADIUS_POSITION_INTERACTION_MIXED` | A_null PRESENT AND exactly one of (B, C) is PRESENT and the other is in {PARTIAL, NOT_FOUND} | "v0.49's sensor_radius causal contribution shows position interaction asymmetrically on the modern A_null corpus: the v0.48 spatial / foraging bridge weakens under exactly one of (shifted-top, permuted) founder-position interventions." |
 
-The rollup is conservative: ROBUST is the only outcome that says "v0.49's claim survives"; INTERACTION_SUPPORTED says "position is involved" without claiming to identify a single mechanism; MIXED is the catch-all for indeterminate combinations.
+The rollup is conservative and partitions the post-A_null-PRESENT space cleanly: ROBUST = both arms PRESENT; SUPPORTED = both arms weaken; MIXED = exactly one arm weakens. Every non-halt (B, C) combination maps to exactly one rollup. (When A_null is not PRESENT, `BRIDGE_REPLICATION_HALT` fires at priority 3 and the B/C interpretations are unreachable by design.)
 
 ### Bridge re-anchor against v0.48 (priority 3, byte-level halt)
 
@@ -198,7 +198,7 @@ B / C arms re-derive their own `a_share_h8` for descriptive logging; do NOT gate
 
 ## Cautious framing (per CLAUDE.md)
 
-- "**Survives founder-position controls**" — NOT "**proves position is irrelevant**". v0.50 tests two specific position interventions (centered, permuted); other position manipulations remain unprobed.
+- "**Survives founder-position controls**" — NOT "**proves position is irrelevant**". v0.50 tests two specific position interventions (shifted-top reflected band, permuted assignment); other position manipulations remain unprobed.
 - "**Shows position interaction**" — NOT "**position is the cause**". A weakened bridge under B or C indicates position contributes; it does not isolate the mechanism.
 - "**On the modern A_null corpus**" / "**under the locked V0_25 anchor**" — NOT a chamber-config-independent claim.
 - v0.50 does not establish: cross-layout generalisation, sensor_radius mechanism (information vs cost), trait-position interactions beyond position alone, descendant-position effects.
@@ -255,7 +255,7 @@ runs/v0.50-position-confound/audit_log.txt
 1. Fresh script `scripts/v0_50_founder_position_audit.py`. CLI: `uv run python scripts/v0_50_founder_position_audit.py [--out-dir runs/v0.50-position-confound]`.
 2. Per (version, seed, hazard) tuple, run **3 arms**. Every arm constructs `HHModel` via the normal A_null path (`FounderSpec(traits_override=None)`):
    - **A_null**: no patch.
-   - **B_position_centered**: inside `setup_observer`, before tick-0 capture, replace each founder's `body.x`/`body.y` with `(spawn_x, centered_y[founder_index])` and update `agent.cell`. Assert single-channel invariant + distinct cells.
+   - **B_position_shifted_top**: inside `setup_observer`, before tick-0 capture, replace each founder's `body.x`/`body.y` with `(spawn_x, shifted_y[founder_index])` (where `shifted_y = [1, 2, 3, 4, 5]`) and update `agent.cell`. Assert single-channel invariant + distinct cells.
    - **C_position_permuted**: inside `setup_observer`, generate non-identity permutation via `np.random.default_rng(seed).permutation(5)` (rotate-by-one fallback). Permute the 5 original `(x, y)` tuples across founders. Patch bodies + cells. Assert single-channel invariant + distinct cells.
 3. For each arm-run, attach v0.48-style `setup_observer` + `tick_observer` (copy-local from v0.48/v0.49). The setup_observer applies the position patch (B / C) before capturing tick 0. Capture per-tick records for ticks 0..50 inclusive (51 snapshots); `AgentBorn` / `AteFood` / `HazardDamageApplied` listeners filtered by `sender=model`.
 4. Aggregate per-lineage primaries identical to v0.48/v0.49. Compute label A and label B per the arm.
@@ -272,25 +272,25 @@ The reducer is fully self-contained: it reads no `runs/` artifacts. Wall time ~1
 `tests/test_v0_50_founder_position_audit.py`:
 
 1. `test_all_arms_construct_founders_via_normal_a_null_path` — all three arms invoke `FounderSpec` with `traits_override=None`; original founder positions captured from live bodies are byte-identical across arms for the same seed.
-2. `test_b_centered_patch_replaces_only_x_y_on_live_bodies` — construct `HHModel` for one tuple; capture pre-patch founder bodies; apply B patch; assert all founders at `(spawn_x, centered_y[i])` and every other body field byte-identical to pre-patch.
+2. `test_b_shifted_top_patch_replaces_only_x_y_on_live_bodies` — construct `HHModel` for one tuple; capture pre-patch founder bodies; apply B patch; assert all founders at `(spawn_x, shifted_y[i])` and every other body field byte-identical to pre-patch.
 3. `test_a_null_arm_streams_mutation_state_byte_identical_across_arms` — for the same seed, original founder traits (full Traits records) captured at setup_observer time are byte-identical across arms (the patch never consumes `streams.mutation`).
 4. `test_c_position_permutation_is_non_identity` — when the helper RNG draws identity, rotate-by-one fallback fires; `assigned_xy != original_xy` for at least one founder.
 5. `test_c_position_patch_replaces_only_x_y_on_live_bodies` — apply C patch; assert non-(x,y) body fields byte-identical to pre-patch; assigned `(x, y)` set is a permutation of the original set.
-6. `test_b_centered_y_pattern_is_symmetric_around_layout_center` — for `tight_gradient` (height=6, center y=3), assert centered_y = `[1, 2, 3, 4, 5]` (mean = 3.0) vs V0_25's `[0, 1, 2, 3, 4]` (mean = 2.0).
+6. `test_b_shifted_top_band_is_top_shifted_reflection_of_v025` — for `tight_gradient` (height=6), assert `shifted_y = [1, 2, 3, 4, 5]` (mean 3.0; lineage 4 at the top edge y=5) vs V0_25's `[0, 1, 2, 3, 4]` (mean 2.0; lineage 0 at the bottom edge y=0). The two bands are reflected: edge-exposure transfers from lineage 0 (V0_25) to lineage 4 (B). Neither band is centered on the geometric mid-row y=2.5.
 7. `test_capacity_1_invariant_preserved_after_patch` — under each of B and C, all 5 patched cells are pairwise distinct.
 8. `test_mesa_cell_pointer_aligned_after_patch` — after patch, `agent.cell.coordinate == (agent.body.x, agent.body.y)` for every founder.
 9. `test_per_arm_subverdict_a_null_present_requires_both_labels_clear` — synthetic paired_d under A_null such that label A (+0.6, +0.7, −0.3) and label B (+0.6, +0.8, −0.2); assert sub-verdict = `A_NULL_BRIDGE_PRESENT`.
-10. `test_per_arm_subverdict_b_centered_partial_when_only_one_label_clears` — synthetic where label A clears 2/3 but label B clears 1/3 under B; assert sub-verdict = `B_POS_CENTERED_BRIDGE_PARTIAL`.
-11. `test_rollup_robust_when_all_three_arms_present` — synthetic (PRESENT, PRESENT, PRESENT); assert rollup = `SENSOR_RADIUS_ROBUST_TO_POSITION`.
-12. `test_rollup_position_interaction_supported_when_b_not_found` — synthetic (PRESENT, NOT_FOUND, PRESENT); assert rollup = `SENSOR_RADIUS_POSITION_INTERACTION_SUPPORTED`.
-13. `test_rollup_position_interaction_supported_when_c_partial` — synthetic (PRESENT, PRESENT, PARTIAL); assert rollup = `SENSOR_RADIUS_POSITION_INTERACTION_SUPPORTED`.
-14. `test_rollup_mixed_for_other_non_halt_combinations` — synthetic (PRESENT, NOT_FOUND, PARTIAL); assert rollup = `SENSOR_RADIUS_POSITION_INTERACTION_MIXED`. (Both B and C non-PRESENT, but C is PARTIAL not NOT_FOUND, so the pattern is asymmetric and not the canonical "interaction-supported" shape.) **Verify this maps to MIXED per priority logic** — actually since B is NOT_FOUND, INTERACTION_SUPPORTED priority-5 fires before MIXED. Test instead with (PRESENT, PARTIAL, PARTIAL) → SUPPORTED (B is PARTIAL, which is in {NOT_FOUND, PARTIAL}). For MIXED, need (PRESENT, PRESENT, PRESENT) — but that's ROBUST. So MIXED has no triggering combination under the priority logic. **Update**: per the locked priority, MIXED is unreachable when A_null = PRESENT and the other two arms each fall in {PRESENT, PARTIAL, NOT_FOUND}. The MIXED bucket exists for verdict-completeness but the only realizable path is via A_null sub-verdict change (which would trigger BRIDGE_REPLICATION_HALT first). Test #14 instead asserts that the rollup logic does NOT fire MIXED when ROBUST or SUPPORTED conditions are met. Locked: see test code for the disambiguation.
+10. `test_per_arm_subverdict_b_shifted_top_partial_when_only_one_label_clears` — synthetic where label A clears 2/3 but label B clears 1/3 under B; assert sub-verdict = `B_POS_SHIFTED_TOP_BRIDGE_PARTIAL`.
+11. `test_rollup_robust_when_all_three_arms_present` — synthetic (A_null PRESENT, B PRESENT, C PRESENT); assert rollup = `SENSOR_RADIUS_ROBUST_TO_POSITION`.
+12. `test_rollup_supported_when_both_b_and_c_weaken` — synthetic (A_null PRESENT, B NOT_FOUND, C NOT_FOUND); assert rollup = `SENSOR_RADIUS_POSITION_INTERACTION_SUPPORTED`. Also test (PRESENT, PARTIAL, NOT_FOUND), (PRESENT, NOT_FOUND, PARTIAL), and (PRESENT, PARTIAL, PARTIAL) — all four "both arms in {PARTIAL, NOT_FOUND}" combinations resolve to SUPPORTED.
+13. `test_rollup_mixed_when_exactly_one_arm_weakens` — synthetic (A_null PRESENT, B PRESENT, C NOT_FOUND); assert rollup = `SENSOR_RADIUS_POSITION_INTERACTION_MIXED`. Also test (PRESENT, NOT_FOUND, PRESENT), (PRESENT, PRESENT, PARTIAL), (PRESENT, PARTIAL, PRESENT) — all four "exactly one arm in {PARTIAL, NOT_FOUND}" combinations resolve to MIXED.
+14. `test_rollup_partition_is_total_under_a_null_present` — exhaustively iterate the 9 (B sub-verdict ∈ {PRESENT, PARTIAL, NOT_FOUND}, C sub-verdict ∈ {PRESENT, PARTIAL, NOT_FOUND}) combinations under A_null PRESENT; assert each maps to exactly one of {ROBUST, SUPPORTED, MIXED}. Counts: ROBUST = 1, SUPPORTED = 4, MIXED = 4.
 15. `test_bridge_replication_halt_on_signed_d_drift` — synthesise A_null cells where one drifts +1.5; assert `BRIDGE_REPLICATION_HALT`.
 16. `test_corpus_rederive_drift_halt_priority_over_bridge_replication_halt` — synthesise both halt conditions; assert priority-1 `CORPUS_REDERIVE_DRIFT_HALT` fires first.
 
 ## Watch-outs (for future-Chronus)
 
-- **B may not be metabolic-equivalent to A_null.** Centered positions interact with hazard cells (`x∈[3,4]`) and food cell respawn dynamics differently than V0_25's bottom-skewed placement. If B's bridge weakens, v0.50 cannot disentangle "position itself" from "downstream metabolic / hazard-encounter consequences of the new position".
+- **B may not be metabolic-equivalent to A_null.** The shifted-top band `[1..5]` interacts with hazard cells (`x∈[3,4]`) and food cell respawn dynamics differently than V0_25's bottom-skewed `[0..4]` placement. If B's bridge weakens, v0.50 cannot disentangle "band reflection itself" from "downstream metabolic / hazard-encounter consequences of the new placement".
 - **`AgentBody` is `@dataclass(frozen=True)`; `HHAgent.body` is reassignable**, and Mesa's `CellAgent.cell` setter handles cell occupancy updates automatically (verified at mesa_agents.py:184–187 for the action-step pattern). v0.50's patch reuses this idiom for tick-0 placement.
 - **Patch order matters.** Inside `setup_observer`: (1) read original positions, (2) compute permutation (C only), (3) patch each body + cell pointer, (4) assert distinctness, (5) capture founder audit + tick-0 snapshot. The patch must happen before any food/hazard listener fires (none should at tick 0 since no step has run yet).
 - **Helper RNG isolation** (same as v0.49): the C-arm permutation RNG never touches `streams.mutation`, never seeds from any model state. Test #3 enforces.
