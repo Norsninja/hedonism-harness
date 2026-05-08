@@ -460,6 +460,10 @@ The v0.53 result is `BRIDGE_PARTIALLY_GENERALIZES` with a structurally interpret
 
 User has not locked which slice is next; the v0.53 result is consistent with multiple readings.
 
+### Implementation note on setup_observer order
+
+Pre-reg implementation plan step 4 specifies setup_observer order as: (a) founder audit, (b) listeners, (c) tick 0 snapshot, (d) layout-invariant assert. The merged implementation runs the layout-invariant assert *before* the tick 0 snapshot — i.e., (a), (b), (c) layout assert, (d) tick 0. Both operations are read-only and execute before any `model.step()`, so the swap is semantically null (no observable / RNG / world-state difference). The script's docstring at `_make_setup_observer` documents the actual order; the pre-reg's text is preserved as the historical-record contract per CLAUDE.md "pre-reg stands as the historical record; do not retrofit it after results". Future v0.5N slices that copy the pre-reg template should treat the layout-assert and tick 0 capture as commutative reads — order is irrelevant given both are pre-dynamics. Logged here pre-PR to prevent a review nit.
+
 ### CI gate at v0.53 close
 
 ```

@@ -405,7 +405,10 @@ def _make_setup_observer(
     """setup_observer factory: read-only founder audit, layout invariant,
     listeners, tick 0 capture.
 
-    Order (locked by pre-reg):
+    Order (this implementation; pre-reg step 4 specifies (c) and (d)
+    swapped — see Results note "Implementation note on setup_observer
+    order"; both are read-only pre-dynamics so the difference is
+    semantically null):
       (a) capture v0.53 founder audit table from live bodies (read-only).
       (b) wire AgentBorn (lineage tracking) / AteFood / HazardDamageApplied
           listeners (sender=model).
