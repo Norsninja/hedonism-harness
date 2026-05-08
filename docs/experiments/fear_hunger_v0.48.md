@@ -262,4 +262,99 @@ No other files modified.
 
 ## Results
 
-(appended after reducer execution)
+**Status:** reducer executed 2026-05-08 against the 64-run modern A_null corpus (v0.42 / v0.43R / v0.44 / v0.45, h ∈ {0, 8}, 8 seeds per (version, hazard) bucket). All re-anchors PASS (drift ≤ 0.0003 ≪ 1e-3 tolerance). All 3 primary observables fire under **both** labels with 0 wrong-sign firings under either; AND-gate satisfied.
+
+### Verdict — `SENSOR_RADIUS_SPATIAL_BRIDGE_PRESENT` fires
+
+> **Locked phrase fires verbatim:** "Founder `sensor_radius` advantage co-occurs with a pre-50 spatial / foraging advantage that also tracks tick-50 readiness fraction on the modern A_null corpus."
+
+3/3 primaries fire under label A (`high_sensor_radius_lineage`); 3/3 fire under label B (`high_tick50_readiness_fraction_lineage`); 0/3 wrong-sign under either. AND-gate trivially satisfied.
+
+### Paired Cohen's d per (label, primary observable) — all six cells fire
+
+#### Label A — `high_sensor_radius_lineage`
+
+| # | observable | sign | paired_d | signed_d | n_runs | fires |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| 1 | `pre50_food_events_count` | + | +1.066 | **+1.066** | 64 | **YES** |
+| 2 | `pre50_food_energy_acquired` | + | +1.066 | **+1.066** | 64 | **YES** |
+| 3 | `mean_distance_to_nearest_food_cell` | − | −1.916 | **+1.916** | 64 | **YES** |
+
+#### Label B — `high_tick50_readiness_fraction_lineage`
+
+| # | observable | sign | paired_d | signed_d | n_runs | fires |
+|---|---|:-:|:-:|:-:|:-:|:-:|
+| 1 | `pre50_food_events_count` | + | +0.916 | **+0.916** | 64 | **YES** |
+| 2 | `pre50_food_energy_acquired` | + | +0.916 | **+0.916** | 64 | **YES** |
+| 3 | `mean_distance_to_nearest_food_cell` | − | −1.179 | **+1.179** | 64 | **YES** |
+
+All 64 runs contributed to every cell's pool (zero NaN drops; every run had ≥ 1 living agent in both A and B labels' lineages across the window).
+
+### Re-anchor — all three published versions PASS
+
+| version | n_runs | derived `a_share_h8` | published | |drift| | halt |
+|---|:-:|:-:|:-:|:-:|:-:|
+| v0.42  | 8 | 0.652 | 0.652 | 0.0003 | no |
+| v0.43R | 8 | 0.674 | — (halted, non-citable) | — | n/a |
+| v0.44  | 8 | 0.878 | 0.878 | 0.0001 | no |
+| v0.45  | 8 | 0.818 | 0.818 | 0.0002 | no |
+
+Re-anchor confirms v0.48's deterministic re-execution reproduces each version's published `a_share_h8` to within the published precision (3 decimals; tolerance 1e-3) — identical halt-tolerances as v0.46 / v0.47.
+
+### Label A / Label B agreement
+
+```
+agreement_rate = 35 / 64 = 0.547
+```
+
+The two labels pick the **same** lineage in roughly half of runs and **different** lineages in the other half. Despite this disagreement, both labels independently produce strong same-direction signals on all three spatial / foraging primaries — i.e., even when the highest-`sensor_radius` lineage is *not* the highest-readiness-fraction lineage, both lineages still tend to be closer to food, eat more often, and acquire more food energy than their non-labelled peers in the same run.
+
+### Reading the result correlationally
+
+The locked phrase is **correlational, not causal**:
+
+- **Distance to nearest food** is the strongest signal under both labels (signed_d = +1.916 under A, +1.179 under B; large effects). Lineages selected by either label are, on average, ~2 Manhattan cells closer to a live food cell than their non-labelled peers across ticks 0..50 (label A delta_mean = −2.00; label B delta_mean = −1.74).
+- **Pre-50 food event count and pre-50 food energy acquired** fire identically under each label (signed_d = +1.066 under A; +0.916 under B). They are perfectly proportional on this corpus because `AteFood.food_gained` is a constant 20.0 per event under V0_25's `WorldConfig` defaults — see Caveats. Treating them as two distinct observables nominally spreads the "fires count" across two cells of the locked 6-cell paired_d table; in practice they form a single information channel.
+- **Cross-label echo of v0.36 + v0.47.** v0.36 found `sensor_radius` aligned-flat under b50/winner labels; v0.47 fired `sensor_radius` as the only firing primary trait under the readiness-fraction label (signed_d = +0.937). v0.48 now shows that *both* readiness-fraction and `sensor_radius` argmax lineages share a common pre-50 spatial / foraging signature on the same A_null corpus. The bridge is consistent with — but does not establish — a causal chain `sensor_radius → spatial advantage → readiness`.
+
+### What v0.48 establishes (and what it does not)
+
+- ✓ **Establishes**: on the modern A_null corpus, the lineage selected by `argmax(founder_sensor_radius)` and the lineage selected by `argmax(tick50_above_threshold_fraction)` *both* exhibit pre-50 spatial / foraging advantages along all three locked primaries with large paired effect sizes; the bridge holds simultaneously under both labels with zero wrong-sign firings.
+- ✗ **Does not establish**: that `sensor_radius` *causes* the spatial advantage, that the spatial advantage *causes* readiness, or that any of these in turn *cause* dominance. The chain is observational, not interventional.
+- ✗ **Does not rule out** confounders: founder spawn position, founder energy at tick 0, lineage-internal trait correlations beyond `sensor_radius`, or lucky early-tick food-cell proximity. v0.48 is a same-corpus reducer; it cannot disentangle these.
+- ✗ **Does not generalise** beyond the locked V0_25 anchor (tight_gradient + GradientPolicy + auto_reproduction=True + unbounded_mutation + transfer-pool funding + ambient_influx_rate=1.0).
+
+### Caveats
+
+- **Observables #1 and #2 are perfectly proportional on this corpus.** `AteFood.food_gained` is a constant 20.0 per event under V0_25's defaults (verified post-hoc via the per-lineage CSV: ratio `pre50_food_energy_acquired / pre50_food_events_count == 20.0` exactly for every (run, lineage) row with non-zero events). Their paired_d values are therefore identical under each label by construction. The pre-reg's 3-observable primary set effectively has 2 independent dimensions on this corpus; the AND-gate over both labels (6 cells, 4 effectively-independent) still cleanly fires `_PRESENT` since observable #3 (distance) is a genuinely independent channel and fires strongly under both labels.
+- **Agreement rate of 0.547 is itself a finding.** The two labels disagree on ~46% of runs yet produce concordant spatial-bridge signals. This is consistent with `sensor_radius` and tick-50 readiness fraction being partial — not redundant — proxies for the same underlying foraging-success structure; it is not consistent with one being a strict subset of the other.
+- **Tautology pressure on observables #1 and #2 vs. label B.** Lineages with higher tick-50 readiness fraction must have more living agents at tick 50, which (loosely) requires more pre-50 food acquisition. Label B's firings on observables #1 and #2 are therefore partially anticipated by the label's own definition; observable #3 (distance) is the cleanest test under label B because it does not directly depend on the readiness predicate. Distance still fires at +1.179 under label B — the bridge is not an artefact of definitional overlap.
+- **Cross-version pooling** valid by H2e regression on each version's branch (A_null arms byte-identical to `optional_intervention=None`); identical pooling discipline as v0.46 / v0.47.
+- **No claim about post-tick-200 dynamics**, no claim about other layouts (open_field / hazard_band), no claim about non-V0_25 anchors.
+
+### Cross-corpus echo, not replication
+
+v0.48 is the third slice in which `sensor_radius` (or its surrounding spatial/readiness structure) shows a same-direction signal on a related corpus:
+
+| slice | corpus | label | finding |
+|---|---|---|---|
+| v0.36 | v0.34's 96-run lineage corpus | b50/winner | `sensor_radius` aligned-flat |
+| v0.47 | modern A_null 64 (v0.42..v0.45) | tick-50 readiness fraction | `sensor_radius` only firing primary trait, signed_d = +0.937 |
+| v0.48 | modern A_null 64 | both `sensor_radius` argmax AND readiness-fraction argmax | all 3 spatial primaries fire under both labels |
+
+These are **echoes**, not independent replications: v0.47 and v0.48 share the same 64-run corpus, and v0.36's corpus differs in seeds + intervention substrate. Treat the cumulative evidence as cautious convergent support for `sensor_radius`-linked spatial sorting, not as cross-corpus replication.
+
+### v0.49 candidate (open; not locked)
+
+If a fresh-stream calibration is judged worth running, v0.49 could be a **first-class intervention slice**: clamp `sensor_radius` at fixed values across founders (eliminating the heritability-correlation channel) and observe whether the spatial / foraging primaries continue to track `tick50_above_threshold_fraction`. That would isolate the `sensor_radius → space` arrow from the `sensor_radius → other-trait → space` confound. Alternatives: equalise food access, scramble food visibility, or randomise founder spawn position. v0.48 explicitly does NOT escalate to causality on its own.
+
+### CI gate at v0.48 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1615 passed, 7 skipped (was 1601, +14 v0.48)
+uv run python scripts/core_smoke_test.py                           ok
+uv run python scripts/v0_48_sensor_radius_spatial_bridge_audit.py  SENSOR_RADIUS_SPATIAL_BRIDGE_PRESENT
+```
+
