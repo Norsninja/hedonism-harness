@@ -119,8 +119,15 @@ def observe(
     """Build an ``Observation`` from world + body (+ optional memory).
 
     Pure: does not mutate any input.
+
+    v0.52 information-channel seam: when ``body_config.effective_sensor_radius_override``
+    is set (default ``None``), the override value is used as the sensing
+    radius for the four axial scans below AND for ``_read_memory_directional``'s
+    ValenceMemory branch (via the same body_config). ``apply_metabolism`` is
+    NOT affected — it continues to read ``body.traits.sensor_radius`` directly.
     """
-    radius = int(body.traits.sensor_radius)
+    override = body_config.effective_sensor_radius_override
+    radius = override if override is not None else int(body.traits.sensor_radius)
     energy_ratio = body.energy / body_config.max_energy
     health_ratio = body.health / body_config.max_health
 
@@ -141,7 +148,7 @@ def observe(
         else CellKind.EMPTY
     )
 
-    memory_signals = _read_memory_directional(memory, body, world)
+    memory_signals = _read_memory_directional(memory, body, world, body_config)
 
     return Observation(
         energy_ratio=energy_ratio,
@@ -180,7 +187,7 @@ _MEMORY_KEYS: tuple[str, ...] = (
 
 
 def _read_memory_directional(
-    memory: object | None, body: AgentBody, world: World
+    memory: object | None, body: AgentBody, world: World, body_config: BodyConfig
 ) -> dict[str, float]:
     """Return the eight memory-direction fields as a dict.
 
@@ -188,14 +195,21 @@ def _read_memory_directional(
 
       - ``None`` -> all zeros (no memory, the v0.1 default).
       - ``ValenceMemory`` (cell-exact) -> axial scan of ``pleasure_ema /
-        distance`` and ``pain_ema / distance`` to ``traits.sensor_radius``.
+        distance`` and ``pain_ema / distance`` to ``traits.sensor_radius``
+        (or to ``body_config.effective_sensor_radius_override`` when set;
+        v0.52 information-channel seam).
       - ``DirectionalMemory`` (v0.11 chemotaxis-style) -> direct read
-        of the 4-vector tendencies; no spatial scan.
+        of the 4-vector tendencies; no spatial scan; ``body_config`` and
+        ``body`` are unused on this branch.
     """
     if isinstance(memory, ValenceMemory):
-        return directional_signals(memory, body.x, body.y, int(body.traits.sensor_radius))
+        override = body_config.effective_sensor_radius_override
+        radius = override if override is not None else int(body.traits.sensor_radius)
+        return directional_signals(memory, body.x, body.y, radius)
     if isinstance(memory, DirectionalMemory):
         _ = world  # silence unused for the directional branch
+        _ = body_config  # silence unused; DirectionalMemory does not consume sensor_radius
         return directional_signals_directional(memory)
     _ = world  # silence unused for the None / unknown-shape branch
+    _ = body_config  # silence unused for the None / unknown-shape branch
     return dict.fromkeys(_MEMORY_KEYS, 0.0)
