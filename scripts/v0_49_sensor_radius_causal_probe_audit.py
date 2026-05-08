@@ -1,0 +1,1650 @@
+"""v0.49 sensor_radius causal probe (clamp + permutation; first-class intervention).
+
+Pre-reg: [[docs/experiments/fear_hunger_v0.49.md]]. Question: if the
+founder-level sensor_radius distribution is removed (clamp) or reassigned
+(permutation) at tick 0, does the v0.48 pre-50 spatial / foraging bridge
+persist, weaken, reverse, or disappear?
+
+Corpus (locked, same as v0.46/v0.47/v0.48): A_null arm only across v0.42 /
+v0.43R / v0.44 / v0.45, hazards {0, 8}, seeds 41..72 (8 per version,
+disjoint). 64 runs per arm; 3 arms; 192 runs total.
+
+Arms (locked):
+  A_null:           normal V0_25 founder draw.
+  B_sensor_radius_founder_clamp_4:
+                    after HHModel construction, inside setup_observer,
+                    every founder body has traits.sensor_radius set to 4
+                    (single-channel: only sensor_radius changes).
+  C_sensor_radius_founder_permutation:
+                    after HHModel construction, inside setup_observer,
+                    permute the sensor_radius values across the 5 founder
+                    bodies. Permutation drawn from a script-local helper
+                    RNG; rotate-by-one fallback if identity drawn.
+
+Per-reg "Pre-implementation correction (2026-05-08)": all arms use
+``FounderSpec(traits_override=None)`` and rely on the model's normal
+trait-draw + agent-RNG path. The intervention is applied as a body-trait
+patch inside the reducer's ``setup_observer`` callback before any
+``model.step()`` runs. This preserves single-channel intervention
+(``streams.mutation`` byte-identical across arms at tick 0).
+
+Primary observables (locked, identical to v0.48):
+  pre50_food_events_count           (+)
+  pre50_food_energy_acquired        (+)
+  mean_distance_to_nearest_food_cell(-)
+
+Labels:
+  Label A (high_sensor_radius_lineage): argmax(founder_sensor_radius),
+    min(lineage_id) tiebreak. Under arm C uses ASSIGNED sensor_radius.
+    Under arm B degenerates to lineage 0 (5-way tie); diagnostic-only.
+  Label B (high_tick50_readiness_fraction_lineage): identical to v0.47
+    / v0.48 (3-tier tiebreak fraction -> count -> min(lineage_id)).
+
+Effect-size rule (locked, sign-aware, identical to v0.48):
+  signed_d = paired_d * expected_sign
+  fires iff signed_d >= +0.5
+  halts iff signed_d <= -0.5
+
+Per-arm sub-verdicts (locked):
+  A_null:     A_NULL_BRIDGE_PRESENT / _PARTIAL / _NOT_FOUND / _OPPOSITE_SIGN_HALT
+  B_clamp_4:  B_CLAMP_LABEL_B_BRIDGE_PRESENT / _NOT_FOUND / _OPPOSITE_SIGN_HALT
+  C_perm:     C_PERM_BRIDGE_PRESENT / _PARTIAL / _NOT_FOUND / _OPPOSITE_SIGN_HALT
+
+Slice rollup (locked, priority-ordered):
+  1. CORPUS_REDERIVE_DRIFT_HALT
+  2. INTERVENTION_OPPOSITE_SIGN_HALT
+  3. BRIDGE_REPLICATION_HALT
+  4. SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED
+  5. SENSOR_RADIUS_CAUSAL_CONTRIBUTION_NOT_SUPPORTED
+  6. SENSOR_RADIUS_CAUSAL_CONTRIBUTION_MIXED
+
+Conservation framing (interventional, not observational): no ``src/``
+modifications, no new sweep arms, no modifications to prior reducer or
+audit scripts. ``model.trait_fingerprints`` is left untouched (records
+original, pre-patch traits); v0.49 captures its own founder audit from
+live bodies after the patch.
+
+Usage:
+    uv run python scripts/v0_49_sensor_radius_causal_probe_audit.py
+    uv run python scripts/v0_49_sensor_radius_causal_probe_audit.py \
+        --out-dir runs/v0.49-causal-probe
+"""
+
+from __future__ import annotations
+
+import argparse
+import csv
+import dataclasses
+import math
+import statistics
+import tempfile
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+
+import numpy as np
+
+from hedonism_harness.core.events import (
+    AgentBorn,
+    AteFood,
+    HazardDamageApplied,
+    signal_for,
+)
+from hedonism_harness.core.interventions import KIND_NULL, InterventionConfig
+from hedonism_harness.core.traits import TraitConfig, Traits
+from hedonism_harness.experiments.comparison_grid import (
+    FIXED_ENERGY_COST,
+    FIXED_ENERGY_THRESHOLD,
+    V0_42_INTERVENTION_ARMS,
+    V0_43R_INTERVENTION_ARMS,
+    V0_44_INTERVENTION_ARMS,
+    V0_45_INTERVENTION_ARMS,
+    Arm,
+    _resolve_layout,
+    tuned_reproduction_config,
+)
+from hedonism_harness.experiments.fear_hunger_chamber import run_chamber
+from hedonism_harness.model import HHModel
+
+# ---------------------------------------------------------------------------
+# Locked configuration (pre-reg)
+# ---------------------------------------------------------------------------
+
+SEEDS_BY_VERSION: dict[str, tuple[int, ...]] = {
+    "v0.42": tuple(range(41, 49)),
+    "v0.43R": tuple(range(49, 57)),
+    "v0.44": tuple(range(57, 65)),
+    "v0.45": tuple(range(65, 73)),
+}
+
+HAZARDS: tuple[int, ...] = (0, 8)
+N_TICKS: int = 200
+N_FOUNDERS: int = 5
+TICK_50: int = 50
+LAYOUT_NAME: str = "tight_gradient"
+
+# Arms (locked).
+ARM_A_NULL: str = "A_null"
+ARM_B_CLAMP_4: str = "B_sensor_radius_founder_clamp_4"
+ARM_C_PERMUTATION: str = "C_sensor_radius_founder_permutation"
+ARMS: tuple[str, ...] = (ARM_A_NULL, ARM_B_CLAMP_4, ARM_C_PERMUTATION)
+
+CLAMP_VALUE: int = 4
+
+# Hardcoded re-anchor reference values (A_null arm only).
+PUBLISHED_A_SHARE_H8: dict[str, float | None] = {
+    "v0.42": 0.652,
+    "v0.43R": None,
+    "v0.44": 0.878,
+    "v0.45": 0.818,
+}
+RE_ANCHOR_DRIFT_TOLERANCE: float = 1e-3
+
+COHENS_D_THRESHOLD: float = 0.5
+
+EXPECTED_FOUNDERS: int = 5
+
+# Primary observables with locked expected signs (identical to v0.48).
+PRIMARY_OBSERVABLES: tuple[tuple[str, int], ...] = (
+    ("pre50_food_events_count", +1),
+    ("pre50_food_energy_acquired", +1),
+    ("mean_distance_to_nearest_food_cell", -1),
+)
+
+# Label fields and names.
+LABEL_A_FIELD = "is_high_sensor_radius_lineage"
+LABEL_B_FIELD = "is_high_tick50_readiness_fraction_lineage"
+LABEL_A_NAME = "label_a_sensor_radius"
+LABEL_B_NAME = "label_b_readiness_fraction"
+
+# v0.48's published bridge cells (label, observable) -> signed_d.
+# Source: docs/experiments/fear_hunger_v0.48.md Results section.
+V048_PUBLISHED_SIGNED_D: dict[tuple[str, str], float] = {
+    (LABEL_A_NAME, "pre50_food_events_count"): +1.066,
+    (LABEL_A_NAME, "pre50_food_energy_acquired"): +1.066,
+    (LABEL_A_NAME, "mean_distance_to_nearest_food_cell"): +1.916,
+    (LABEL_B_NAME, "pre50_food_events_count"): +0.916,
+    (LABEL_B_NAME, "pre50_food_energy_acquired"): +0.916,
+    (LABEL_B_NAME, "mean_distance_to_nearest_food_cell"): +1.179,
+}
+
+# Per-arm sub-verdicts.
+SUBVERDICT_A_NULL_PRESENT = "A_NULL_BRIDGE_PRESENT"
+SUBVERDICT_A_NULL_PARTIAL = "A_NULL_BRIDGE_PARTIAL"
+SUBVERDICT_A_NULL_NOT_FOUND = "A_NULL_BRIDGE_NOT_FOUND"
+SUBVERDICT_A_NULL_OPPOSITE = "A_NULL_BRIDGE_OPPOSITE_SIGN_HALT"
+
+SUBVERDICT_B_CLAMP_PRESENT = "B_CLAMP_LABEL_B_BRIDGE_PRESENT"
+SUBVERDICT_B_CLAMP_NOT_FOUND = "B_CLAMP_LABEL_B_BRIDGE_NOT_FOUND"
+SUBVERDICT_B_CLAMP_OPPOSITE = "B_CLAMP_LABEL_B_OPPOSITE_SIGN_HALT"
+
+SUBVERDICT_C_PERM_PRESENT = "C_PERM_BRIDGE_PRESENT"
+SUBVERDICT_C_PERM_PARTIAL = "C_PERM_BRIDGE_PARTIAL"
+SUBVERDICT_C_PERM_NOT_FOUND = "C_PERM_BRIDGE_NOT_FOUND"
+SUBVERDICT_C_PERM_OPPOSITE = "C_PERM_BRIDGE_OPPOSITE_SIGN_HALT"
+
+# Slice rollup verdicts (locked, priority-ordered).
+ROLLUP_CORPUS_DRIFT_HALT = "CORPUS_REDERIVE_DRIFT_HALT"
+ROLLUP_INTERVENTION_OPPOSITE_HALT = "INTERVENTION_OPPOSITE_SIGN_HALT"
+ROLLUP_BRIDGE_REPLICATION_HALT = "BRIDGE_REPLICATION_HALT"
+ROLLUP_CAUSAL_SUPPORTED = "SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED"
+ROLLUP_CAUSAL_NOT_SUPPORTED = "SENSOR_RADIUS_CAUSAL_CONTRIBUTION_NOT_SUPPORTED"
+ROLLUP_CAUSAL_MIXED = "SENSOR_RADIUS_CAUSAL_CONTRIBUTION_MIXED"
+
+# Locked phrases (verbatim per pre-reg).
+LOCKED_PHRASES: dict[str, str] = {
+    ROLLUP_CORPUS_DRIFT_HALT: (
+        "Halt: A_null re-anchor drifted from the published Results value for {version}; "
+        "v0.49's deterministic re-execution does not reproduce the published metric within 1e-3."
+    ),
+    ROLLUP_INTERVENTION_OPPOSITE_HALT: (
+        "Halt: a v0.49 spatial / foraging primary fires in the WRONG direction under a "
+        "gating label; the founder-trait intervention is incompatible with the locked "
+        "expected signs."
+    ),
+    ROLLUP_BRIDGE_REPLICATION_HALT: (
+        "Halt: v0.49's A_null arm does not reproduce v0.48's spatial bridge — either a "
+        "paired_d cell drifts beyond 1e-3 of the published value, or the A_null sub-verdict "
+        "does not resolve to PRESENT. v0.49 cannot interpret the B / C arms without an "
+        "established baseline."
+    ),
+    ROLLUP_CAUSAL_SUPPORTED: (
+        "Founder sensor_radius variation supports a causal contribution to the v0.48 pre-50 "
+        "spatial / foraging bridge: the bridge follows reassigned founder sensor_radius and "
+        "weakens when founder variation is removed."
+    ),
+    ROLLUP_CAUSAL_NOT_SUPPORTED: (
+        "Founder sensor_radius variation is not supported as a causal contributor to the "
+        "v0.48 pre-50 spatial / foraging bridge: the bridge persists without founder "
+        "variation and does not follow reassigned founder sensor_radius."
+    ),
+    ROLLUP_CAUSAL_MIXED: (
+        "Founder sensor_radius variation shows mixed evidence as a causal contributor to "
+        "the v0.48 pre-50 spatial / foraging bridge: the B / C arms do not resolve cleanly "
+        "under the locked criteria."
+    ),
+}
+
+FOUNDER_TRAIT_NAMES: tuple[str, ...] = (
+    "reproduction_drive",
+    "metabolic_rate",
+    "sensor_radius",
+)
+
+
+class V049ReducerError(Exception):
+    """Halt condition raised when a v0.49 invariant is violated."""
+
+
+# ---------------------------------------------------------------------------
+# Per-run capture (per-arm)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class _TickRecord:
+    """Per-tick snapshot of living-agent positions + food/hazard cells."""
+
+    tick: int
+    agents: list[tuple[int, int, int, int, int]] = field(default_factory=list)
+    food_cells: tuple[tuple[int, int], ...] = ()
+    hazard_cells: tuple[tuple[int, int], ...] = ()
+
+
+@dataclass
+class _Tick50Readiness:
+    """Tick-50 readiness-predicate snapshot per living agent."""
+
+    agent_id: int
+    lineage_id: int
+    energy: float
+    age: int
+
+
+@dataclass
+class _FounderRecord:
+    """Per-founder original / assigned trait snapshot for the audit."""
+
+    lineage_id: int
+    founder_index: int  # 0..4 in lineage-id order
+    original_sensor_radius: int
+    assigned_sensor_radius: int
+    original_reproduction_drive: float
+    original_metabolic_rate: float
+    permutation_map_index: int  # for C only; equals founder_index for A/B
+    applied_identity_rotation_fallback: bool  # for C only; False for A/B
+
+
+@dataclass
+class _RunCapture:
+    """Everything captured during one (arm, version, seed, hazard) run."""
+
+    arm: str
+    version: str
+    seed: int
+    hazard: int
+    tick_records: dict[int, _TickRecord] = field(default_factory=dict)
+    tick50_readiness: list[_Tick50Readiness] = field(default_factory=list)
+    birth_tick_by_agent: dict[int, int] = field(default_factory=dict)
+    lineage_by_agent: dict[int, int] = field(default_factory=dict)
+    founder_records: list[_FounderRecord] = field(default_factory=list)
+    pre50_food_events_by_agent: dict[int, int] = field(default_factory=dict)
+    pre50_food_energy_by_agent: dict[int, float] = field(default_factory=dict)
+    pre50_hazard_damage_events_by_agent: dict[int, int] = field(default_factory=dict)
+    n_observer_fires: int = 0
+    energy_threshold: float = 0.0
+    min_age: int = 0
+    effective_sensor_radius_changed_count: int = 0
+
+
+def _select_a_null_arm(version: str, hazard: int) -> Arm:
+    """Pull the A_null arm for ``hazard`` from the version's INTERVENTION_ARMS tuple."""
+    armset = {
+        "v0.42": V0_42_INTERVENTION_ARMS,
+        "v0.43R": V0_43R_INTERVENTION_ARMS,
+        "v0.44": V0_44_INTERVENTION_ARMS,
+        "v0.45": V0_45_INTERVENTION_ARMS,
+    }[version]
+    candidates = [a for a in armset if "A_null" in a.label and a.hazard_damage == hazard]
+    if len(candidates) != 1:
+        msg = (
+            f"v0.49: failed to find unique A_null arm for {version} h={hazard}; "
+            f"got {len(candidates)} candidates"
+        )
+        raise V049ReducerError(msg)
+    return candidates[0]
+
+
+# ---------------------------------------------------------------------------
+# Founder-trait patch (per arm)
+# ---------------------------------------------------------------------------
+
+
+def _compute_permutation_with_rotate_fallback(
+    rng: np.random.Generator, n: int
+) -> tuple[list[int], bool]:
+    """Draw a permutation of range(n); rotate-by-one if identity drawn.
+
+    Returns ``(perm, applied_fallback)``. The fallback fires only when
+    the drawn permutation is exactly the identity, guaranteeing a
+    non-identity permutation for every C-arm run.
+    """
+    drawn = rng.permutation(n)
+    if list(int(x) for x in drawn) == list(range(n)):
+        return [(i + 1) % n for i in range(n)], True
+    return [int(x) for x in drawn], False
+
+
+def _assert_single_channel_invariant(
+    original: Traits, assigned: Traits, arm: str, lineage_id: int
+) -> None:
+    """Assert every Traits field except sensor_radius is byte-identical."""
+    for f in dataclasses.fields(original):
+        name = f.name
+        if name == "sensor_radius":
+            continue
+        if getattr(original, name) != getattr(assigned, name):
+            msg = (
+                f"v0.49 single-channel invariant violated under arm {arm} "
+                f"lineage_id={lineage_id}: field {name!r} differs between "
+                f"original ({getattr(original, name)!r}) and assigned "
+                f"({getattr(assigned, name)!r})"
+            )
+            raise V049ReducerError(msg)
+
+
+def _apply_founder_patch(arm: str, seed: int, model: HHModel, capture: _RunCapture) -> None:
+    """Patch founder body traits per the arm spec; record originals + assigned.
+
+    Called inside the reducer's setup_observer, after HHModel construction
+    and before any model.step() runs. Single-channel by construction:
+    only the sensor_radius field on each founder body is replaced.
+    """
+    founders = sorted(model.agents, key=lambda a: int(a.body.lineage_id))
+    if len(founders) != EXPECTED_FOUNDERS:
+        msg = (
+            f"v0.49 invariant: expected exactly {EXPECTED_FOUNDERS} founders "
+            f"at setup_observer time; got {len(founders)}"
+        )
+        raise V049ReducerError(msg)
+
+    # Snapshot original sensor_radii (and full Traits per founder) BEFORE any patch.
+    original_traits_per_founder: list[Traits] = [a.body.traits for a in founders]
+    original_sr: list[int] = [int(t.sensor_radius) for t in original_traits_per_founder]
+
+    # Compute permutation map (identity for A/B; possibly non-identity for C).
+    perm: list[int]
+    applied_fallback = False
+    if arm == ARM_C_PERMUTATION:
+        perm, applied_fallback = _compute_permutation_with_rotate_fallback(
+            np.random.default_rng(seed), EXPECTED_FOUNDERS
+        )
+    else:
+        perm = list(range(EXPECTED_FOUNDERS))
+
+    # Determine assigned sensor_radius per founder.
+    assigned_sr: list[int]
+    if arm == ARM_A_NULL:
+        assigned_sr = list(original_sr)
+    elif arm == ARM_B_CLAMP_4:
+        assigned_sr = [CLAMP_VALUE] * EXPECTED_FOUNDERS
+    elif arm == ARM_C_PERMUTATION:
+        assigned_sr = [original_sr[perm[i]] for i in range(EXPECTED_FOUNDERS)]
+    else:
+        msg = f"v0.49: unknown arm {arm!r}"
+        raise V049ReducerError(msg)
+
+    # Apply the patch and assert single-channel invariant.
+    for i, agent in enumerate(founders):
+        original = original_traits_per_founder[i]
+        assigned = dataclasses.replace(original, sensor_radius=int(assigned_sr[i]))
+        _assert_single_channel_invariant(original, assigned, arm, int(agent.body.lineage_id))
+        if arm != ARM_A_NULL:
+            agent.body = dataclasses.replace(agent.body, traits=assigned)
+
+    # Record founder audit and effective changed count.
+    changed = sum(1 for i in range(EXPECTED_FOUNDERS) if assigned_sr[i] != original_sr[i])
+    capture.effective_sensor_radius_changed_count = changed
+    for i, agent in enumerate(founders):
+        capture.founder_records.append(
+            _FounderRecord(
+                lineage_id=int(agent.body.lineage_id),
+                founder_index=i,
+                original_sensor_radius=original_sr[i],
+                assigned_sensor_radius=int(assigned_sr[i]),
+                original_reproduction_drive=float(
+                    original_traits_per_founder[i].reproduction_drive
+                ),
+                original_metabolic_rate=float(original_traits_per_founder[i].metabolic_rate),
+                permutation_map_index=int(perm[i]),
+                applied_identity_rotation_fallback=applied_fallback,
+            )
+        )
+
+
+# ---------------------------------------------------------------------------
+# Per-tick capture (read-only)
+# ---------------------------------------------------------------------------
+
+
+def _capture_tick_record(model: HHModel, tick_label: int, capture: _RunCapture) -> None:
+    """Read-only snapshot of living-agent positions + food/hazard cells."""
+    if tick_label in capture.tick_records:
+        return
+    capture.n_observer_fires += 1
+    record = _TickRecord(tick=tick_label)
+    for agent in model.agents:
+        body = getattr(agent, "body", None)
+        if body is None or not getattr(body, "alive", False):
+            continue
+        traits = body.traits
+        record.agents.append(
+            (
+                int(body.id),
+                int(body.lineage_id),
+                int(body.x),
+                int(body.y),
+                int(traits.sensor_radius),
+            )
+        )
+    food_mask = np.asarray(model.world.food_value) > 0
+    food_xs, food_ys = np.where(food_mask)
+    record.food_cells = tuple(zip(food_xs.tolist(), food_ys.tolist(), strict=True))
+    hazard_mask = np.asarray(model.world.hazard_damage) > 0
+    hazard_xs, hazard_ys = np.where(hazard_mask)
+    record.hazard_cells = tuple(zip(hazard_xs.tolist(), hazard_ys.tolist(), strict=True))
+    capture.tick_records[tick_label] = record
+
+
+def _make_setup_observer(
+    arm: str,
+    seed: int,
+    capture: _RunCapture,
+    disconnect_callbacks: list[Callable[[], None]],
+) -> Callable[[HHModel], None]:
+    """setup_observer factory: applies founder patch, then captures tick 0."""
+
+    def setup(model: HHModel) -> None:
+        # 1. Apply founder-trait patch (B/C) or no-op (A_null).
+        _apply_founder_patch(arm, seed, model, capture)
+
+        # 2. Build lineage_by_agent + birth_tick_by_agent for the patched founders.
+        for agent in model.agents:
+            body = getattr(agent, "body", None)
+            if body is None:
+                continue
+            lineage_id = int(body.lineage_id)
+            capture.lineage_by_agent[int(body.id)] = lineage_id
+            capture.birth_tick_by_agent[int(body.id)] = 0
+
+        # 3. Listener for non-founder births; filtered by sender=model.
+        def _on_agent_born(_sender: object, *, event: AgentBorn) -> None:
+            capture.birth_tick_by_agent[int(event.agent_id)] = int(event.tick)
+            capture.lineage_by_agent[int(event.agent_id)] = int(event.lineage_id)
+
+        signal_for(AgentBorn).connect(_on_agent_born, sender=model)
+        disconnect_callbacks.append(
+            lambda: signal_for(AgentBorn).disconnect(_on_agent_born, sender=model)
+        )
+
+        # 4. AteFood / HazardDamageApplied listeners filtered to tick <= 50.
+        def _on_ate_food(_sender: object, *, event: AteFood) -> None:
+            if int(model.tick_count) > TICK_50:
+                return
+            aid = int(event.agent_id)
+            capture.pre50_food_events_by_agent[aid] = (
+                capture.pre50_food_events_by_agent.get(aid, 0) + 1
+            )
+            capture.pre50_food_energy_by_agent[aid] = capture.pre50_food_energy_by_agent.get(
+                aid, 0.0
+            ) + float(event.food_gained)
+
+        def _on_hazard_damage(_sender: object, *, event: HazardDamageApplied) -> None:
+            if int(model.tick_count) > TICK_50:
+                return
+            aid = int(event.agent_id)
+            capture.pre50_hazard_damage_events_by_agent[aid] = (
+                capture.pre50_hazard_damage_events_by_agent.get(aid, 0) + 1
+            )
+
+        signal_for(AteFood).connect(_on_ate_food, sender=model)
+        signal_for(HazardDamageApplied).connect(_on_hazard_damage, sender=model)
+        disconnect_callbacks.append(
+            lambda: signal_for(AteFood).disconnect(_on_ate_food, sender=model)
+        )
+        disconnect_callbacks.append(
+            lambda: signal_for(HazardDamageApplied).disconnect(_on_hazard_damage, sender=model)
+        )
+
+        capture.energy_threshold = float(model.reproduction_config.energy_threshold)
+        capture.min_age = int(model.reproduction_config.min_age)
+
+        # 5. Capture tick 0 snapshot AFTER the patch is applied.
+        _capture_tick_record(model, tick_label=0, capture=capture)
+
+    return setup
+
+
+def _make_per_tick_observer(capture: _RunCapture) -> Callable[[HHModel], None]:
+    """tick_observer factory: snapshots ticks 1..50 (tick 0 captured at setup)."""
+
+    def observer(model: HHModel) -> None:
+        tick = int(model.tick_count)
+        if tick == 0 or tick > TICK_50:
+            return
+        _capture_tick_record(model, tick_label=tick, capture=capture)
+        if tick == TICK_50:
+            for agent in model.agents:
+                body = getattr(agent, "body", None)
+                if body is None or not getattr(body, "alive", False):
+                    continue
+                capture.tick50_readiness.append(
+                    _Tick50Readiness(
+                        agent_id=int(body.id),
+                        lineage_id=int(body.lineage_id),
+                        energy=float(body.energy),
+                        age=int(body.age),
+                    )
+                )
+
+    return observer
+
+
+def _run_one_arm(arm: str, version: str, seed: int, hazard: int, runs_root: Path) -> _RunCapture:
+    """Execute one (arm, version, seed, hazard) run, returning its capture."""
+    if arm not in ARMS:
+        msg = f"v0.49: unknown arm {arm!r}"
+        raise V049ReducerError(msg)
+    base_arm = _select_a_null_arm(version, hazard)
+    layout = _resolve_layout(LAYOUT_NAME)
+    repro_kwargs: dict[str, float] = {
+        "energy_threshold": (
+            base_arm.energy_threshold
+            if base_arm.energy_threshold is not None
+            else FIXED_ENERGY_THRESHOLD
+        ),
+        "energy_cost": (
+            base_arm.energy_cost if base_arm.energy_cost is not None else FIXED_ENERGY_COST
+        ),
+    }
+    if base_arm.offspring_start_energy is not None:
+        repro_kwargs["offspring_start_energy"] = base_arm.offspring_start_energy
+    repro_cfg = tuned_reproduction_config(**repro_kwargs)
+    trait_cfg = TraitConfig(unbounded_mutation=True)
+
+    capture = _RunCapture(arm=arm, version=version, seed=seed, hazard=hazard)
+    disconnects: list[Callable[[], None]] = []
+    base_setup = _make_setup_observer(arm, seed, capture, disconnects)
+
+    def setup(model: HHModel) -> None:
+        model.auto_reproduction_enabled = base_arm.auto_reproduction
+        base_setup(model)
+
+    use_memory = base_arm.memory_type is not None
+    memory_type = base_arm.memory_type or "cell_exact"
+
+    optional_intervention: InterventionConfig | None = None
+    if base_arm.intervention_kind is not None:
+        optional_intervention = InterventionConfig(kind=base_arm.intervention_kind)
+    if optional_intervention is not None and optional_intervention.kind != KIND_NULL:
+        msg = (
+            f"v0.49: base arm must be A_null only; got "
+            f"intervention_kind={base_arm.intervention_kind!r}"
+        )
+        raise V049ReducerError(msg)
+
+    run_id = f"{arm}-{version}-A_null-hzd{hazard}-seed-{seed}"
+    try:
+        run_chamber(
+            seed=seed,
+            runs_root=runs_root,
+            run_id=run_id,
+            n_founders=N_FOUNDERS,
+            n_ticks=N_TICKS,
+            layout=layout,
+            policy_factory=base_arm.policy_factory,
+            trait_config=trait_cfg,
+            reproduction_config=repro_cfg,
+            use_memory=use_memory,
+            memory_type=memory_type,
+            food_respawn_cooldown=base_arm.food_respawn_cooldown,
+            energy_pool_initial=base_arm.energy_pool_initial,
+            ambient_influx_rate=base_arm.ambient_influx_rate,
+            child_funding_mode=base_arm.child_funding_mode,
+            hazard_damage=base_arm.hazard_damage,
+            hazard_avoidance_weight=base_arm.hazard_avoidance_weight,
+            condition=f"v0.49-{arm}-{version}-A_null-hzd{hazard}",
+            setup_observer=setup,
+            tick_observer=_make_per_tick_observer(capture),
+            optional_intervention=optional_intervention,
+        )
+    finally:
+        for disconnect in disconnects:
+            disconnect()
+
+    expected_ticks = TICK_50 + 1
+    if len(capture.tick_records) != expected_ticks:
+        msg = (
+            f"v0.49 invariant: per-tick observer must capture {expected_ticks} ticks for "
+            f"{run_id}; got {len(capture.tick_records)}"
+        )
+        raise V049ReducerError(msg)
+    if len(capture.founder_records) != EXPECTED_FOUNDERS:
+        msg = (
+            f"v0.49 invariant: expected exactly {EXPECTED_FOUNDERS} founder records for "
+            f"{run_id}; got {len(capture.founder_records)}"
+        )
+        raise V049ReducerError(msg)
+    return capture
+
+
+# ---------------------------------------------------------------------------
+# Per-lineage row + label assignment
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class PerLineageRow:
+    arm: str
+    version: str
+    seed: int
+    hazard: int
+    run_id: str
+    lineage_id: int
+    original_sensor_radius: int
+    assigned_sensor_radius: int
+    intervention_delta: int  # assigned - original
+    founder_reproduction_drive: float
+    founder_metabolic_rate: float
+    pre50_food_events_count: int
+    pre50_food_energy_acquired: float
+    mean_distance_to_nearest_food_cell: float  # NaN if no living agents over 0..50
+    tick50_living_count: int
+    tick50_above_threshold_count: int
+    tick50_above_threshold_fraction: float  # NaN if 0 living at tick 50
+    b50_count: int
+    is_eventual_top_b50_label: bool
+    is_high_sensor_radius_lineage: bool
+    is_high_tick50_readiness_fraction_lineage: bool
+    label_a_gating_valid: bool
+    label_a_degenerate_reason: str  # "" if not degenerate
+    effective_sensor_radius_changed_count: int
+
+
+PER_LINEAGE_FIELDNAMES: list[str] = [
+    "arm",
+    "version",
+    "seed",
+    "hazard",
+    "run_id",
+    "lineage_id",
+    "original_sensor_radius",
+    "assigned_sensor_radius",
+    "intervention_delta",
+    "founder_reproduction_drive",
+    "founder_metabolic_rate",
+    "pre50_food_events_count",
+    "pre50_food_energy_acquired",
+    "mean_distance_to_nearest_food_cell",
+    "tick50_living_count",
+    "tick50_above_threshold_count",
+    "tick50_above_threshold_fraction",
+    "b50_count",
+    "is_eventual_top_b50_label",
+    "is_high_sensor_radius_lineage",
+    "is_high_tick50_readiness_fraction_lineage",
+    "label_a_gating_valid",
+    "label_a_degenerate_reason",
+    "effective_sensor_radius_changed_count",
+]
+
+
+def _manhattan_distance_to_nearest(
+    x: int, y: int, cells: tuple[tuple[int, int], ...]
+) -> float | None:
+    if not cells:
+        return None
+    return float(min(abs(cx - x) + abs(cy - y) for (cx, cy) in cells))
+
+
+def _per_tick_lineage_distance_means(
+    capture: _RunCapture,
+) -> dict[int, float]:
+    """Per-lineage mean distance to nearest food, aggregated per pre-reg.
+
+    Per-tick lineage mean over (agent's min Manhattan distance to nearest
+    food cell) for living agents at tick t in lineage L; then mean across
+    ticks 0..50 where the lineage had >= 1 living agent. Returns NaN when
+    the lineage has zero living agents across the entire window OR when
+    every contributing tick had zero food cells.
+    """
+    all_lineages = sorted(set(capture.lineage_by_agent.values()))
+    sums: dict[int, float] = dict.fromkeys(all_lineages, 0.0)
+    counts: dict[int, int] = dict.fromkeys(all_lineages, 0)
+    for tick in range(TICK_50 + 1):
+        record = capture.tick_records.get(tick)
+        if record is None:
+            continue
+        living_by_lineage: dict[int, list[tuple[int, int, int, int, int]]] = {}
+        for row in record.agents:
+            living_by_lineage.setdefault(row[1], []).append(row)
+        for lid, agents in living_by_lineage.items():
+            agent_distances: list[float] = []
+            for _aid, _lid, ax, ay, _r in agents:
+                d = _manhattan_distance_to_nearest(ax, ay, record.food_cells)
+                if d is not None:
+                    agent_distances.append(d)
+            if agent_distances:
+                sums[lid] = sums.get(lid, 0.0) + statistics.mean(agent_distances)
+                counts[lid] = counts.get(lid, 0) + 1
+    out: dict[int, float] = {}
+    for lid in all_lineages:
+        out[lid] = sums[lid] / counts[lid] if counts.get(lid, 0) > 0 else float("nan")
+    return out
+
+
+def _select_sensor_radius_label(
+    assigned_sensor_radius_by_lineage: dict[int, int],
+) -> int | None:
+    """argmax(assigned_sensor_radius), tiebreak min(lineage_id)."""
+    if not assigned_sensor_radius_by_lineage:
+        return None
+    best_lid: int | None = None
+    best_value = float("-inf")
+    for lid in sorted(assigned_sensor_radius_by_lineage):
+        v = float(assigned_sensor_radius_by_lineage[lid])
+        if v > best_value:
+            best_value = v
+            best_lid = lid
+    return best_lid
+
+
+def _select_fraction_label(
+    candidates: list[tuple[int, float, int]],
+) -> int | None:
+    """v0.47/v0.48 3-tier tiebreak: fraction -> count -> min(lineage_id).
+
+    Copy-local from v0.48 reducer to keep that script byte-identical.
+    """
+    if not candidates:
+        return None
+    best = candidates[0]
+    for cand in candidates[1:]:
+        if (
+            cand[1] > best[1]
+            or (cand[1] == best[1] and cand[2] > best[2])
+            or (cand[1] == best[1] and cand[2] == best[2] and cand[0] < best[0])
+        ):
+            best = cand
+    return best[0]
+
+
+def _aggregate_per_lineage(capture: _RunCapture) -> list[PerLineageRow]:  # noqa: PLR0912, PLR0915 — per-lineage aggregation is cohesive (b50 / pre50 / spatial / readiness / labels all consume the same capture).
+    """Roll up per-tick + per-event capture into per-lineage rows."""
+    all_lineages = sorted(set(capture.lineage_by_agent.values()))
+
+    # b50_count per lineage.
+    b50_by_lineage: dict[int, int] = dict.fromkeys(all_lineages, 0)
+    for aid, btick in capture.birth_tick_by_agent.items():
+        if btick > TICK_50:
+            lid = capture.lineage_by_agent.get(aid)
+            if lid is None:
+                msg = f"v0.49: agent_id {aid} has birth_tick {btick} but no lineage_id"
+                raise V049ReducerError(msg)
+            b50_by_lineage[lid] = b50_by_lineage.get(lid, 0) + 1
+    total_b50 = sum(b50_by_lineage.values())
+
+    eventual_top: int | None
+    if total_b50 == 0:
+        eventual_top = None
+    else:
+        best_id = -1
+        best_count = -1
+        for lid in sorted(all_lineages):
+            count = b50_by_lineage.get(lid, 0)
+            if count > best_count:
+                best_id = lid
+                best_count = count
+        eventual_top = best_id
+
+    # Tick-50 readiness predicate per lineage.
+    living_at_50_by_lineage: dict[int, list[_Tick50Readiness]] = {lid: [] for lid in all_lineages}
+    for snap in capture.tick50_readiness:
+        living_at_50_by_lineage.setdefault(snap.lineage_id, []).append(snap)
+
+    fraction_by_lineage: dict[int, float] = {}
+    count_by_lineage: dict[int, int] = {}
+    living_count_by_lineage: dict[int, int] = {}
+    for lid in all_lineages:
+        living = living_at_50_by_lineage.get(lid, [])
+        n_living = len(living)
+        living_count_by_lineage[lid] = n_living
+        n_above = sum(
+            1 for s in living if s.energy >= capture.energy_threshold and s.age >= capture.min_age
+        )
+        count_by_lineage[lid] = n_above
+        fraction_by_lineage[lid] = (n_above / n_living) if n_living > 0 else float("nan")
+
+    fraction_candidates = [
+        (lid, fraction_by_lineage[lid], count_by_lineage[lid])
+        for lid in all_lineages
+        if not math.isnan(fraction_by_lineage[lid])
+    ]
+    fraction_label = _select_fraction_label(fraction_candidates)
+
+    # Founder records keyed by lineage_id (assigned sensor_radius post-patch).
+    founder_by_lineage: dict[int, _FounderRecord] = {
+        rec.lineage_id: rec for rec in capture.founder_records
+    }
+    assigned_sr_by_lineage: dict[int, int] = {
+        lid: founder_by_lineage[lid].assigned_sensor_radius for lid in all_lineages
+    }
+    sensor_label = _select_sensor_radius_label(assigned_sr_by_lineage)
+
+    # Label A gating validity: degenerate under arm B (all founders clamped to 4).
+    label_a_gating_valid: bool
+    label_a_degenerate_reason: str
+    if capture.arm == ARM_B_CLAMP_4:
+        label_a_gating_valid = False
+        label_a_degenerate_reason = "all founders assigned sensor_radius=4"
+    else:
+        label_a_gating_valid = True
+        label_a_degenerate_reason = ""
+
+    # Distance metric per lineage.
+    distance_by_lineage = _per_tick_lineage_distance_means(capture)
+
+    # Pre-50 event counts per lineage.
+    pre50_food_events_by_lineage: dict[int, int] = dict.fromkeys(all_lineages, 0)
+    pre50_food_energy_by_lineage: dict[int, float] = {lid: 0.0 for lid in all_lineages}
+    pre50_hazard_damage_by_lineage: dict[int, int] = dict.fromkeys(all_lineages, 0)
+    for aid, lid in capture.lineage_by_agent.items():
+        pre50_food_events_by_lineage[lid] = pre50_food_events_by_lineage.get(
+            lid, 0
+        ) + capture.pre50_food_events_by_agent.get(aid, 0)
+        pre50_food_energy_by_lineage[lid] = pre50_food_energy_by_lineage.get(
+            lid, 0.0
+        ) + capture.pre50_food_energy_by_agent.get(aid, 0.0)
+        pre50_hazard_damage_by_lineage[lid] = pre50_hazard_damage_by_lineage.get(
+            lid, 0
+        ) + capture.pre50_hazard_damage_events_by_agent.get(aid, 0)
+    # Suppress unused-variable warning: hazard rollup is descriptive (not in row schema).
+    _ = pre50_hazard_damage_by_lineage
+
+    rows: list[PerLineageRow] = []
+    run_id = f"{capture.arm}-{capture.version}-A_null-hzd{capture.hazard}-seed-{capture.seed}"
+    for lid in all_lineages:
+        founder = founder_by_lineage[lid]
+        rows.append(
+            PerLineageRow(
+                arm=capture.arm,
+                version=capture.version,
+                seed=capture.seed,
+                hazard=capture.hazard,
+                run_id=run_id,
+                lineage_id=lid,
+                original_sensor_radius=founder.original_sensor_radius,
+                assigned_sensor_radius=founder.assigned_sensor_radius,
+                intervention_delta=founder.assigned_sensor_radius - founder.original_sensor_radius,
+                founder_reproduction_drive=float(founder.original_reproduction_drive),
+                founder_metabolic_rate=float(founder.original_metabolic_rate),
+                pre50_food_events_count=pre50_food_events_by_lineage.get(lid, 0),
+                pre50_food_energy_acquired=pre50_food_energy_by_lineage.get(lid, 0.0),
+                mean_distance_to_nearest_food_cell=distance_by_lineage.get(lid, float("nan")),
+                tick50_living_count=living_count_by_lineage[lid],
+                tick50_above_threshold_count=count_by_lineage[lid],
+                tick50_above_threshold_fraction=fraction_by_lineage[lid],
+                b50_count=b50_by_lineage.get(lid, 0),
+                is_eventual_top_b50_label=(eventual_top is not None and lid == eventual_top),
+                is_high_sensor_radius_lineage=(sensor_label is not None and lid == sensor_label),
+                is_high_tick50_readiness_fraction_lineage=(
+                    fraction_label is not None and lid == fraction_label
+                ),
+                label_a_gating_valid=label_a_gating_valid,
+                label_a_degenerate_reason=label_a_degenerate_reason,
+                effective_sensor_radius_changed_count=capture.effective_sensor_radius_changed_count,
+            )
+        )
+    return rows
+
+
+# ---------------------------------------------------------------------------
+# Effect-size + per-arm sub-verdicts
+# ---------------------------------------------------------------------------
+
+
+def _per_run_paired_delta(
+    rows_in_run: list[PerLineageRow], observable_field: str, label_field: str
+) -> float | None:
+    label_rows = [r for r in rows_in_run if getattr(r, label_field)]
+    if len(label_rows) != 1:
+        return None
+    label_value = getattr(label_rows[0], observable_field)
+    if isinstance(label_value, float) and math.isnan(label_value):
+        return None
+    non_label = [r for r in rows_in_run if not getattr(r, label_field)]
+    non_label_values = [
+        getattr(r, observable_field)
+        for r in non_label
+        if not (
+            isinstance(getattr(r, observable_field), float)
+            and math.isnan(getattr(r, observable_field))
+        )
+    ]
+    if not non_label_values:
+        return None
+    return float(label_value) - statistics.mean(non_label_values)
+
+
+def _paired_cohens_d(deltas: list[float]) -> float:
+    if len(deltas) < 2:
+        return float("nan")
+    mean = statistics.mean(deltas)
+    sd = statistics.stdev(deltas)
+    if sd == 0:
+        return float("nan")
+    return mean / sd
+
+
+@dataclass(frozen=True)
+class ObservableSummary:
+    arm: str
+    observable: str
+    label: str
+    sign: int
+    n_runs_contributing: int
+    paired_d: float
+    signed_d: float
+    delta_mean: float
+    delta_stdev: float
+    delta_min: float
+    delta_max: float
+    fires_expected: bool
+    fires_wrong: bool
+
+
+def _index_rows_by_arm_run(
+    rows: list[PerLineageRow],
+) -> dict[tuple[str, str, int, int], list[PerLineageRow]]:
+    out: dict[tuple[str, str, int, int], list[PerLineageRow]] = {}
+    for r in rows:
+        out.setdefault((r.arm, r.version, r.seed, r.hazard), []).append(r)
+    return out
+
+
+def _summarise_observable_for_arm(
+    *,
+    arm: str,
+    observable: str,
+    sign: int,
+    label: str,
+    label_field: str,
+    all_rows: list[PerLineageRow],
+    runs: list[tuple[str, int, int]],
+) -> ObservableSummary:
+    deltas: list[float] = []
+    by_arm_run = _index_rows_by_arm_run(all_rows)
+    for run_key in runs:
+        run_rows = by_arm_run.get((arm, run_key[0], run_key[1], run_key[2]), [])
+        delta = _per_run_paired_delta(run_rows, observable, label_field)
+        if delta is not None:
+            deltas.append(delta)
+    d = _paired_cohens_d(deltas)
+    if not deltas:
+        delta_mean = float("nan")
+        delta_min = float("nan")
+        delta_max = float("nan")
+    else:
+        delta_mean = statistics.mean(deltas)
+        delta_min = min(deltas)
+        delta_max = max(deltas)
+    delta_stdev = statistics.stdev(deltas) if len(deltas) >= 2 else float("nan")
+    signed_d = d * sign if not math.isnan(d) else d
+    fires_expected = (not math.isnan(signed_d)) and signed_d >= COHENS_D_THRESHOLD
+    fires_wrong = (not math.isnan(signed_d)) and signed_d <= -COHENS_D_THRESHOLD
+    return ObservableSummary(
+        arm=arm,
+        observable=observable,
+        label=label,
+        sign=sign,
+        n_runs_contributing=len(deltas),
+        paired_d=d,
+        signed_d=signed_d,
+        delta_mean=delta_mean,
+        delta_stdev=delta_stdev,
+        delta_min=delta_min,
+        delta_max=delta_max,
+        fires_expected=fires_expected,
+        fires_wrong=fires_wrong,
+    )
+
+
+def _arm_subverdict(  # noqa: PLR0911 — explicit per-arm verdict structure; collapsing branches would obscure the gating-label rules.
+    arm: str,
+    summaries_a: list[ObservableSummary],
+    summaries_b: list[ObservableSummary],
+) -> str:
+    """Per-arm sub-verdict per pre-reg gating rules."""
+    if arm == ARM_A_NULL:
+        n_wrong = sum(1 for s in summaries_a + summaries_b if s.fires_wrong)
+        if n_wrong > 0:
+            return SUBVERDICT_A_NULL_OPPOSITE
+        n_fire_a = sum(1 for s in summaries_a if s.fires_expected)
+        n_fire_b = sum(1 for s in summaries_b if s.fires_expected)
+        a_clears = n_fire_a >= 2
+        b_clears = n_fire_b >= 2
+        if a_clears and b_clears:
+            return SUBVERDICT_A_NULL_PRESENT
+        if a_clears != b_clears:
+            return SUBVERDICT_A_NULL_PARTIAL
+        return SUBVERDICT_A_NULL_NOT_FOUND
+    if arm == ARM_B_CLAMP_4:
+        # Only label B gates.
+        n_wrong = sum(1 for s in summaries_b if s.fires_wrong)
+        if n_wrong > 0:
+            return SUBVERDICT_B_CLAMP_OPPOSITE
+        n_fire_b = sum(1 for s in summaries_b if s.fires_expected)
+        if n_fire_b >= 2:
+            return SUBVERDICT_B_CLAMP_PRESENT
+        return SUBVERDICT_B_CLAMP_NOT_FOUND
+    if arm == ARM_C_PERMUTATION:
+        n_wrong = sum(1 for s in summaries_a + summaries_b if s.fires_wrong)
+        if n_wrong > 0:
+            return SUBVERDICT_C_PERM_OPPOSITE
+        n_fire_a = sum(1 for s in summaries_a if s.fires_expected)
+        n_fire_b = sum(1 for s in summaries_b if s.fires_expected)
+        a_clears = n_fire_a >= 2
+        b_clears = n_fire_b >= 2
+        if a_clears and b_clears:
+            return SUBVERDICT_C_PERM_PRESENT
+        if a_clears != b_clears:
+            return SUBVERDICT_C_PERM_PARTIAL
+        return SUBVERDICT_C_PERM_NOT_FOUND
+    msg = f"v0.49: unknown arm {arm!r} in subverdict"
+    raise V049ReducerError(msg)
+
+
+# ---------------------------------------------------------------------------
+# Re-anchor (corpus + bridge)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ReAnchorRow:
+    arm: str
+    version: str
+    hazard: int
+    n_runs_contributing: int
+    a_share_h8_derived: float
+    a_share_h8_published: float | None
+    drift_abs: float | None
+    halts: bool
+
+
+def _compute_a_share_h8(all_rows: list[PerLineageRow], arm: str, version: str) -> tuple[float, int]:
+    by_arm_run = _index_rows_by_arm_run(all_rows)
+    shares: list[float] = []
+    for (a, ver, _seed, haz), rows_in_run in by_arm_run.items():
+        if a != arm or ver != version or haz != 8:
+            continue
+        total_b50 = sum(r.b50_count for r in rows_in_run)
+        if total_b50 == 0:
+            continue
+        max_b50 = max(r.b50_count for r in rows_in_run)
+        shares.append(max_b50 / total_b50)
+    if not shares:
+        return float("nan"), 0
+    return statistics.mean(shares), len(shares)
+
+
+def _check_corpus_re_anchor(all_rows: list[PerLineageRow]) -> list[ReAnchorRow]:
+    """Per-arm a_share_h8 derivation; halt-gating only on A_null arm."""
+    out: list[ReAnchorRow] = []
+    for arm in ARMS:
+        for version in ("v0.42", "v0.43R", "v0.44", "v0.45"):
+            derived, n_runs = _compute_a_share_h8(all_rows, arm, version)
+            published = PUBLISHED_A_SHARE_H8[version] if arm == ARM_A_NULL else None
+            if published is None or math.isnan(derived):
+                drift_abs: float | None = None
+                halts = False
+            else:
+                drift_abs = abs(derived - published)
+                halts = drift_abs > RE_ANCHOR_DRIFT_TOLERANCE
+            out.append(
+                ReAnchorRow(
+                    arm=arm,
+                    version=version,
+                    hazard=8,
+                    n_runs_contributing=n_runs,
+                    a_share_h8_derived=derived,
+                    a_share_h8_published=published,
+                    drift_abs=drift_abs,
+                    halts=halts,
+                )
+            )
+    return out
+
+
+@dataclass(frozen=True)
+class BridgeReAnchorRow:
+    label: str
+    observable: str
+    published_signed_d: float
+    derived_signed_d: float
+    drift_abs: float
+    halts: bool
+
+
+def _check_bridge_re_anchor(
+    summaries_a_a: list[ObservableSummary], summaries_a_b: list[ObservableSummary]
+) -> list[BridgeReAnchorRow]:
+    """Compare A_null arm's six cells to v0.48's published signed_d values."""
+    out: list[BridgeReAnchorRow] = []
+    derived_by_key: dict[tuple[str, str], float] = {}
+    for s in summaries_a_a + summaries_a_b:
+        derived_by_key[(s.label, s.observable)] = s.signed_d
+    for (label, observable), published in V048_PUBLISHED_SIGNED_D.items():
+        derived = derived_by_key.get((label, observable), float("nan"))
+        if math.isnan(derived):
+            drift_abs = float("inf")
+            halts = True
+        else:
+            drift_abs = abs(derived - published)
+            halts = drift_abs > RE_ANCHOR_DRIFT_TOLERANCE
+        out.append(
+            BridgeReAnchorRow(
+                label=label,
+                observable=observable,
+                published_signed_d=published,
+                derived_signed_d=derived,
+                drift_abs=drift_abs,
+                halts=halts,
+            )
+        )
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Slice rollup (priority-ordered)
+# ---------------------------------------------------------------------------
+
+
+def _evaluate_rollup(  # noqa: PLR0911 — six-way priority match is the explicit verdict structure.
+    *,
+    a_null_subverdict: str,
+    b_clamp_subverdict: str,
+    c_perm_subverdict: str,
+    corpus_re_anchor: list[ReAnchorRow],
+    bridge_re_anchor: list[BridgeReAnchorRow],
+) -> tuple[str, str]:
+    """Return (rollup_verdict, locked_phrase)."""
+    # Priority 1: corpus drift halt.
+    drift_halt = next(
+        (r for r in corpus_re_anchor if r.halts and r.arm == ARM_A_NULL),
+        None,
+    )
+    if drift_halt is not None:
+        return ROLLUP_CORPUS_DRIFT_HALT, LOCKED_PHRASES[ROLLUP_CORPUS_DRIFT_HALT].format(
+            version=drift_halt.version
+        )
+
+    # Priority 2: any arm opposite-sign halt.
+    if a_null_subverdict == SUBVERDICT_A_NULL_OPPOSITE:
+        return ROLLUP_INTERVENTION_OPPOSITE_HALT, LOCKED_PHRASES[ROLLUP_INTERVENTION_OPPOSITE_HALT]
+    if b_clamp_subverdict == SUBVERDICT_B_CLAMP_OPPOSITE:
+        return ROLLUP_INTERVENTION_OPPOSITE_HALT, LOCKED_PHRASES[ROLLUP_INTERVENTION_OPPOSITE_HALT]
+    if c_perm_subverdict == SUBVERDICT_C_PERM_OPPOSITE:
+        return ROLLUP_INTERVENTION_OPPOSITE_HALT, LOCKED_PHRASES[ROLLUP_INTERVENTION_OPPOSITE_HALT]
+
+    # Priority 3: bridge replication halt (cell drift OR A_null sub-verdict != PRESENT).
+    if any(r.halts for r in bridge_re_anchor):
+        return ROLLUP_BRIDGE_REPLICATION_HALT, LOCKED_PHRASES[ROLLUP_BRIDGE_REPLICATION_HALT]
+    if a_null_subverdict != SUBVERDICT_A_NULL_PRESENT:
+        return ROLLUP_BRIDGE_REPLICATION_HALT, LOCKED_PHRASES[ROLLUP_BRIDGE_REPLICATION_HALT]
+
+    # Priority 4-6: A_null is PRESENT; consult B/C.
+    b_present = b_clamp_subverdict == SUBVERDICT_B_CLAMP_PRESENT
+    b_not_found = b_clamp_subverdict == SUBVERDICT_B_CLAMP_NOT_FOUND
+    c_present = c_perm_subverdict == SUBVERDICT_C_PERM_PRESENT
+    c_not_found = c_perm_subverdict == SUBVERDICT_C_PERM_NOT_FOUND
+
+    if c_present and b_not_found:
+        return ROLLUP_CAUSAL_SUPPORTED, LOCKED_PHRASES[ROLLUP_CAUSAL_SUPPORTED]
+    if c_not_found and b_present:
+        return ROLLUP_CAUSAL_NOT_SUPPORTED, LOCKED_PHRASES[ROLLUP_CAUSAL_NOT_SUPPORTED]
+    return ROLLUP_CAUSAL_MIXED, LOCKED_PHRASES[ROLLUP_CAUSAL_MIXED]
+
+
+# ---------------------------------------------------------------------------
+# CSV writers
+# ---------------------------------------------------------------------------
+
+
+def _format_value(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return "True" if value else "False"
+    if isinstance(value, float):
+        if math.isnan(value):
+            return ""
+        return repr(value)
+    return str(value)
+
+
+def _write_per_lineage_csv(rows: list[PerLineageRow], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(PER_LINEAGE_FIELDNAMES)
+        for row in rows:
+            d = asdict(row)
+            writer.writerow([_format_value(d[name]) for name in PER_LINEAGE_FIELDNAMES])
+
+
+INTERVENTION_AUDIT_FIELDNAMES: list[str] = [
+    "arm",
+    "version",
+    "seed",
+    "hazard",
+    "lineage_id",
+    "founder_index",
+    "original_sensor_radius",
+    "assigned_sensor_radius",
+    "permutation_map_index",
+    "applied_identity_rotation_fallback",
+    "effective_sensor_radius_changed_count",
+]
+
+
+def _write_intervention_audit_csv(captures: list[_RunCapture], path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(INTERVENTION_AUDIT_FIELDNAMES)
+        for cap in captures:
+            for rec in cap.founder_records:
+                writer.writerow(
+                    [
+                        cap.arm,
+                        cap.version,
+                        str(cap.seed),
+                        str(cap.hazard),
+                        str(rec.lineage_id),
+                        str(rec.founder_index),
+                        str(rec.original_sensor_radius),
+                        str(rec.assigned_sensor_radius),
+                        str(rec.permutation_map_index),
+                        _format_value(rec.applied_identity_rotation_fallback),
+                        str(cap.effective_sensor_radius_changed_count),
+                    ]
+                )
+
+
+def _write_audit_summary_csv(
+    summaries: list[ObservableSummary],
+    corpus_re_anchor: list[ReAnchorRow],
+    bridge_re_anchor: list[BridgeReAnchorRow],
+    a_null_subverdict: str,
+    b_clamp_subverdict: str,
+    c_perm_subverdict: str,
+    rollup_verdict: str,
+    rollup_phrase: str,
+    path: Path,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["section", "key", "value"])
+        for r in corpus_re_anchor:
+            for field_name, value in (
+                ("derived", r.a_share_h8_derived),
+                ("published", r.a_share_h8_published),
+                ("drift_abs", r.drift_abs),
+                ("n_runs", r.n_runs_contributing),
+                ("halts", r.halts),
+            ):
+                writer.writerow(
+                    [
+                        "reanchor_a_share_h8",
+                        f"{r.arm}/{r.version}/h{r.hazard}/{field_name}",
+                        _format_value(value),
+                    ]
+                )
+        for br in bridge_re_anchor:
+            for field_name, value in (
+                ("published_signed_d", br.published_signed_d),
+                ("derived_signed_d", br.derived_signed_d),
+                ("drift_abs", br.drift_abs),
+                ("halts", br.halts),
+            ):
+                writer.writerow(
+                    [
+                        "bridge_reanchor",
+                        f"{br.label}/{br.observable}/{field_name}",
+                        _format_value(value),
+                    ]
+                )
+        for s in summaries:
+            for field_name, value in (
+                ("paired_d", s.paired_d),
+                ("signed_d", s.signed_d),
+                ("n_runs", s.n_runs_contributing),
+                ("fires_expected", s.fires_expected),
+                ("fires_wrong", s.fires_wrong),
+                ("delta_mean", s.delta_mean),
+                ("delta_stdev", s.delta_stdev),
+                ("delta_min", s.delta_min),
+                ("delta_max", s.delta_max),
+            ):
+                writer.writerow(
+                    [
+                        "paired_d",
+                        f"{s.arm}/{s.label}/{s.observable}/{field_name}",
+                        _format_value(value),
+                    ]
+                )
+        writer.writerow(["sub_verdicts", "A_null", a_null_subverdict])
+        writer.writerow(["sub_verdicts", "B_clamp_4", b_clamp_subverdict])
+        writer.writerow(["sub_verdicts", "C_permutation", c_perm_subverdict])
+        writer.writerow(["rollup_verdict", "verdict", rollup_verdict])
+        writer.writerow(["rollup_verdict", "locked_phrase", rollup_phrase])
+
+
+def _observable_line(s: ObservableSummary) -> str:
+    d_str = "nan" if math.isnan(s.paired_d) else f"{s.paired_d:+.3f}"
+    signed_str = "nan" if math.isnan(s.signed_d) else f"{s.signed_d:+.3f}"
+    flag = ""
+    if s.fires_expected:
+        flag = " FIRES"
+    if s.fires_wrong:
+        flag = " WRONG-SIGN"
+    sign_label = "+" if s.sign > 0 else "-"
+    mean_str = "nan" if math.isnan(s.delta_mean) else f"{s.delta_mean:+.4f}"
+    sd_str = "nan" if math.isnan(s.delta_stdev) else f"{s.delta_stdev:.4f}"
+    min_str = "nan" if math.isnan(s.delta_min) else f"{s.delta_min:+.4f}"
+    max_str = "nan" if math.isnan(s.delta_max) else f"{s.delta_max:+.4f}"
+    return (
+        f"  {s.observable:<38} sign={sign_label}  d={d_str}  signed_d={signed_str}  "
+        f"n={s.n_runs_contributing:>2}  "
+        f"delta_mean={mean_str}  sd={sd_str}  min={min_str}  max={max_str}{flag}\n"
+    )
+
+
+def _write_audit_log(
+    summaries: list[ObservableSummary],
+    corpus_re_anchor: list[ReAnchorRow],
+    bridge_re_anchor: list[BridgeReAnchorRow],
+    a_null_subverdict: str,
+    b_clamp_subverdict: str,
+    c_perm_subverdict: str,
+    rollup_verdict: str,
+    rollup_phrase: str,
+    captures: list[_RunCapture],
+    path: Path,
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lines: list[str] = []
+    lines.append("=== v0.49 sensor_radius causal probe (clamp + permutation) ===\n")
+    lines.append("\nCorpus re-anchor (per (arm, version, h=8)):\n")
+    for r in corpus_re_anchor:
+        published_str = "—" if r.a_share_h8_published is None else f"{r.a_share_h8_published:.3f}"
+        derived_str = "nan" if math.isnan(r.a_share_h8_derived) else f"{r.a_share_h8_derived:.3f}"
+        drift_str = "—" if r.drift_abs is None else f"{r.drift_abs:.4f}"
+        halt_str = " HALT" if r.halts else ""
+        lines.append(
+            f"  {r.arm:<40} {r.version} h={r.hazard}  n={r.n_runs_contributing:>2}  "
+            f"derived={derived_str}  published={published_str}  drift={drift_str}{halt_str}\n"
+        )
+    lines.append("\nBridge re-anchor (A_null arm vs v0.48 published signed_d):\n")
+    for br in bridge_re_anchor:
+        drift_str = "inf" if math.isinf(br.drift_abs) else f"{br.drift_abs:.4f}"
+        halt_str = " HALT" if br.halts else ""
+        lines.append(
+            f"  {br.label}/{br.observable:<38} "
+            f"published={br.published_signed_d:+.3f}  derived={br.derived_signed_d:+.3f}  "
+            f"drift={drift_str}{halt_str}\n"
+        )
+    for arm in ARMS:
+        lines.append(f"\nArm {arm} — paired_d per (gating-label, primary observable):\n")
+        for s in summaries:
+            if s.arm != arm:
+                continue
+            lines.append(f"  [{s.label}] {_observable_line(s)}")
+    # C-arm permutation summary.
+    c_captures = [c for c in captures if c.arm == ARM_C_PERMUTATION]
+    if c_captures:
+        changed_counts = [c.effective_sensor_radius_changed_count for c in c_captures]
+        n_identity_fallbacks = sum(
+            1
+            for c in c_captures
+            if c.founder_records and c.founder_records[0].applied_identity_rotation_fallback
+        )
+        lines.append("\nC_permutation effective changed counts:\n")
+        lines.append(
+            f"  n_runs={len(c_captures)}  "
+            f"mean_changed={statistics.mean(changed_counts):.3f}  "
+            f"min={min(changed_counts)}  max={max(changed_counts)}  "
+            f"identity_fallbacks={n_identity_fallbacks}\n"
+        )
+    lines.append(
+        f"\nSub-verdicts: A_null={a_null_subverdict}  "
+        f"B_clamp={b_clamp_subverdict}  C_perm={c_perm_subverdict}\n"
+    )
+    lines.append(f"\nRollup verdict: {rollup_verdict}\n")
+    lines.append(f'Locked phrase fired: "{rollup_phrase}"\n')
+    path.write_text("".join(lines))
+
+
+# ---------------------------------------------------------------------------
+# Orchestrator
+# ---------------------------------------------------------------------------
+
+
+def run_audit(out_dir: Path) -> tuple[str, str]:  # noqa: PLR0912, PLR0915 — orchestrator threads sweep + aggregation + paired_d (3 arms x 2 labels x 3 obs) + agreement + re-anchor (corpus + bridge) + verdicts + I/O.
+    """Run the full v0.49 audit, writing outputs under ``out_dir``."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    print("=== v0.49 sensor_radius causal probe (clamp + permutation) ===")
+    print(f"Arms: {list(ARMS)}")
+    print(f"Corpus per arm: A_null over {list(SEEDS_BY_VERSION)}; hazards={HAZARDS}")
+    print(
+        f"Total runs: {len(ARMS) * sum(len(s) for s in SEEDS_BY_VERSION.values()) * len(HAZARDS)}"
+    )
+    print(
+        "Primary observables: "
+        + ", ".join(f"{n} ({'+' if s > 0 else '-'})" for n, s in PRIMARY_OBSERVABLES)
+    )
+    print()
+
+    captures: list[_RunCapture] = []
+    all_rows: list[PerLineageRow] = []
+    runs_meta: list[tuple[str, int, int]] = []
+
+    with tempfile.TemporaryDirectory() as td:
+        runs_root = Path(td)
+        for arm in ARMS:
+            for version, seeds in SEEDS_BY_VERSION.items():
+                for hazard in HAZARDS:
+                    for seed in seeds:
+                        capture = _run_one_arm(arm, version, seed, hazard, runs_root)
+                        rows = _aggregate_per_lineage(capture)
+                        captures.append(capture)
+                        all_rows.extend(rows)
+                        if arm == ARM_A_NULL:
+                            runs_meta.append((version, seed, hazard))
+                        a_lid = next(
+                            (r.lineage_id for r in rows if r.is_high_sensor_radius_lineage),
+                            None,
+                        )
+                        b_lid = next(
+                            (
+                                r.lineage_id
+                                for r in rows
+                                if r.is_high_tick50_readiness_fraction_lineage
+                            ),
+                            None,
+                        )
+                        print(
+                            f"  {arm:<42} {version} h={hazard:>2} seed={seed:>2}  "
+                            f"a_top={a_lid}  b_top={b_lid}  "
+                            f"changed={capture.effective_sensor_radius_changed_count}"
+                        )
+
+    print()
+
+    # Compute per-arm summaries (label A and label B, for all 3 arms).
+    summaries: list[ObservableSummary] = []
+    for arm in ARMS:
+        for name, sign in PRIMARY_OBSERVABLES:
+            summaries.append(
+                _summarise_observable_for_arm(
+                    arm=arm,
+                    observable=name,
+                    sign=sign,
+                    label=LABEL_A_NAME,
+                    label_field=LABEL_A_FIELD,
+                    all_rows=all_rows,
+                    runs=runs_meta,
+                )
+            )
+        for name, sign in PRIMARY_OBSERVABLES:
+            summaries.append(
+                _summarise_observable_for_arm(
+                    arm=arm,
+                    observable=name,
+                    sign=sign,
+                    label=LABEL_B_NAME,
+                    label_field=LABEL_B_FIELD,
+                    all_rows=all_rows,
+                    runs=runs_meta,
+                )
+            )
+
+    summaries_by = {(s.arm, s.label): [] for s in summaries}
+    for s in summaries:
+        summaries_by[(s.arm, s.label)].append(s)
+
+    a_null_subverdict = _arm_subverdict(
+        ARM_A_NULL,
+        summaries_by[(ARM_A_NULL, LABEL_A_NAME)],
+        summaries_by[(ARM_A_NULL, LABEL_B_NAME)],
+    )
+    b_clamp_subverdict = _arm_subverdict(
+        ARM_B_CLAMP_4,
+        summaries_by[(ARM_B_CLAMP_4, LABEL_A_NAME)],
+        summaries_by[(ARM_B_CLAMP_4, LABEL_B_NAME)],
+    )
+    c_perm_subverdict = _arm_subverdict(
+        ARM_C_PERMUTATION,
+        summaries_by[(ARM_C_PERMUTATION, LABEL_A_NAME)],
+        summaries_by[(ARM_C_PERMUTATION, LABEL_B_NAME)],
+    )
+
+    corpus_re_anchor = _check_corpus_re_anchor(all_rows)
+    bridge_re_anchor = _check_bridge_re_anchor(
+        summaries_by[(ARM_A_NULL, LABEL_A_NAME)],
+        summaries_by[(ARM_A_NULL, LABEL_B_NAME)],
+    )
+
+    rollup_verdict, rollup_phrase = _evaluate_rollup(
+        a_null_subverdict=a_null_subverdict,
+        b_clamp_subverdict=b_clamp_subverdict,
+        c_perm_subverdict=c_perm_subverdict,
+        corpus_re_anchor=corpus_re_anchor,
+        bridge_re_anchor=bridge_re_anchor,
+    )
+
+    per_lineage_path = out_dir / "per_run_per_lineage_v049.csv"
+    intervention_audit_path = out_dir / "per_run_intervention_audit.csv"
+    audit_summary_path = out_dir / "audit_summary.csv"
+    audit_log_path = out_dir / "audit_log.txt"
+    _write_per_lineage_csv(all_rows, per_lineage_path)
+    _write_intervention_audit_csv(captures, intervention_audit_path)
+    _write_audit_summary_csv(
+        summaries,
+        corpus_re_anchor,
+        bridge_re_anchor,
+        a_null_subverdict,
+        b_clamp_subverdict,
+        c_perm_subverdict,
+        rollup_verdict,
+        rollup_phrase,
+        audit_summary_path,
+    )
+    _write_audit_log(
+        summaries,
+        corpus_re_anchor,
+        bridge_re_anchor,
+        a_null_subverdict,
+        b_clamp_subverdict,
+        c_perm_subverdict,
+        rollup_verdict,
+        rollup_phrase,
+        captures,
+        audit_log_path,
+    )
+
+    # Echo to stdout.
+    print("Corpus re-anchor (per (arm, version, h=8)):")
+    for r in corpus_re_anchor:
+        published_str = "—" if r.a_share_h8_published is None else f"{r.a_share_h8_published:.3f}"
+        derived_str = "nan" if math.isnan(r.a_share_h8_derived) else f"{r.a_share_h8_derived:.3f}"
+        drift_str = "—" if r.drift_abs is None else f"{r.drift_abs:.4f}"
+        halt_str = " HALT" if r.halts else ""
+        print(
+            f"  {r.arm:<42} {r.version} h={r.hazard}  n={r.n_runs_contributing:>2}  "
+            f"derived={derived_str}  published={published_str}  drift={drift_str}{halt_str}"
+        )
+    print("\nBridge re-anchor (A_null arm vs v0.48 published signed_d):")
+    for br in bridge_re_anchor:
+        drift_str = "inf" if math.isinf(br.drift_abs) else f"{br.drift_abs:.4f}"
+        halt_str = " HALT" if br.halts else ""
+        print(
+            f"  {br.label}/{br.observable:<38} "
+            f"published={br.published_signed_d:+.3f}  derived={br.derived_signed_d:+.3f}  "
+            f"drift={drift_str}{halt_str}"
+        )
+
+    for arm in ARMS:
+        print(f"\nArm {arm} — paired_d per (gating-label, primary observable):")
+        for s in summaries:
+            if s.arm != arm:
+                continue
+            print(f"  [{s.label}] {_observable_line(s).rstrip()}")
+
+    print(
+        f"\nSub-verdicts: A_null={a_null_subverdict}  "
+        f"B_clamp={b_clamp_subverdict}  C_perm={c_perm_subverdict}"
+    )
+    print(f"\nRollup verdict: {rollup_verdict}")
+    print(f'Locked phrase: "{rollup_phrase}"')
+    print()
+    print(f"Wrote {per_lineage_path}")
+    print(f"Wrote {intervention_audit_path}")
+    print(f"Wrote {audit_summary_path}")
+    print(f"Wrote {audit_log_path}")
+
+    if rollup_verdict in {
+        ROLLUP_CORPUS_DRIFT_HALT,
+        ROLLUP_INTERVENTION_OPPOSITE_HALT,
+        ROLLUP_BRIDGE_REPLICATION_HALT,
+    }:
+        raise V049ReducerError(rollup_phrase)
+    return rollup_verdict, rollup_phrase
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="v0.49 sensor_radius causal probe audit")
+    parser.add_argument(
+        "--out-dir",
+        type=Path,
+        default=Path("runs/v0.49-causal-probe"),
+        help="Directory for v0.49 outputs (default: runs/v0.49-causal-probe).",
+    )
+    args = parser.parse_args()
+    run_audit(args.out_dir)
+
+
+if __name__ == "__main__":
+    main()
