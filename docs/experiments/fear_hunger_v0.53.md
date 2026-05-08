@@ -304,4 +304,168 @@ No `src/` modifications. No prior reducer / audit / test files modified.
 
 ## Results
 
-(To be appended after the reducer runs against the 192-run corpus. Status: pre-reg locked; reducer not yet implemented.)
+**Status:** reducer executed 2026-05-08 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~12 minutes. **Tier-1 bridge re-anchor PASSES** (A_null_V0_25 arm reproduces v0.48's six published signed_d cells within max drift 0.0004 ≪ 1e-3 tolerance). Corpus re-anchor (`a_share_h8`) max drift 0.0003 on v0.42; v0.44 / v0.45 within 0.0002. No opposite-sign firings under any gating label on B or C arms.
+
+### Rollup verdict — `BRIDGE_PARTIALLY_GENERALIZES` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with the V0_25 substrate held constant, the v0.48 spatial / foraging bridge does not resolve to a single categorical outcome across `widened_gradient` and `food_ladder` under the locked +0.5 paired_d threshold. The bridge partially generalizes across the three tested layout geometries; the asymmetric pattern (per-arm sub-verdicts) is logged in Results."
+
+Sub-verdicts:
+
+| arm | layout | sub-verdict |
+|---|---|---|
+| A_null_V0_25 | `tight_gradient` | `A_NULL_V025_BRIDGE_PRESENT` |
+| B_widened_gradient | `widened_gradient` | `B_WIDENED_BRIDGE_NOT_FOUND` |
+| C_food_ladder | `food_ladder` | `C_LADDER_BRIDGE_PRESENT` |
+
+The (PRESENT, NOT_FOUND, PRESENT) triple is the `BRIDGE_PARTIALLY_GENERALIZES` pattern. C fires the bridge cleanly under both labels (3/3 each); B does not fire under either label. The asymmetric finding is not a halt — opposite-sign halt did not fire — it is the scientifically meaningful first-class outcome that the rollup was designed to surface.
+
+### Tier-1 bridge re-anchor — A_null_V0_25 reproduces v0.48 within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 ≪ 1e-3. v0.53's A_null_V0_25 arm is byte-compatible with the v0.48–v0.52b A_null path (no `src/` modifications under v0.53; the v0.52b-tip `src/` files are pinned by SHA-256 in `tests/test_v0_53_cross_layout_generalization_audit.py` test #8).
+
+### Per-arm signed_d (sign-aware)
+
+#### Arm A_null_V0_25 — sub-verdict `A_NULL_V025_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | **+1.066** | YES |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | **+1.066** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **+1.916** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.916** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.916** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.179** | YES |
+
+#### Arm B_widened_gradient — sub-verdict `B_WIDENED_BRIDGE_NOT_FOUND`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | nan | — |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | nan | — |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **−0.062** | NO |
+| label_b_readiness_fraction | pre50_food_events_count | + | nan | — |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | nan | — |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+7.766** | YES (degenerate; see below) |
+
+Four of the six B-arm cells produce `nan` paired_d because per-run `delta_mean = 0.0` and `sd = 0.0` across all 64 runs — `pre50_food_events_count` and `pre50_food_energy_acquired` are identically zero in every B run. The widened-gradient layout has spawn at `x = 1` and food at `x ∈ [10..14]`; the minimum traversal is 9 cells, with a 3-wide hazard band at `x ∈ [5..7]` in between. Within 50 ticks, no founder lineage in any of the 64 runs reaches the food zone, so all four food-related primaries (`pre50_food_events_count`, `pre50_food_energy_acquired` × Label A, Label B) are uniformly zero. The Label A vs non-Label A delta is structurally `0 − 0 = 0` on every run, producing the `0/0 = nan` paired_d. **This is descriptive only**; under the locked sub-verdict criterion (≥ 2/3 cells per label clearing the +0.5 threshold), four `nan` cells cannot fire and B's sub-verdict resolves to `B_WIDENED_BRIDGE_NOT_FOUND`.
+
+The one non-nan B-arm cell that fires (`label_b_readiness_fraction × mean_distance_to_nearest_food_cell`, signed_d = +7.766) is **degenerate**: per-run `delta_mean = −0.0981` cells with `sd = 0.0126` cells. The huge `paired_d` reflects extremely low variance, not a meaningful effect size — the absolute spatial signal is < 0.1 cell across all 64 runs. The pre-reg's per-arm sub-verdict rule requires ≥ 2/3 cells clearing per label to fire PRESENT; B clears 0/3 under Label A (3 cells, 1 nan + 1 sub-threshold + 1 nan… wait, all three under Label A are: nan, nan, −0.062, none firing) and 1/3 under Label B (2 nan + 1 firing). **B sub-verdict = NOT_FOUND** (neither label clears ≥ 2/3).
+
+The −0.062 cell does NOT trigger `LAYOUT_OPPOSITE_SIGN_HALT` (priority 3 threshold is signed_d ≤ −0.5; −0.062 is far above).
+
+#### Arm C_food_ladder — sub-verdict `C_LADDER_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | **+1.186** | YES |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | **+1.186** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **+1.804** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.621** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.621** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+0.939** | YES |
+
+3/3 primaries fire under both labels with 0 wrong-sign. Label A magnitudes are slightly stronger than A_null_V0_25 (+1.186 vs +1.066 on events/energy); Label B magnitudes are weaker (+0.621 vs +0.916 on events/energy; +0.939 vs +1.179 on distance). The pre-food column at `x = 4` lets agents reach reproductive eligibility from a low-cost early energy source before crossing the hazard band — enough founders survive to populate the per-lineage primary counters and produce non-degenerate paired_d.
+
+### Layout reachability — descriptive
+
+Across the three layouts under V0_25 substrate (5 founders spawning at `x = 1`, sensor_radius integer-uniform on {1..6}, 50-tick observation window):
+
+| layout | spawn → food traversal (cells) | hazard band | pre-food | fraction of runs with ≥ 1 lineage reaching food by tick 50 |
+|---|:-:|---|---|:-:|
+| `tight_gradient` | 9 → 4 (food at `x ∈ [5..8]`) | `x ∈ [3..4]` (2 cols) | none | 1.00 (per A_null_V0_25 paired_d non-zero on all 6 cells) |
+| `widened_gradient` | 1 → 10 (food at `x ∈ [10..14]`) | `x ∈ [5..7]` (3 cols) | none | **0.00** (zero food events on all 64 runs) |
+| `food_ladder` | 1 → 4 (pre-food at `x = 4`) and 1 → 9 (food at `x ∈ [9..11]`) | `x ∈ [6..8]` (3 cols) | `x = 4` (1 col) | 1.00 (all C-arm cells non-degenerate) |
+
+The B_widened result is consistent with raw food-reach failure: the corridor between the 3-wide hazard band and the 5-wide food zone makes the v0.48 bridge unfireable on this substrate's 50-tick window. The C_food_ladder result confirms that adding a pre-food column at moderate distance restores bridge fireability with directional structure intact.
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+B_widened_gradient arm (informational only — `n=0` on every cell because no lineage produces a tracked dominance event in the corpus's hazard=8 pool):
+
+| version | B `a_share_h8` | n |
+|---|:-:|:-:|
+| v0.42 | nan | 0 |
+| v0.43R | nan | 0 |
+| v0.44 | nan | 0 |
+| v0.45 | nan | 0 |
+
+C_food_ladder arm (informational only — different counterfactual; raised dominance fractions consistent with the pre-food column boosting per-lineage reproductive eligibility):
+
+| version | C `a_share_h8` | n |
+|---|:-:|:-:|
+| v0.42 | 0.822 | 8 |
+| v0.43R | 0.955 | 7 |
+| v0.44 | 1.000 | 7 |
+| v0.45 | 1.000 | 5 |
+
+### What v0.53 can safely claim
+
+- ✓ **A_null_V0_25 replicated.** Tier-1 re-anchor reproduces v0.48's six published signed_d cells within 0.0004. The corpus re-anchor reproduces v0.42 / v0.44 / v0.45 within 0.0003. The v0.53 reducer's paired_d / label-assignment / observable-extraction machinery is correct.
+- ✓ **The v0.48 spatial / foraging bridge fires PRESENT on `food_ladder`** (3/3 under both labels, 0 wrong-sign). The bridge is not exclusive to `tight_gradient` (V0_25) layout geometry; under at least one alternative food-rich layout (with a pre-food column at moderate distance from spawn), the bridge fires cleanly with directional structure preserved.
+- ✓ **The v0.48 bridge does NOT fire on `widened_gradient`** (4/6 cells `nan` due to uniformly-zero food primaries; sub-verdict `NOT_FOUND`). The bridge is not universal across food-rich layouts at the V0_25 substrate's 50-tick window — at least one tested geometry produces a structural floor effect (no agent reaches food) that prevents the bridge from being measured.
+- ✓ **The bridge partially generalizes across the three tested layout geometries on this corpus** (`tight_gradient` PRESENT, `widened_gradient` NOT_FOUND, `food_ladder` PRESENT). The asymmetric pattern is the categorical outcome the locked rollup was designed to surface; it is preserved verbatim by the locked phrase.
+
+### What v0.53 cannot claim
+
+- ✗ **"The widened_gradient bridge is absent"** in any general sense. v0.53's `B_WIDENED_BRIDGE_NOT_FOUND` is *driven by* the structural fact that no founder lineage reaches the food zone in 50 ticks — not by a discriminative null on Label A vs Label B differentiation. With a longer observation window (e.g., tick-100 readiness), agents may eventually reach the food zone and the bridge may fire. v0.53's NOT_FOUND verdict is anchored to the V0_25-specific 50-tick window; longer-horizon probes are out of scope.
+- ✗ **"The food_ladder bridge magnitude is comparable to V0_25's bridge."** Magnitudes shifted (Label A stronger by ~+0.12 on events / energy, Label B weaker by ~−0.30 on events / energy; distance cell stronger on Label A by +0.11 and weaker on Label B by −0.24). Magnitude differences are descriptive, not gating; v0.53 does not establish a quantitative cross-layout magnitude relationship.
+- ✗ **Causal contribution of `sensor_radius` per layout.** v0.53 is observational. A future causal-generalization slice (re-running v0.49's null + clamp_4 + permutation_5! per layout, ~576 runs total) would be required to make a per-layout causal claim.
+- ✗ **Mechanism behind the asymmetric (PRESENT, NOT_FOUND, PRESENT) pattern.** The structural reachability story (widened gradient is too far; food_ladder's pre-food column shortens effective traversal) is the most parsimonious explanation but is NOT formally established by v0.53. Disambiguating it from alternative mechanisms (different food-density per cell, different hazard placement, different spawn-to-safe ratio) would require additional layouts or a fresh-stream calibration.
+- ✗ **Generalization beyond the three tested layouts** (`tight_gradient`, `widened_gradient`, `food_ladder`). `default_layout` and `near_hazard_layout` are not in v0.53's set. Other layouts not covered.
+- ✗ **Generalization to non-V0_25 substrates.** Aggregate-optimum substrates (v0.21..v0.27) and intermediate ecologies are not tested.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED; descendant-drift channel empirically zero under V0_25) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge (B PRESENT); C arm halt-loud | interventional (B PRESENT confirms cost dispensable; C uniform-max regime-shift halt) |
+| v0.52b | modern A_null | bridge follows between-lineage information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT; lineage-coherent inheritance verified clean) |
+| v0.53 | modern A_null | bridge fires PRESENT on `food_ladder`, NOT_FOUND on `widened_gradient`, PRESENT on `tight_gradient` | observational (PARTIALLY_GENERALIZES; layout asymmetry surfaced) |
+
+The v0.46→v0.53 stack now reads: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → that contribution survives shifted-top + permuted founder positions → and the founder-clamp NOT_FOUND result is preserved under lineage-wide clamping → and the metabolic-cost channel of `sensor_radius` is not necessary for the bridge → and the bridge follows the assigned effective information radius when global information economy is preserved → **and the bridge fires on `food_ladder` and not on `widened_gradient` under the V0_25 substrate's 50-tick window, indicating that the bridge's measurability depends on layout reachability rather than being a universal property of `sensor_radius` variation under any food-rich geometry.**
+
+### Next-step candidates (open; not locked)
+
+The v0.53 result is `BRIDGE_PARTIALLY_GENERALIZES` with a structurally interpretable cause (food unreachable in 50 ticks on widened_gradient). Multiple follow-up directions:
+
+- **Disambiguation slice (v0.54a candidate).** Re-run B_widened_gradient with an extended observation window (e.g., tick-100 or tick-200 readiness) to distinguish "bridge structurally absent" from "bridge measurement window too short". Pure observational; no `src/` change.
+- **Causal-generalization slice (v0.54b candidate).** Re-run v0.49's null + clamp_4 + permutation_5! per layout on `tight_gradient` + `food_ladder` (skipping `widened_gradient` per the v0.53 NOT_FOUND finding). ~384 runs. Tests whether the v0.49 causal verdict re-fires per layout that admits the bridge.
+- **v0.54 — joint ablation** (already documented). `sensor_radius_metabolic_cost = 0` AND between-lineage shuffle of `effective_sensor_radius_override`. Tests for higher-order interactions between v0.52's and v0.52b's separately-addressed channels.
+- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.53 conclusion stack — needed for any "mechanism" declaration. Longer-horizon.
+
+User has not locked which slice is next; the v0.53 result is consistent with multiple readings.
+
+### CI gate at v0.53 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok (224 files already formatted)
+uv run pytest                   1712 passed, 7 skipped (was 1696; +16 v0.53)
+uv run python scripts/core_smoke_test.py                                ok (default behavior preserved; src/ untouched)
+uv run python scripts/v0_53_cross_layout_generalization_audit.py        BRIDGE_PARTIALLY_GENERALIZES
+```
