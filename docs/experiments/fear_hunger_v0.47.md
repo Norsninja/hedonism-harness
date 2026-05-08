@@ -237,4 +237,88 @@ No other files modified.
 
 ## Results
 
-*(Appended after reducer run on the modern A_null corpus.)*
+**Status:** reducer executed 2026-05-08 against 64 A_null runs (v0.42 / v0.43R / v0.44 / v0.45, h ∈ {0, 8}, 8 seeds per (version, hazard) bucket). All re-anchors PASS (drift ≤ 0.0003 ≪ 1e-3 tolerance).
+
+### Verdict — `READINESS_TRAITS_PARTIALLY_PREDICTIVE` fires
+
+> **Locked phrase fires verbatim:** "Founder traits at tick 0 are partially predictive of tick-50 readiness on the modern A_null corpus; only one of three primary traits clears the locked threshold."
+
+One of three primary traits fires above the locked sign-aware Cohen's d threshold of +0.5; zero traits fire wrong-sign.
+
+### Fraction-label paired_d per primary trait (PRIMARY)
+
+| trait | sign | paired_d | signed_d | delta_mean | delta_sd | delta_min | delta_max | n | fires |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `reproduction_drive` | + | −0.144 | −0.144 | −0.134 | 0.927 | −2.415 | +1.810 | 64 | no |
+| `metabolic_rate` | − | −0.178 | +0.178 | −0.103 | 0.577 | −1.055 | +1.070 | 64 | no |
+| `sensor_radius` | + | **+0.937** | **+0.937** | +1.598 | 1.705 | −3.500 | +4.250 | 64 | **YES** |
+
+`paired_d` is the raw Cohen's d on the per-run delta vector; `signed_d = paired_d * expected_sign`. Fires iff `signed_d ≥ +0.5`; halts iff `signed_d ≤ −0.5`. None of the three traits hit the halt threshold; only `sensor_radius` clears the fire threshold.
+
+### Count-label paired_d per primary trait (descriptive only)
+
+| trait | sign | paired_d | signed_d | delta_mean | delta_sd | delta_min | delta_max | n | fires (descr.) |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
+| `reproduction_drive` | + | −0.253 | −0.253 | −0.242 | 0.957 | −2.415 | +1.810 | 53 | no |
+| `metabolic_rate` | − | −0.268 | +0.268 | −0.156 | 0.580 | −1.055 | +1.070 | 53 | no |
+| `sensor_radius` | + | +1.675 | +1.675 | +2.024 | 1.208 | −0.250 | +4.250 | 53 | YES (descr.) |
+
+11 runs are excluded from the count-label pool because every lineage has `count = 0` at tick 50 (no agent satisfies the readiness predicate; at the V0_25 anchor this happens when the bulk of the post-founder population is born late in the pre-50 window and remains under `min_age = 10` at tick 50). Those 11 runs still contribute to the fraction-label pool because `tick50_above_threshold_fraction = 0/n_living = 0.0` is well-defined; the fraction-label argmax then assigns the label by tier-3 tiebreak (lowest `lineage_id`).
+
+### Re-anchor — all three published versions PASS
+
+| version | n | derived `a_share_h8` | published | drift | halt |
+|---|:-:|:-:|:-:|:-:|:-:|
+| v0.42 | 8 | 0.652 | 0.652 | 0.0003 | no |
+| v0.43R | 8 | 0.674 | — (halted, non-citable) | — | n/a |
+| v0.44 | 8 | 0.878 | 0.878 | 0.0001 | no |
+| v0.45 | 8 | 0.818 | 0.818 | 0.0002 | no |
+
+Identical re-anchor metric and tolerance to v0.46. v0.47's deterministic re-execution reproduces each version's published `a_share_h8` to within the published precision (3 decimals).
+
+### Fraction / count label agreement
+
+`49 / 53` well-defined runs assign the same lineage as both `high_tick50_readiness_fraction_lineage` AND `high_tick50_readiness_count_lineage`.
+**Agreement rate = 0.925** (excluded 11 runs have no count-label per the all-zero-count rule above). The high agreement rate confirms the per-capita and absolute-count framings rarely diverge in this corpus; the verdict is robust to the per-capita / absolute reading.
+
+### Reading the result correlationally
+
+The locked phrase is **correlational, not causal**: only `sensor_radius` predicts which lineage carries the highest tick-50 readiness fraction with a paired effect size that clears the locked threshold:
+
+- **`sensor_radius` (+):** the `high_tick50_readiness_fraction_lineage`'s founder has, on average, ~1.6 sensor-radius units more than its non-label peers (signed_d = +0.937, large effect by Cohen's convention). Mechanistically consistent with: wider sensors → better food localisation pre-50 → more food acquired → more agents passing the energy threshold → higher readiness fraction. The cost-side prior (`sensor_radius_metabolic_cost`) does not dominate at the V0_25 anchor.
+- **`reproduction_drive` (+):** signed_d = −0.144, essentially null; the "more drive → more readiness" prior does not appear in the data. Possible explanation: under V0_25 + `auto_reproduction=True`, reproduction is gated by the readiness predicate (energy + age), not by a drive-mediated decision threshold — reproduction_drive's behavioural lever may be largely bypassed at the chamber level.
+- **`metabolic_rate` (−):** signed_d = +0.178, mildly off-direction but well within the ambiguous zone (no halt). The energy-retention prior does not show up cleanly; founders with lower metabolic_rate do not differentially drive readiness fraction. Possible explanations: (a) the trait variance available in 5 founder draws per run × 64 runs is bounded by the default range [0.5, 2.0], potentially swamped by trajectory-level food access variance; (b) the readiness predicate is energy-AND-age-gated, so age satisfaction may be the dominant lever for which lineage clears the predicate at tick 50.
+
+### Cross-corpus / cross-label echo of v0.36
+
+v0.36 reported `sensor_radius` as the firing aligned-flat trait under the b50/winner label on the v0.34 corpus. v0.47 fires `sensor_radius` under the readiness-fraction label on the modern A_null corpus. Same trait, two different labels, two different corpora, two different reducer scaffolds. **This is a cross-corpus / cross-label correlational echo, not a replication.** It is consistent with `sensor_radius` being a robust predictor of "favored" lineages across the project's two main lineage-axis reducer slices, but it is not a mechanism declaration — fresh-stream calibration analogous to v0.30..v0.33 would be required for a causal claim.
+
+### What v0.47 establishes (and what it does not)
+
+- ✓ **Establishes**: on the modern A_null corpus (4 versions × 8 seeds × 2 hazards = 64 runs), `sensor_radius` of the founder agent at tick 0 predicts which lineage carries the highest tick-50 above-threshold fraction (paired_d = +0.937, large). The other two pre-committed primaries (`reproduction_drive`, `metabolic_rate`) do not clear the locked threshold and do not fire wrong-sign.
+- ✓ **Cross-label robustness**: the count-label paired_d for `sensor_radius` (+1.675) is even larger than the fraction-label paired_d (+0.937), and the labels agree on 49/53 well-defined runs (rate 0.925). The fire is not an artefact of the per-capita normalisation.
+- ✗ **Does not establish**: that `sensor_radius` *causes* readiness. Mechanism declarations require fresh-stream calibration; v0.47 is observational decomposition only.
+- ✗ **Does not rule out** any of the v0.45-caveat live candidates: pre-50 spatial sorting, founder-position advantage, topology-mediated energy access. Founder traits and pre-50 spatial topology are not mutually exclusive — sensors may matter precisely *because* they shape which spatial cells the founder explores.
+- ✗ **Does not generalise** beyond the locked V0_25 anchor (tight_gradient + GradientPolicy + auto_reproduction=True + unbounded_mutation + transfer-pool funding).
+
+### Caveats
+
+- **Sample-size noise.** With 64 runs × 5 founders/run, paired_d's per-trait n is 64 (one delta per run). The default `metabolic_rate` range is `[0.5, 2.0]` — a narrow window relative to trait variance from food-access trajectory differences. v0.36's pre-reg flagged similar concerns. The non-firing of `reproduction_drive` and `metabolic_rate` should not be over-interpreted as null — only as below-threshold under the locked discipline.
+- **`reproduction_drive` lever.** Under the V0_25 anchor's `auto_reproduction=True`, the reproduction-trigger pathway bypasses agent-level deliberation; `reproduction_drive` plausibly has its strongest behavioural effect when policies consult it as an action-utility weight. A v0.47-style decomposition under `auto_reproduction=False` (different anchor) would test this.
+- **`sensor_radius` is integer.** Coerced to float in paired_d arithmetic. Its delta_min = −3.5 and delta_max = +4.25 reflect the discrete trait range. The relatively large delta_sd = 1.705 and the strong paired_d = +0.937 together suggest a real signal, not a numerical artefact.
+- **The 11 zero-count runs.** Excluded from the count-label pool but included in the fraction-label pool with `tick50_above_threshold_fraction = 0.0` for every lineage. The fraction-label argmax in those runs is degenerate (lowest `lineage_id` wins by tier-3 tiebreak); the per-trait paired_d treats the assigned lineage as the "high" one and pools normally. This adds noise to the fraction-label paired_d but does not bias it (the assigned lineage is randomized w.r.t. founder trait values by the `lineage_id`-only tiebreak — no founder-trait correlation with `lineage_id` at setup time).
+- **Cross-version pooling.** The 64 runs span 4 versions whose substrate `src/` extensions accumulated additively. v0.46's H2e re-anchor confirmed cross-version pool validity; v0.47 inherits.
+
+### v0.48 candidate (open; not locked)
+
+The natural next decomposition addresses v0.45's other live candidate: **pre-50 spatial sorting / founder-position advantage**. v0.46 + v0.47 together establish: (a) readiness predicts post-50 dominance (v0.46), (b) founder `sensor_radius` predicts readiness (v0.47). The chained inference is *not* run, but the natural mechanistic question is: do founders with larger `sensor_radius` end up at spatially advantaged positions pre-50 (closer to food clusters, further from hazard, etc.), and is *that* spatial advantage what drives the readiness signal? A v0.48 reducer capturing per-founder centroid + nearest-food-cluster distance + nearest-hazard distance over the same 64-run corpus, with founder trait values as covariates, would isolate the "trait → space → readiness" path.
+
+### CI gate at v0.47 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1601 passed, 7 skipped (was 1587, +14 v0.47)
+uv run python scripts/core_smoke_test.py                         ok
+uv run python scripts/v0_47_founder_trait_readiness_audit.py     READINESS_TRAITS_PARTIALLY_PREDICTIVE
+```
