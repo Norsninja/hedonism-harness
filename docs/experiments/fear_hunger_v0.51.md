@@ -1,0 +1,646 @@
+# fear_hunger v0.51 — descendant-drift probe (founder + lineage-wide sensor_radius clamp)
+
+**Slice:** v0.51
+**Type:** **first-class intervention** (NOT a post-hoc reducer); founder-time + descendant-time `sensor_radius` clamp.
+**Predecessors:** v0.21..v0.27 (substrate / aggregate-optimum), v0.34..v0.36 (lineage observability + heritability), v0.42..v0.45 (substrate-causal arc), v0.46 (`READINESS_PREDICTS_DOMINANCE`), v0.47 (`READINESS_TRAITS_PARTIALLY_PREDICTIVE`), v0.48 (`SENSOR_RADIUS_SPATIAL_BRIDGE_PRESENT`), v0.49 (`SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED`: founder clamp + permutation establishes single-channel founder-time causal probe; descendants of clamped founders mutate freely), v0.50 (`SENSOR_RADIUS_ROBUST_TO_POSITION`: shifted-top + permuted founder positions do not break the bridge).
+**Question being asked (locked):** Does lineage-wide `sensor_radius` clamping preserve v0.49's founder-clamp NOT_FOUND result on the v0.48 spatial / foraging bridge, or does it change the categorical outcome?
+
+v0.49's `B_sensor_radius_founder_clamp_4` arm clamps founders at `sensor_radius=4` but leaves the per-tick mutation pipeline untouched, so descendants of clamped founders are free to drift away from 4 via `mutate_traits`. The pre-50 window has limited reproductive opportunity, but reproduction does occur (see `model.trait_fingerprints` records of post-tick-0 births in v0.49 logs). v0.51 closes that residual channel by additionally patching every newborn's `sensor_radius` back to 4 immediately after birth, before the newborn's first `model.step()`. The categorical-only question is whether C reproduces the v0.49 founder-clamp NOT_FOUND verdict (preservation) or whether the categorical outcome differs (alteration). Magnitude differences in B vs C signed_d cells are reported descriptively in Results; they do NOT drive the verdict.
+
+## Pre-implementation correction (2026-05-08, before any reducer code)
+
+The descendant-clamp implementation path was investigated by sub-agent and locked at design time per the v0.51 handoff. The locked design is **Option 1**: a script-local `AgentBorn` listener applied per-run inside `setup_observer`, single-channel-patching the newborn's `body.traits.sensor_radius` to 4 before the newborn takes its first step. The user has further refined this design with three implementation locks; recorded here for the historical record. No data has been seen yet.
+
+### Listener safety (locked)
+
+The `AgentBorn` listener is connected with **both** strong-reference protections, redundantly:
+
+```python
+def _on_agent_born(_sender: object, *, event: AgentBorn) -> None:
+    ...
+
+signal_for(AgentBorn).connect(_on_agent_born, sender=model, weak=False)
+disconnect_callbacks.append(
+    lambda: signal_for(AgentBorn).disconnect(_on_agent_born, sender=model)
+)
+```
+
+`weak=False` removes any ambiguity about blinker's reference handling; the closure capture in `disconnect_callbacks` is belt-and-braces. Disconnect happens in a `finally` block in the per-run scope so a failed run does not leak a sender-scoped listener into later runs:
+
+```python
+try:
+    run_chamber(... setup_observer=setup, tick_observer=...)
+finally:
+    for disconnect in disconnect_callbacks:
+        disconnect()
+```
+
+### Descendant patch counters (locked)
+
+The C-arm reducer logs four counters per run for audit transparency:
+
+| counter | semantics |
+|---|---|
+| `n_births_seen` | total `AgentBorn` events the listener observed in ticks 1..200 |
+| `n_births_patched` | number of newborn body patches actually written by the listener (every birth gets a patch write — even no-op writes, see below) |
+| `n_births_already_sensor_radius_4` | number of births where `original_sensor_radius == 4` already (mutated draw landed on the clamp value); the patch is a no-op write, NOT a failure |
+| `n_birth_patch_failures` | number of births where the single-channel invariant raised; expected = 0 |
+
+A child whose mutated `sensor_radius` happens to equal 4 is a legitimate no-op patch — the listener still runs the `dataclasses.replace(...)` write and the single-channel invariant should still pass on every non-`sensor_radius` field. `n_births_patched == n_births_seen` always; `n_birth_patch_failures == 0` always under correct implementation (loud halt otherwise via `V051ReducerError`).
+
+### Audit-truth: do not consume `model.trait_fingerprints` for v0.51
+
+`HHModel._record_trait_fingerprint` (model.py ~line 386 for founders; descendants recorded via the equivalent path inside `_spawn_child` before `AgentBorn` emits) records the **pre-patch** trait vector for descendants. After v0.51's listener patches the newborn body, the body's `sensor_radius` differs from `model.trait_fingerprints`'s record. This is not a behavioral problem (the simulator continues with the patched body), but it is an audit-truth problem: any v0.51 metric that reads `model.trait_fingerprints` would observe pre-patch values and would not measure what the slice claims to measure.
+
+**Locked**: v0.51's reducer ignores `model.trait_fingerprints` entirely for the C-arm audit. It captures its own audit table from live `model.agents` post-patch, with explicit columns:
+
+```
+founder_original_sensor_radius
+founder_assigned_sensor_radius
+child_original_sensor_radius          # mutated draw value, captured immediately before listener patch
+child_assigned_sensor_radius          # post-patch value (always 4 for arm C)
+```
+
+`model.trait_fingerprints` is left untouched (no mutation, no read) — same conservative treatment as v0.49's option A.
+
+This correction does not change the verdict structure, arm count, corpus, observable definitions, label-A-degeneracy semantics, two-tier re-anchor, slice rollup outcomes, or locked phrases. It locks the listener-side implementation discipline and the audit-table schema.
+
+## Conservation framing — interventional, not observational
+
+- **No `src/` modifications.** v0.51's intervention is fully script-local: founder-time body trait patches inside `setup_observer` (B and C arms), and descendant-time body trait patches inside an `AgentBorn` listener registered for the duration of one run (C arm only).
+- **No modifications to prior reducer or audit scripts.** v0.34's `lineage_replay.py`, v0.35's `lineage_survival_replay.py`, v0.36's `trait_replay.py`, the four substrate audits (v0.42 / v0.43R / v0.44 / v0.45), and v0.46 / v0.47 / v0.48 / v0.49 / v0.50's reducers remain byte-identical to their merged forms.
+- **No `traits_override`.** All arms construct founders through the normal A_null path with `FounderSpec(traits_override=None)`. The B and C founder patches are applied post-construction inside `setup_observer`, identical to v0.49's locked pattern.
+- **No `model.trait_fingerprints` consumption for the v0.51 descendant audit.** v0.51 captures its own audit table from live bodies post-patch (see Pre-implementation correction).
+- **A_null arm is byte-identical to v0.48 / v0.49 / v0.50's A_null path.** No patch applied. RNG streams (`streams.mutation`, per-agent RNGs) and per-tick state are identical for the same (version, seed, hazard) tuple. Byte-identity verified by the Tier-1 bridge re-anchor halt below.
+- **B arm copies v0.49's founder-clamp logic verbatim.** Same `dataclasses.replace(traits, sensor_radius=4)` on each founder body inside `setup_observer`, before tick-0 capture. Byte-identity verified by the Tier-2 founder-clamp re-anchor halt below.
+- **C arm extends B with a per-run `AgentBorn` listener** that single-channel-patches every newborn's `body.traits.sensor_radius` to 4 before the newborn's first `model.step()`. The listener is registered inside `setup_observer` after the founder patch and the v0.48-style signal listeners, and is disconnected in a `finally` block at run end.
+- **B and C arms diverge from A_null at tick 0.** Only because founder `sensor_radius` differs. C also diverges from B at every newborn's first step because newborn `sensor_radius` is 4 under C and the parent-mutated draw under B. The intervention does not consume RNG and does not alter `streams.mutation` or per-agent RNG state during `setup_observer` (verified by test #10: byte-identical 8-draw probe at the end of `setup_observer` across all three arms). Any divergence in the simulation thereafter arises from changed agent body traits, NOT from RNG-stream offset; once `model.step()` begins, B/C agent behavior diverges from A_null and may trigger different reproduction events at later ticks, which in turn consume `streams.mutation` differently. That is the intended behavior of a single-channel body-trait intervention, not RNG drift.
+- **Single-channel intervention.** B and C modify ONLY the `sensor_radius` field of body trait vectors (founders for B; founders + descendants for C). All other fields come from the model's normal draw / mutation pipeline. A runtime invariant (`V051ReducerError`) enforces this on every founder patch (B, C) and every newborn patch (C). Loud halt on any non-`sensor_radius` field difference between `original_traits` and `assigned_traits`.
+- **No mutation pipeline modification.** v0.51 does NOT override `mutate_traits`. Descendants under arm C still mutate `sensor_radius` *during* `mutate_traits` — the listener overwrites the mutated value back to 4 *after* birth, before the newborn first steps. From the lineage's behavioral perspective, every agent has `sensor_radius=4` at every step it takes; from the mutation pipeline's perspective, nothing is unusual.
+- **Mesa cell occupancy unchanged.** v0.51 does not modify `agent.body.x`, `agent.body.y`, or `agent.cell` — only the `traits.sensor_radius` field. No two-phase patch is required (contrast v0.50 which had to detach + re-attach for the capacity-1 grid).
+
+## Corpus (locked, 64 × 3 arms = 192 runs)
+
+| version | seeds | hazards | runs per arm | total runs |
+|---|---|---|---|---|
+| v0.42 | 41..48 | {0, 8} | 16 | 48 |
+| v0.43R | 49..56 | {0, 8} | 16 | 48 |
+| v0.44 | 57..64 | {0, 8} | 16 | 48 |
+| v0.45 | 65..72 | {0, 8} | 16 | 48 |
+| **total** | | | | **192** |
+
+V0_25 anchor unchanged from v0.46–v0.50. Each (version, seed, hazard) tuple is run **3 times** — once per arm. Wall time estimate: ~10 minutes for 192 runs (matches v0.49 / v0.50).
+
+## Default V0_25 founder draw (for reference)
+
+`tight_gradient` layout, 5 founders at `(spawn_x=1, spread_y(5, 6))` = `[(1,0), (1,1), (1,2), (1,3), (1,4)]`. `TraitConfig(unbounded_mutation=True)` draws integer-valued `sensor_radius` from {1..6}. v0.49's per-run audit logs original founder `sensor_radius` values; v0.51's A_null arm is byte-identical to v0.49 A_null in this respect.
+
+## Arms (locked, 3)
+
+### A_null
+
+```
+no patch
+```
+
+Founder traits, agent RNGs, and `streams.mutation` byte-identical to v0.48 / v0.49 / v0.50's A_null arm. Used as the bridge replication baseline for the Tier-1 re-anchor.
+
+### B_founder_clamp_4
+
+For each (version, seed, hazard) tuple, the reducer constructs `HHModel` normally and applies the founder patch inside `setup_observer`, before tick-0 capture:
+
+1. `HHModel(...)` returns with 5 founder agents constructed normally; `random_traits` and `spawn_agent_rng` consume from `streams.mutation` exactly as A_null.
+2. Inside `setup_observer`, for each founder agent (sorted by lineage_id):
+   ```python
+   original_traits = agent.body.traits
+   assigned_traits = dataclasses.replace(original_traits, sensor_radius=4)
+   agent.body = dataclasses.replace(agent.body, traits=assigned_traits)
+   ```
+3. Single-channel founder invariant: every non-`sensor_radius` field of `original_traits` equals the corresponding field of `assigned_traits`. Loud halt (`V051ReducerError`) on any difference.
+4. Capture v0.51's founder audit row per founder: `(lineage_id, founder_original_sensor_radius, founder_assigned_sensor_radius=4, all_other_founder_traits)`.
+5. **No `AgentBorn` listener.** Descendants of B-arm founders mutate freely via the normal pipeline (this is exactly v0.49's B arm).
+
+By construction, B's per-run, per-tick state is byte-identical to v0.49's `B_sensor_radius_founder_clamp_4` arm for the same (version, seed, hazard) tuple. Tier-2 re-anchor below verifies this at metric level.
+
+### C_lineage_clamp_4
+
+For each (version, seed, hazard) tuple, identical setup to B (normal `HHModel` construction; founder patch in `setup_observer` before tick 0). **Additionally**, inside `setup_observer` after the founder patch and the v0.48-style signal listeners are wired, the reducer registers a per-run `AgentBorn` listener:
+
+```python
+patch_counters = {
+    "n_births_seen": 0,
+    "n_births_patched": 0,
+    "n_births_already_sensor_radius_4": 0,
+    "n_birth_patch_failures": 0,
+}
+
+def _on_agent_born(_sender: object, *, event: AgentBorn) -> None:
+    patch_counters["n_births_seen"] += 1
+    aid = int(event.agent_id)
+    target = next((a for a in model.agents if int(a.body.id) == aid), None)
+    if target is None:
+        patch_counters["n_birth_patch_failures"] += 1
+        msg = f"v0.51 C arm: AgentBorn event for agent_id={aid} but no live body found"
+        raise V051ReducerError(msg)
+    original = target.body.traits
+    if int(original.sensor_radius) == 4:
+        patch_counters["n_births_already_sensor_radius_4"] += 1
+    assigned = dataclasses.replace(original, sensor_radius=4)
+    # Single-channel invariant on child: every non-sensor_radius field equal.
+    _assert_single_channel_invariant(original, assigned)
+    target.body = dataclasses.replace(target.body, traits=assigned)
+    capture.child_audit_rows.append(
+        ChildAudit(
+            tick=int(event.tick),
+            agent_id=aid,
+            lineage_id=int(event.lineage_id),
+            child_original_sensor_radius=int(original.sensor_radius),
+            child_assigned_sensor_radius=4,
+        )
+    )
+    patch_counters["n_births_patched"] += 1
+
+signal_for(AgentBorn).connect(_on_agent_born, sender=model, weak=False)
+disconnect_callbacks.append(
+    lambda: signal_for(AgentBorn).disconnect(_on_agent_born, sender=model)
+)
+```
+
+The per-run scope wraps the `run_chamber(...)` call in a `try / finally`, with the disconnect loop in `finally` (executes whether the run succeeds, raises, or is interrupted). This guarantees no sender-scoped listener leaks into a later run's `HHModel`.
+
+**Birth-pipeline ordering invariants** (verified by sub-agent investigation; locked in handoff):
+
+- Births fire at phase 7 of `model.step()` (after metabolism / hazard).
+- The blinker `send()` is synchronous; the listener fires before `del child_agent`.
+- The newborn is reachable via `model.agents` immediately after Mesa registration.
+- The listener fires **before** the newborn first steps — its first `model.step()` consumes the patched body.
+- `model.trait_fingerprints` for the newborn is recorded by `_record_trait_fingerprint` *before* `AgentBorn` emits and is therefore stale relative to the patched body. v0.51's audit ignores `model.trait_fingerprints` per the Pre-implementation correction above.
+
+The model's `streams.mutation` and per-agent RNGs are NOT consumed by the listener; only the body's `traits.sensor_radius` is overwritten.
+
+## Labels (locked, two)
+
+Label B is unchanged from v0.48 / v0.49 / v0.50 (tick-50 readiness fraction with the 3-tier tiebreak); copy-local from v0.48's reducer.
+
+Label A definition is unchanged (`argmax_lineage(founder_sensor_radius)`, tiebreak `min(lineage_id)`), but **degenerate under both B and C** (all 5 founders have `assigned_sensor_radius == 4` → 5-way tie → `min(lineage_id)` always wins → label A is always lineage 0). Label A is therefore **diagnostic-only** under arms B and C: computed and reported in the per-lineage CSV (`label_a_gating_valid = False`, `label_a_degenerate_reason = "all founders assigned sensor_radius=4"`), but does NOT feed the arm's sub-verdict computation, does NOT enter the per-arm paired_d cells, and does NOT trigger `INTERVENTION_OPPOSITE_SIGN_HALT` even if its descriptive signed_d's are below −0.5.
+
+| arm | Label A gating | Label B gating |
+|---|:-:|:-:|
+| A_null | gates | gates |
+| B_founder_clamp_4 | diagnostic-only (degenerate) | gates |
+| C_lineage_clamp_4 | diagnostic-only (degenerate) | gates |
+
+## Primary observables (locked, 3, identical to v0.48 / v0.49 / v0.50)
+
+| # | name | expected sign |
+|---|---|:-:|
+| 1 | `pre50_food_events_count` | + |
+| 2 | `pre50_food_energy_acquired` | + |
+| 3 | `mean_distance_to_nearest_food_cell` | − |
+
+Definitions, aggregation rules, NaN handling: copy-local from v0.48 / v0.49 / v0.50. Per-tick observer firing semantics unchanged (tick 0 captured at `setup_observer` time *after* the B/C founder patch; ticks 1..50 captured by `tick_observer`).
+
+## Effect-size rule (locked, sign-aware, identical to v0.48 / v0.49 / v0.50)
+
+```
+per_run_delta_O = label_lineage_value_O − mean(non_label_lineage_values_O)
+paired_d_O      = mean(per_run_delta_O) / stdev(per_run_delta_O, ddof=1)
+signed_d_O      = paired_d_O × expected_sign
+fires_expected  iff signed_d_O ≥ +0.5
+fires_wrong     iff signed_d_O ≤ −0.5
+```
+
+Per-arm NaN handling identical to v0.48 / v0.49 / v0.50. Cross-arm pairing on (version, seed, hazard) is descriptive only.
+
+## Per-arm sub-verdicts (locked)
+
+### A_null arm — gating: Label A AND Label B
+
+| condition | sub-verdict |
+|---|---|
+| both labels clear ≥ 2/3, 0 wrong-sign | `A_NULL_BRIDGE_PRESENT` |
+| exactly one label clears ≥ 2/3, 0 wrong-sign | `A_NULL_BRIDGE_PARTIAL` |
+| neither label clears ≥ 2/3, 0 wrong-sign | `A_NULL_BRIDGE_NOT_FOUND` |
+| any primary signed_d ≤ −0.5 under either label | `A_NULL_BRIDGE_OPPOSITE_SIGN_HALT` |
+
+### B_founder_clamp_4 arm — gating: Label B only (Label A diagnostic)
+
+| condition | sub-verdict |
+|---|---|
+| Label B clears ≥ 2/3, 0 wrong-sign | `B_FOUNDER_CLAMP_LABEL_B_BRIDGE_PRESENT` |
+| Label B clears < 2/3, 0 wrong-sign | `B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND` |
+| any Label B primary signed_d ≤ −0.5 | `B_FOUNDER_CLAMP_LABEL_B_OPPOSITE_SIGN_HALT` |
+
+### C_lineage_clamp_4 arm — gating: Label B only (Label A diagnostic)
+
+| condition | sub-verdict |
+|---|---|
+| Label B clears ≥ 2/3, 0 wrong-sign | `C_LINEAGE_CLAMP_LABEL_B_BRIDGE_PRESENT` |
+| Label B clears < 2/3, 0 wrong-sign | `C_LINEAGE_CLAMP_LABEL_B_BRIDGE_NOT_FOUND` |
+| any Label B primary signed_d ≤ −0.5 | `C_LINEAGE_CLAMP_LABEL_B_OPPOSITE_SIGN_HALT` |
+
+Each arm's paired_d cells are computed independently from the arm's 64-run pool. Label A's paired_d cells under B and C are computed and CSV-reported but do not gate.
+
+## Slice-level rollup verdicts (locked, 6 outcomes, priority-ordered)
+
+Priority order (first-matching wins):
+
+1. `CORPUS_REDERIVE_DRIFT_HALT`
+2. `INTERVENTION_OPPOSITE_SIGN_HALT`
+3. `BRIDGE_REPLICATION_HALT` (A_null vs v0.48)
+4. `FOUNDER_CLAMP_REPLICATION_HALT` (B vs v0.49 B cells)
+5. `FOUNDER_CLAMP_REPRODUCED`
+6. `LINEAGE_CLAMP_ALTERS_FOUNDER_CLAMP_RESULT`
+
+The partition is **total under correct re-anchors**: with priority-3 anchoring A_null sub-verdict to PRESENT and priority-4 anchoring B sub-verdict to NOT_FOUND, the only remaining categorical degree of freedom is C ∈ {PRESENT, NOT_FOUND}. NOT_FOUND under C → outcome 5; PRESENT under C → outcome 6. C opposite-sign halts at priority 2. No catch-all is needed; if a non-halt non-{5,6} state is reached, an upstream anchor halt failed silently and the implementation is broken.
+
+### Halt conditions
+
+| priority | rollup verdict | trigger | locked phrase (verbatim) |
+|---|---|---|---|
+| 1 | `CORPUS_REDERIVE_DRIFT_HALT` | A_null arm `a_share_h8` for any of v0.42 / v0.44 / v0.45 drifts > 1e-3 from the published reference | "Halt: A_null re-anchor drifted from the published Results value for {version}; v0.51's deterministic re-execution does not reproduce the published metric within 1e-3." |
+| 2 | `INTERVENTION_OPPOSITE_SIGN_HALT` | any arm's gating-label primary fires wrong-sign (signed_d ≤ −0.5). Diagnostic-only Label A under B / C does NOT trigger this halt. | "Halt: a v0.51 spatial / foraging primary fires in the WRONG direction under a gating label; the founder + descendant `sensor_radius` clamp intervention is incompatible with the locked expected signs." |
+| 3 | `BRIDGE_REPLICATION_HALT` | (a) A_null arm's signed_d for any of the six v0.48 cells drifts > 1e-3 from the v0.48 published value, OR (b) A_null sub-verdict ≠ `A_NULL_BRIDGE_PRESENT` | "Halt: v0.51's A_null arm does not reproduce v0.48's spatial bridge — either a paired_d cell drifts beyond 1e-3 of the published value, or the A_null sub-verdict does not resolve to PRESENT. v0.51 cannot interpret the B / C arms without an established baseline." |
+| 4 | `FOUNDER_CLAMP_REPLICATION_HALT` | B arm's six (Label A diagnostic + Label B gating) signed_d cells drift > 1e-3 from v0.49's B-arm published values | "Halt: v0.51's B_founder_clamp_4 arm does not reproduce v0.49's founder-clamp signed_d cells — at least one cell drifts beyond 1e-3 of the v0.49 published value. v0.51 cannot interpret the C arm without an established founder-clamp baseline." |
+
+### Tier-1 (priority 3) re-anchor — A_null vs v0.48
+
+A_null arm's six paired_d cells must reproduce v0.48's published signed_d values within 1e-3:
+
+| label | observable | sign | v0.48 published signed_d |
+|---|---|:-:|:-:|
+| `label_a_sensor_radius` | `pre50_food_events_count` | + | **+1.066** |
+| `label_a_sensor_radius` | `pre50_food_energy_acquired` | + | **+1.066** |
+| `label_a_sensor_radius` | `mean_distance_to_nearest_food_cell` | − | **+1.916** |
+| `label_b_readiness_fraction` | `pre50_food_events_count` | + | **+0.916** |
+| `label_b_readiness_fraction` | `pre50_food_energy_acquired` | + | **+0.916** |
+| `label_b_readiness_fraction` | `mean_distance_to_nearest_food_cell` | − | **+1.179** |
+
+Drift tolerance = 1e-3. Same protocol as v0.49 / v0.50.
+
+### Tier-2 (priority 4) re-anchor — B vs v0.49 B cells
+
+B arm's six (Label A diagnostic + Label B gating) signed_d cells must reproduce v0.49's published B-arm values within 1e-3:
+
+| label | observable | sign | v0.49 published B signed_d (Label A diagnostic) |
+|---|---|:-:|:-:|
+| `label_a_sensor_radius` (diagnostic) | `pre50_food_events_count` | + | **−0.243** |
+| `label_a_sensor_radius` (diagnostic) | `pre50_food_energy_acquired` | + | **−0.243** |
+| `label_a_sensor_radius` (diagnostic) | `mean_distance_to_nearest_food_cell` | − | **−0.732** (paired_d ≈ +0.732 → signed_d −0.732 with sign=−1) |
+
+| label | observable | sign | v0.49 published B signed_d (Label B gating) |
+|---|---|:-:|:-:|
+| `label_b_readiness_fraction` | `pre50_food_events_count` | + | **+0.182** |
+| `label_b_readiness_fraction` | `pre50_food_energy_acquired` | + | **+0.182** |
+| `label_b_readiness_fraction` | `mean_distance_to_nearest_food_cell` | − | **−0.181** |
+
+Drift tolerance = 1e-3. Source: `docs/experiments/fear_hunger_v0.49.md` Results §"Per-arm paired_d (sign-aware) → Arm B".
+
+Rationale: v0.51's B arm runs the same code path as v0.49's B arm (same V0_25 anchor, same founder-clamp-4 patch via `setup_observer`, same `streams.mutation` consumption order, no descendant listener on this arm). The cells must reproduce v0.49's values bytewise modulo float-arithmetic edge cases. A drift > 1e-3 indicates an implementation bug or an RNG-stream offset — most likely a misplaced listener wire-up that consumed bytes from `streams.mutation`.
+
+### Outcome conditions (only consulted if no halt fires)
+
+| priority | rollup verdict | (A_null, B_founder_clamp, C_lineage_clamp) sub-verdicts | locked phrase (verbatim) |
+|---|---|---|---|
+| 5 | `FOUNDER_CLAMP_REPRODUCED` | (A_NULL_BRIDGE_PRESENT, B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND, C_LINEAGE_CLAMP_LABEL_B_BRIDGE_NOT_FOUND) | "v0.51 reproduces v0.49's founder-clamp finding under both founder-only and lineage-wide `sensor_radius` clamps on the modern A_null corpus: the v0.48 spatial / foraging bridge does not fire under Label B in either clamp arm, and clamping descendants in addition to founders does not change the categorical verdict." |
+| 6 | `LINEAGE_CLAMP_ALTERS_FOUNDER_CLAMP_RESULT` | (A_NULL_BRIDGE_PRESENT, B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND, C_LINEAGE_CLAMP_LABEL_B_BRIDGE_PRESENT) | "v0.51's lineage-wide `sensor_radius` clamp alters the founder-clamp result on the modern A_null corpus: the bridge does not fire under founder-only clamp but does fire under lineage-wide clamp. This counterintuitive pattern requires follow-up before interpreting descendant drift as explanatory." |
+
+The rollup is **categorical-only** — no magnitude-delta rule between B and C. Magnitude differences in B vs C signed_d cells are reported descriptively in Results but do not alter the verdict. Per the v0.51 handoff and user lock-in: this is deliberate; report magnitude differences in Results without firing a verdict on them.
+
+The rollup is **conservative**: locked phrases use "reproduces" and "alters" — not "is causal for", "proves", or "rules out". Mechanism declarations require fresh-stream calibration analogous to v0.30..v0.33; v0.51 is a single-channel founder + descendant `sensor_radius` clamp and cannot rule out trait-covariance effects, founder-position confounds (already addressed by v0.50 but not eliminated), or non-V0_25-anchor effects.
+
+Outcome 6's locked phrase explicitly flags that an ALTERS firing demands follow-up before interpretation — clamping descendants more aggressively than founders cannot intuitively *create* a bridge that founder-only clamp removed; an ALTERS verdict signals an unexpected interaction (e.g., descendant trait covariance, listener implementation bug, edge-case data path) and is treated as a finding requiring investigation, not a clean causal claim.
+
+## Cautious framing (per CLAUDE.md)
+
+- "**Reproduces**", "**alters**" — NOT "**proves**", "**causes**", or "**rules out**".
+- "**Founder + descendant `sensor_radius` clamped**" — NOT "**no `sensor_radius` variation in the lineage**" (the mutation pipeline still draws variant values; the listener overwrites them).
+- "**On the modern A_null corpus**" / "**under the locked V0_25 anchor**" — NOT a chamber-config-independent claim.
+- v0.51 explicitly does not establish: cross-layout generalisation, mechanism (information vs cost), trait-covariance with non-`sensor_radius` fields, or post-tick-50 dominance dynamics.
+
+## What v0.51 cannot establish (logged here pre-data, not retrofittable)
+
+- ✗ **Mechanism**. v0.51 is single-channel: it varies *only* the `sensor_radius` field of body trait vectors (founders for B; founders + descendants for C). It does not separate "information radius" from "metabolic cost".
+- ✗ **Trait-covariance closure**. v0.51 holds non-`sensor_radius` traits at the model's normal draw / mutation. If `sensor_radius` interacts non-trivially with another trait via reproduction inheritance, v0.51 cannot detect it. (v0.50's preflight showed pairwise |ρ| < 0.15 for founder traits, but that does not exclude descendant-time interactions.)
+- ✗ **Generalisation beyond V0_25 / tight_gradient / 5 founders / height-6**. Layout, policy, reproduction config, and trait config are all V0_25 anchor.
+- ✗ **Causality for post-tick-50 dominance**. v0.51 measures the v0.48 *bridge* (pre-50 spatial / foraging primaries vs Label B). It does not directly probe v0.46's b50-share dominance label.
+- ✗ **Mechanism for an ALTERS firing**. Outcome 6 (`LINEAGE_CLAMP_ALTERS_FOUNDER_CLAMP_RESULT`) is the only non-halt non-REPRODUCED categorical outcome under correct re-anchors. If it fires, the locked phrase explicitly demands follow-up — v0.51 cannot interpret an ALTERS verdict as a clean causal claim because clamping descendants is a *more restrictive* intervention than clamping founders alone, and a more restrictive intervention should not intuitively *create* a bridge that the less restrictive intervention removed. An ALTERS firing signals an unexpected interaction worth investigating before publishing a directional reading.
+
+## Open framing (NOT in v0.51)
+
+- v0.52 candidate: set `sensor_radius_metabolic_cost = 0` (decouple sensing radius from metabolic burden; isolate "information" from "cost").
+- v0.53 candidate: cross-layout generalisation (v0.48–v0.51 on `widened_gradient` / `food_ladder`).
+- Eventual fresh-stream calibration (v0.30-style) on the v0.46–v0.51 conclusion stack — needed for any "mechanism" declaration.
+
+## Re-anchor (locked, A_null arm only, identical to v0.46–v0.50)
+
+| version | published `a_share_h8` |
+|---|---|
+| v0.42 | 0.652 |
+| v0.43R | NOT PUBLISHED (informational-only) |
+| v0.44 | 0.878 |
+| v0.45 | 0.818 |
+
+B and C arms re-derive their own `a_share_h8` for descriptive logging; do NOT gate the verdict.
+
+## Outputs (locked)
+
+```
+runs/v0.51-descendant-drift/per_run_per_lineage_v051.csv
+  columns: arm, version, seed, hazard, run_id, lineage_id,
+           founder_original_sensor_radius, founder_assigned_sensor_radius,
+           founder_reproduction_drive, founder_metabolic_rate,
+           pre50_food_events_count, pre50_food_energy_acquired,
+           mean_distance_to_nearest_food_cell,
+           tick50_living_count, tick50_above_threshold_count, tick50_above_threshold_fraction,
+           b50_count, is_eventual_top_b50_label,
+           is_high_sensor_radius_lineage, is_high_tick50_readiness_fraction_lineage,
+           label_a_gating_valid, label_a_degenerate_reason
+
+runs/v0.51-descendant-drift/per_run_child_audit.csv
+  columns: arm, version, seed, hazard, run_id, tick, agent_id, lineage_id,
+           child_original_sensor_radius, child_assigned_sensor_radius
+  (arm in {C_lineage_clamp_4} only; A_null and B contribute zero rows)
+
+runs/v0.51-descendant-drift/per_run_listener_counters.csv
+  columns: arm, version, seed, hazard, run_id,
+           n_births_seen, n_births_patched,
+           n_births_already_sensor_radius_4, n_birth_patch_failures
+  (arm in {C_lineage_clamp_4} only)
+
+runs/v0.51-descendant-drift/audit_summary.csv
+  columns: section, key, value
+  sections:
+    - reanchor_a_share_h8: per (arm, version, h=8) derived + (A_null only) published + drift_abs
+    - bridge_reanchor: per (label, observable) v0.48 published signed_d + A_null derived signed_d + drift_abs
+    - founder_clamp_reanchor: per (label, observable) v0.49 B published signed_d + v0.51 B derived signed_d + drift_abs
+    - paired_d: per (arm, gating-label, observable) cell — paired_d, signed_d, n_runs, fires_expected, fires_wrong
+    - paired_d_diagnostic: per (B, C, label_a, observable) cell — descriptive only
+    - listener_aggregates: total per arm of n_births_seen / n_births_patched / n_births_already_sr4 / n_birth_patch_failures
+    - sub_verdicts: per arm — sub-verdict + locked sub-phrase (where applicable)
+    - rollup_verdict: locked rollup verdict + locked rollup phrase
+
+runs/v0.51-descendant-drift/audit_log.txt
+  human-readable echo with all locked phrases printed verbatim where they fire,
+  plus the listener counter aggregate and the n_births distribution per arm.
+```
+
+## Implementation plan (locked)
+
+1. Fresh script `scripts/v0_51_descendant_drift_audit.py`. CLI: `uv run python scripts/v0_51_descendant_drift_audit.py [--out-dir runs/v0.51-descendant-drift]`.
+2. Per (version, seed, hazard) tuple, run **3 arms**. Every arm constructs `HHModel` via the normal A_null path (`FounderSpec(traits_override=None)`):
+   - **A_null**: no patch, no listener.
+   - **B_founder_clamp_4**: inside `setup_observer`, apply v0.49's founder-clamp patch verbatim. No listener.
+   - **C_lineage_clamp_4**: inside `setup_observer`, apply the founder-clamp patch (verbatim from B), then register the `AgentBorn` listener (`weak=False` + closure capture in `disconnect_callbacks`). The listener single-channel-patches every newborn body's `traits.sensor_radius` to 4 before the newborn first steps; logs to `patch_counters` and `capture.child_audit_rows`.
+3. For each arm-run, attach v0.48-style `setup_observer` + `tick_observer` (copy-local from v0.48 / v0.49 / v0.50). The `setup_observer` order is: (a) apply founder patch (B / C), (b) capture v0.51 founder audit table from live bodies, (c) capture tick-0 snapshot, (d) wire `AgentBorn` / `AteFood` / `HazardDamageApplied` listeners (filtered by `sender=model`), (e) for C only, wire the descendant-clamp listener (also `sender=model`).
+4. Wrap `run_chamber(...)` in `try / finally`. On `finally`, iterate `disconnect_callbacks` and call each — guarantees no listener leak even on failure.
+5. Aggregate per-lineage primaries identical to v0.48 / v0.49 / v0.50. Compute Label A and Label B per the arm's specific source (founder-original = founder-assigned for A_null; assigned = 4 for B and C). Under B and C, report Label A diagnostically with `label_a_gating_valid = False`.
+6. Compute paired_d per (arm, gating-label, observable) cell. For B and C, also compute Label A diagnostic paired_d cells (CSV-reported, do NOT gate). Classify per-arm sub-verdicts under the gating rules above.
+7. **Tier-1 bridge re-anchor** (priority 3): A_null arm's six cells vs v0.48 published; halt if drift > 1e-3 OR if A_null sub-verdict ≠ PRESENT.
+8. **Tier-2 founder-clamp re-anchor** (priority 4): B arm's six cells vs v0.49 B published; halt if drift > 1e-3.
+9. **Corpus re-anchor** (priority 1): A_null arm only; halt if `a_share_h8` for v0.42 / v0.44 / v0.45 drifts > 1e-3.
+10. **Opposite-sign halt** (priority 2): scan all gating-label cells (Label A under A_null + Label B under all three); halt if any signed_d ≤ −0.5. Diagnostic-only Label A cells under B / C are excluded from the halt scan.
+11. Compute slice rollup verdict per the locked priority order; print + write the locked phrase verbatim.
+
+The reducer is fully self-contained: it reads no `runs/` artifacts. Wall time estimate: ~10 minutes for 192 runs (matches v0.49 / v0.50; the listener overhead is O(births per run) and births are bounded by the reproduction config).
+
+Determinism guaranteed by passing each (version, seed) the same V0_25 anchor config; the listener does not consume any RNG, so A_null / B / C `streams.mutation` byte-identity at every founder spawn is structural by construction.
+
+## Test list (locked, 16 tests; extends v0.46–v0.50 7-point review pattern)
+
+`tests/test_v0_51_descendant_drift_audit.py`:
+
+1. `test_all_arms_construct_founders_via_normal_a_null_path` — for every arm, `FounderSpec` is constructed with `traits_override=None`. The intervention lives in `setup_observer` (B, C) and in the `AgentBorn` listener (C only).
+2. `test_b_founder_clamp_patch_replaces_only_sensor_radius_on_founder_bodies` — construct `HHModel` for a representative tuple; capture pre-patch founder body traits; apply the B-arm patch; assert every founder's `body.traits.sensor_radius == 4` and every other field byte-identical to pre-patch.
+3. `test_c_founder_clamp_identical_to_b_for_founders` — construct two `HHModel` instances with the same (version, seed, hazard); apply B founder patch to one and C founder patch to the other; assert all 5 founders' bodies are byte-identical between the two models post-patch (the B and C founder paths are the same code).
+4. `test_c_agent_born_listener_patches_newborn_via_synthetic_event` — register the C listener on a constructed `HHModel`; spawn a synthetic agent into `model.agents` with a non-4 `sensor_radius`; emit a synthetic `AgentBorn(agent_id=spawned, lineage_id=..., tick=...)` via `signal_for(AgentBorn).send(model, event=...)`; assert the spawned agent's `body.traits.sensor_radius == 4` post-emit and every other body trait field is byte-identical to pre-emit.
+5. `test_c_listener_single_channel_invariant_on_child_patches` — register the C listener on a constructed `HHModel`; spawn a synthetic agent whose traits would, after `dataclasses.replace(..., sensor_radius=4)`, also flip a different field (simulated by monkey-patching `dataclasses.replace` for the test); assert `V051ReducerError` raised loud and `n_birth_patch_failures` increments.
+6. `test_c_listener_strong_reference_via_weak_false_and_disconnect_callbacks` — construct `HHModel`; register listener with `weak=False`; drop the local Python reference to `_on_agent_born`; force a Python GC cycle; emit a synthetic `AgentBorn`; assert the listener still fires (verifies `weak=False` is honoured and the closure-capture-in-`disconnect_callbacks` belt-and-braces works).
+7. `test_c_listener_disconnects_in_finally_on_run_failure` — wrap `run_chamber(...)` in `try / finally` and force the run to raise inside the chamber loop (e.g., monkey-patch a step to raise); assert the disconnect callback runs (verified by emitting a post-finally synthetic `AgentBorn` and confirming no patch occurs / no exception from a stale handler).
+8. `test_c_descendant_patch_counters_increment_correctly` — synthetic A_null run with stub births at: (a) child with `sensor_radius=2` → `n_births_seen += 1`, `n_births_patched += 1`, `n_births_already_sensor_radius_4 += 0`; (b) child with `sensor_radius=4` → `n_births_seen += 1`, `n_births_patched += 1`, `n_births_already_sensor_radius_4 += 1` (no-op patch but counted as patched); (c) failed lookup → `n_birth_patch_failures += 1`. Assert counter values after each scenario.
+9. `test_v051_audit_uses_live_bodies_not_trait_fingerprints` — grep test on `scripts/v0_51_descendant_drift_audit.py` source: assert the file contains zero references to `model.trait_fingerprints` or `trait_fingerprints` (the audit must use live `model.agents` only). Belt-and-braces: also test that with a synthetic model where `model.trait_fingerprints` is set to an obviously-wrong sentinel, the v0.51 founder + child audit tables do not contain the sentinel.
+10. `test_streams_mutation_state_byte_identical_across_arms_at_setup_observer_end` — for the same (version, seed, hazard), construct three `HHModel` instances; record `streams.mutation` state via a deterministic 8-draw probe at the end of `setup_observer` for each arm (after founder patch + listener wire-up for C); assert the next 8 draws are byte-identical across A_null, B, and C. Verifies the listener does not consume RNG.
+11. `test_label_a_diagnostic_only_under_b_and_c` — synthetic per-lineage rows for arm B and arm C; assert `label_a_gating_valid == False`, `label_a_degenerate_reason == "all founders assigned sensor_radius=4"`, and that Label A's paired_d cells do NOT feed B's or C's sub-verdict (gating uses Label B only).
+12. `test_per_arm_subverdict_a_null_present_requires_both_labels_clear` — synthetic A_null paired_d such that Label A is (+0.6, +0.7, −0.3) and Label B is (+0.6, +0.8, −0.2); assert sub-verdict = `A_NULL_BRIDGE_PRESENT`. Also test that (Label A 1/3, Label B 2/3) → `A_NULL_BRIDGE_PARTIAL`.
+13. `test_rollup_founder_clamp_reproduced_when_present_notfound_notfound` — synthetic (A_NULL_BRIDGE_PRESENT, B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND, C_LINEAGE_CLAMP_LABEL_B_BRIDGE_NOT_FOUND); assert rollup = `FOUNDER_CLAMP_REPRODUCED`.
+14. `test_rollup_lineage_clamp_alters_founder_clamp_result_when_present_notfound_present` — synthetic (A_NULL_BRIDGE_PRESENT, B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND, C_LINEAGE_CLAMP_LABEL_B_BRIDGE_PRESENT); assert rollup = `LINEAGE_CLAMP_ALTERS_FOUNDER_CLAMP_RESULT` and the locked phrase contains "alters the founder-clamp result" verbatim.
+15. `test_founder_clamp_replication_halt_priority_over_outcome` — synthesise B-arm signed_d cells where one cell drifts +1.5 from v0.49's B published value; assert `FOUNDER_CLAMP_REPLICATION_HALT` raised loud (priority 4) and the outcome verdicts are not consulted. Also synthesise an A_null bridge cell drift of +1.5 alongside a valid B/C state and assert `BRIDGE_REPLICATION_HALT` fires at priority 3, not the outcome.
+16. `test_priority_partition_total_under_correct_anchors` — under the assumption that priorities 1-4 do not fire (corpus + bridge + founder-clamp re-anchors all pass; no opposite-sign), the only categorical degrees of freedom are A_null sub-verdict ∈ {PRESENT} (pinned by priority 3), B sub-verdict ∈ {NOT_FOUND} (pinned by priority 4), and C sub-verdict ∈ {PRESENT, NOT_FOUND, OPPOSITE_SIGN_HALT}. Assert: C NOT_FOUND → `FOUNDER_CLAMP_REPRODUCED`; C PRESENT → `LINEAGE_CLAMP_ALTERS_FOUNDER_CLAMP_RESULT`; C OPPOSITE_SIGN_HALT → `INTERVENTION_OPPOSITE_SIGN_HALT` (priority 2). Also assert that when a halt fires, no outcome verdict is consulted (the halt phrase replaces the rollup phrase). Confirms total-partition under correct re-anchors with no catch-all required.
+
+## Watch-outs (for future-Chronus)
+
+- **Listener strong-reference**: connect with `weak=False` AND keep the closure in `disconnect_callbacks`. Both protections; either alone is sufficient on current blinker but the redundancy is cheap insurance. Documented in pre-implementation correction.
+- **Listener disconnect in `finally`**: per-run scope, not module scope. A failed run must not leak its `sender=model`-scoped listener into a later run's `HHModel`. Test #7 enforces.
+- **`AgentBorn` event has only `agent_id`** — no trait fields, no body reference. The listener must scan `model.agents` to find the body by id. With 5 founders + small descendant counts at pre-50, this is O(births × population) per run, negligible at this corpus scale.
+- **`model.trait_fingerprints` records pre-patch.** v0.51's audit tables must NOT consume `model.trait_fingerprints` — they would observe pre-patch values (which differ from the patched values for descendants under arm C). Use live bodies + v0.51's own audit rows only. Test #9 enforces. This is a "audit-truth" issue, not a behavioral one.
+- **Single-channel invariant must halt loud** on any non-`sensor_radius` field difference between original and assigned trait vectors. Applied to BOTH founder patches (B, C) and child patches (C). Guards against `dataclasses.replace` semantics drift if a future Traits field is added and not preserved.
+- **No-op patches are valid.** A child whose mutated `sensor_radius` is already 4 is a legitimate no-op — the listener still runs the `dataclasses.replace(...)` write (which produces an identical object) and the single-channel invariant still passes. `n_births_already_sensor_radius_4` counts these for transparency. The expected fraction at V0_25 trait config is 1/6 ≈ 0.167.
+- **Pre-50 byte-identity** vs v0.48 holds for A_null only. B and C diverge at tick 0 (founder bodies have `sensor_radius=4`); C additionally diverges from B at every newborn's first step. Tier-1 (vs v0.48) anchors A_null; Tier-2 (vs v0.49) anchors B. C has no published reference to anchor against — it's the new measurement.
+- **B arm should reproduce v0.49 byte-identically.** The B path is v0.49's B path verbatim — same `setup_observer` body patch, same RNG consumption, same downstream simulation. Tier-2 enforces drift ≤ 1e-3.
+- **Expected outcome under correct implementation is #5 `FOUNDER_CLAMP_REPRODUCED`**: Tier-2 re-anchor pins B's sub-verdict to v0.49's NOT_FOUND, and clamping descendants more aggressively than founders should not introduce a bridge. An ALTERS firing is the only non-halt non-REPRODUCED outcome and demands follow-up per the locked phrase.
+- **Label A is diagnostic-only under both B and C.** Five-way tie under min(lineage_id) tiebreak → always lineage 0. Reported in CSV with `label_a_gating_valid = False` but does NOT trigger `INTERVENTION_OPPOSITE_SIGN_HALT` even at large negative signed_d (e.g., v0.49's −0.732 on `mean_distance_to_nearest_food_cell` under B Label A). Test #11 enforces.
+- **Determinism north star** ([[scripts/core_smoke_test.py]]) must continue to pass; v0.51 makes no `src/` change so this is preserved by construction.
+- **All five prior intervention paths** (v0.42, v0.43R, v0.44, v0.45, v0.49, v0.50) plus the post-hoc reducers (v0.34, v0.35, v0.36, v0.46, v0.47, v0.48) remain dispatchable on main. v0.49's reducer in particular must remain byte-identical to its merged form — v0.51 does NOT modify it.
+- **Locked phrase discipline:** all sub-verdict and rollup locked phrases fire verbatim where the verdict fires. No paraphrase.
+
+## Files this slice will create
+
+- `docs/experiments/fear_hunger_v0.51.md` (this file; Results section appended after reducer run)
+- `scripts/v0_51_descendant_drift_audit.py`
+- `tests/test_v0_51_descendant_drift_audit.py`
+
+No other files modified.
+
+## Results
+
+**Status:** reducer executed 2026-05-08 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~10 minutes. **All re-anchors PASS:** Tier-1 bridge re-anchor (A_null vs v0.48) max drift 0.0004; Tier-2 founder-clamp re-anchor (B vs v0.49 B) max drift 0.0004; corpus re-anchor (`a_share_h8`) max drift 0.0003. No opposite-sign firings under any gating label. 0 listener patch failures.
+
+### Rollup verdict — `FOUNDER_CLAMP_REPRODUCED` fires
+
+> **Locked phrase fires verbatim:** "v0.51 reproduces v0.49's founder-clamp finding under both founder-only and lineage-wide `sensor_radius` clamps on the modern A_null corpus: the v0.48 spatial / foraging bridge does not fire under Label B in either clamp arm, and clamping descendants in addition to founders does not change the categorical verdict."
+
+Sub-verdicts:
+
+| arm | sub-verdict |
+|---|---|
+| A_null | `A_NULL_BRIDGE_PRESENT` |
+| B_founder_clamp_4 | `B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND` |
+| C_lineage_clamp_4 | `C_LINEAGE_CLAMP_LABEL_B_BRIDGE_NOT_FOUND` |
+
+The (PRESENT, NOT_FOUND, NOT_FOUND) triple is the REPRODUCED pattern — clamping descendants in addition to founders did not change the categorical verdict on the modern A_null corpus.
+
+### Headline caveat (read this before the rest of Results)
+
+`C_lineage_clamp_4` was behaviorally equivalent to `B_founder_clamp_4` at the paired_d level because all 1539 C-arm newborns across the 64-run corpus arrived at `sensor_radius=4` *before* the listener patched. **v0.51 cannot distinguish "descendant `sensor_radius` variation is irrelevant to the bridge" from "descendant `sensor_radius` variation did not occur under V0_25 after founder clamp."** The C arm's lineage-wide clamp *would have* blocked descendant drift had any occurred, but no drift was observed pre-patch in this corpus. The locked phrase still fires verbatim — categorical preservation under lineage-wide clamping is the empirical finding — but the *evidence* rests on B-equivalence rather than on a counterfactual descendant-drift channel that v0.51 actively neutralised. v0.49's founder-only clamp was not secretly leaking meaningful descendant `sensor_radius` variation under V0_25; it did not leak because the integer-quantized mutation pipeline kept children of clamped-4 parents at 4 with empirical probability 1 across all 1539 reproductive events. See "Structural finding" below for the per-listener counters and the implication for v0.51's interpretive scope.
+
+### Tier-1 bridge re-anchor — A_null arm reproduces v0.48 within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 ≪ 1e-3. v0.51's A_null arm is byte-compatible with v0.48 / v0.49 / v0.50's A_null path; B and C interpretations are anchored at the same baseline.
+
+### Tier-2 founder-clamp re-anchor — B arm reproduces v0.49 B within 1e-3
+
+| label | observable | v0.49 B published | v0.51 B derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius (diagnostic) | pre50_food_events_count | −0.243 | −0.243 | 0.0003 |
+| label_a_sensor_radius (diagnostic) | pre50_food_energy_acquired | −0.243 | −0.243 | 0.0003 |
+| label_a_sensor_radius (diagnostic) | mean_distance_to_nearest_food_cell | −0.732 | −0.732 | 0.0004 |
+| label_b_readiness_fraction (gating) | pre50_food_events_count | +0.182 | +0.182 | 0.0000 |
+| label_b_readiness_fraction (gating) | pre50_food_energy_acquired | +0.182 | +0.182 | 0.0000 |
+| label_b_readiness_fraction (gating) | mean_distance_to_nearest_food_cell | −0.181 | −0.181 | 0.0003 |
+
+Max drift 0.0004. v0.51's B arm reproduces v0.49's B-arm signed_d cells within published precision — the founder-clamp baseline is byte-compatible with v0.49.
+
+### Per-arm signed_d (sign-aware)
+
+#### Arm A_null — sub-verdict `A_NULL_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | **+1.066** | YES |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | **+1.066** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **+1.916** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.916** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.916** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.179** | YES |
+
+#### Arm B_founder_clamp_4 — sub-verdict `B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND`
+
+Label A (diagnostic-only; `label_a_gating_valid = False`):
+
+| observable | sign | signed_d |
+|---|:-:|:-:|
+| pre50_food_events_count | + | −0.243 |
+| pre50_food_energy_acquired | + | −0.243 |
+| mean_distance_to_nearest_food_cell | − | −0.732 |
+
+Label B (gating):
+
+| observable | sign | signed_d | fires |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | +0.182 | no |
+| pre50_food_energy_acquired | + | +0.182 | no |
+| mean_distance_to_nearest_food_cell | − | −0.181 | no |
+
+0/3 primaries clear +0.5 under Label B; 0 wrong-sign under the gating label. Diagnostic Label A's `−0.732` on `mean_distance_to_nearest_food_cell` does NOT trigger `INTERVENTION_OPPOSITE_SIGN_HALT` (per pre-reg's diagnostic-only gating).
+
+#### Arm C_lineage_clamp_4 — sub-verdict `C_LINEAGE_CLAMP_LABEL_B_BRIDGE_NOT_FOUND`
+
+Label A (diagnostic-only; `label_a_gating_valid = False`):
+
+| observable | sign | signed_d |
+|---|:-:|:-:|
+| pre50_food_events_count | + | −0.243 |
+| pre50_food_energy_acquired | + | −0.243 |
+| mean_distance_to_nearest_food_cell | − | −0.732 |
+
+Label B (gating):
+
+| observable | sign | signed_d | fires |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | +0.182 | no |
+| pre50_food_energy_acquired | + | +0.182 | no |
+| mean_distance_to_nearest_food_cell | − | −0.181 | no |
+
+**The C arm produces byte-identical signed_d cells to the B arm.** See structural finding below.
+
+### Listener aggregate (C arm only, 64 runs)
+
+```
+n_births_seen_total                       = 1539
+n_births_patched_total                    = 1539
+n_births_already_sensor_radius_4_total    = 1539
+n_birth_patch_failures_total              = 0
+```
+
+The descendant-clamp listener fired on every single one of the 1539 newborn events across the 64 C-arm runs. It successfully patched every one of them. **All 1539 newborns already had `sensor_radius == 4` before the patch fired** — i.e., every patch was a no-op write. Zero failures.
+
+### Structural finding — descendant drift is empirically zero on this corpus
+
+The C arm produces byte-identical paired_d cells to the B arm. The listener counters explain why: every newborn under C was already at `sensor_radius=4` pre-patch (`n_births_already_sensor_radius_4 == n_births_patched == n_births_seen` for every run). Under V0_25's `TraitConfig(unbounded_mutation=True)` mutation pipeline, when a parent's `sensor_radius` is exactly 4, the integer-quantized child draw is also exactly 4 with probability 1 across all 1539 reproductive events in this corpus. The mutation noise applied to a parent's `sensor_radius=4` never moved the integer-quantized result to a different value within the locked V0_25 anchor.
+
+**Implication for v0.51's interpretive scope.** The slice was designed to probe whether descendant drift in `sensor_radius` (which v0.49 left as a residual channel) contributes to the v0.48 bridge on top of founder variation. The empirical answer on the V0_25 corpus is that the residual channel does not exist: descendants of clamped founders do not drift to non-4 `sensor_radius` values within the integer-quantized mutation pipeline. The C arm's listener therefore had nothing to do beyond no-op writes. The categorical verdict `FOUNDER_CLAMP_REPRODUCED` is correct, but the *evidence* it rests on is "C is byte-equivalent to B" rather than "C produces a different behavioral trajectory than B and the bridge still does not fire". v0.51 cannot distinguish "descendant variation is irrelevant to the bridge" from "descendant variation never occurred in the first place".
+
+The locked phrase still fires verbatim: clamping descendants did not change the categorical verdict, on the modern A_null corpus, under V0_25. Magnitude differences between B and C are zero by construction here.
+
+### Corpus re-anchor
+
+A_null arm — all PASS:
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+B and C arms (informational only; identical between B and C, consistent with the structural finding above):
+
+| arm | v0.42 | v0.43R | v0.44 | v0.45 |
+|---|:-:|:-:|:-:|:-:|
+| B_founder_clamp_4 | 0.382 | 0.438 | 0.430 | 0.481 |
+| C_lineage_clamp_4 | 0.382 | 0.438 | 0.430 | 0.481 |
+
+B and C have byte-identical `a_share_h8` values across every (version, h=8) bucket — confirming the simulation trajectories are byte-identical under V0_25 mutation. v0.49's B-arm `a_share_h8` published values (0.382 / 0.438 / 0.430 / 0.481) reproduce here exactly.
+
+### Reading the result correlationally
+
+The locked phrase says **"reproduces"** — not "rules out", not "proves", not "is causal for". v0.51 establishes:
+
+- ✓ The v0.49 founder-clamp NOT_FOUND verdict reproduces under v0.51's B arm (Tier-2 re-anchor passes within 0.0004).
+- ✓ The categorical verdict does not change between founder-only clamp (B) and lineage-wide clamp (C) — both NOT_FOUND under Label B. **Caveat:** see the Headline caveat above; B and C produced byte-identical paired_d cells because no descendant drift occurred pre-patch.
+- ✓ The descendant-clamp listener fires on every newborn (1539/1539), executes a single-channel `dataclasses.replace` write on every body, runs the single-channel invariant on each (zero failures across the corpus), and disconnects in `finally` blocks. **Caveat:** every one of the 1539 writes was a no-op — the body's `sensor_radius` was already 4 before the patch ran, so the post-patch body is byte-identical to the pre-patch body. The listener's *implementation* is sound; the listener's *empirical workload* on this corpus was zero meaningful patches.
+- ✓ The `model.trait_fingerprints` audit-truth lock holds (test #9 enforces zero AST references in the v0.51 audit script).
+
+What v0.51 does NOT establish:
+
+- ✗ **That descendant variation in `sensor_radius` is irrelevant to the bridge.** The empirical descendant-drift channel was zero on this corpus; v0.51 cannot probe a channel that does not exist.
+- ✗ **Mechanism**. v0.51 is single-channel and observational of the categorical verdict structure, not of the route by which `sensor_radius` produces spatial advantage.
+- ✗ **Generalisation beyond V0_25 / tight_gradient / 5 founders / height-6**. Layout, policy, reproduction config, and trait config are all V0_25 anchor. Cross-anchor pipelines may show non-zero descendant drift; v0.51 does not test them.
+- ✗ **Causality for post-tick-50 dominance**. v0.51 measures the v0.48 bridge; the v0.46 dominance question remains separate.
+
+### Caveats
+
+- **C arm is empirically equivalent to B arm on this corpus.** This is the headline structural caveat. The pre-reg's expectation was that arms B and C might produce different magnitudes; in practice they produce byte-identical signed_d cells because the mutation pipeline did not move any newborn's `sensor_radius` away from 4. Future slices probing different anchors (cross-policy, cross-layout, larger trait noise) may produce non-zero descendant drift and recover the original C-vs-B contrast.
+- **Listener counters confirm the C arm's intervention machinery works correctly even when the empirical patch volume is zero.** Single-channel invariant fires zero false halts; weak=False + finally disconnect logic both verified by tests #6 and #7. The slice's *implementation* is sound; the *evidence* is constrained by the V0_25 mutation pipeline's quantization behavior, not by an implementation bug.
+- **Cross-version pooling validity** carries forward from v0.46–v0.50 (A_null arms byte-identical to `optional_intervention=None`); B and C pooling validity is by construction (identical V0_25 anchor, identical single-channel founder patch, identical listener wiring).
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED via clamp + permutation) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST under shifted-top + permutation) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED; descendant-drift channel empirically zero) |
+
+The v0.46→v0.51 stack: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → that contribution survives shifted-top + permuted founder positions → and the founder-clamp NOT_FOUND result is preserved under lineage-wide clamping (with the structural caveat that descendants did not drift to non-4 values in the first place).
+
+### Next-step candidates (open; not locked)
+
+Per the pre-reg's "Open framing" + new follow-ups suggested by v0.51's structural finding. Recommended next slice is **v0.52 metabolic-cost decoupling** — the next mechanistic ambiguity in the v0.49–v0.51 stack. The descendant-drift calibration follow-up is optional and only needs running if the descendant-drift question itself is judged worth re-opening.
+
+- **v0.52 — `sensor_radius_metabolic_cost = 0` (recommended next).** Decouples sensing radius from metabolic burden; isolates "information radius" from "metabolic cost". v0.49–v0.51 strongly implicate `sensor_radius`, but `sensor_radius` still means two things at once: (1) wider sensing / information access, (2) higher metabolic cost. v0.52 distinguishes these channels and is independent of v0.51's descendant-drift question.
+- **v0.53 — cross-layout generalisation.** Run v0.48–v0.51 on `widened_gradient` and / or `food_ladder`. Layouts with different reproduction schedules may produce non-zero descendant drift in `sensor_radius` and would let v0.51's C-vs-B contrast become live, independent of any new intervention.
+- **Calibration follow-up only — elevated mutation-noise probe.** A slice that re-runs the v0.51 listener under a perturbed `TraitConfig` with elevated `sensor_radius` mutation noise would probe whether the C arm's empirical equivalence to B is V0_25-specific or a general feature of integer-quantized mutation. **Optional**; only worth running if the descendant-drift question is judged worth re-opening as a first-class slice. Not a blocker for v0.52.
+- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.51 conclusion stack — needed for any "mechanism" declaration. Not next-step; longer-horizon.
+
+### CI gate at v0.51 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1664 passed, 7 skipped (was 1648, +16 v0.51)
+uv run python scripts/core_smoke_test.py                      ok
+uv run python scripts/v0_51_descendant_drift_audit.py         FOUNDER_CLAMP_REPRODUCED
+```
