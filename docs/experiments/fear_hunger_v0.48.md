@@ -268,7 +268,7 @@ No other files modified.
 
 > **Locked phrase fires verbatim:** "Founder `sensor_radius` advantage co-occurs with a pre-50 spatial / foraging advantage that also tracks tick-50 readiness fraction on the modern A_null corpus."
 
-3/3 primaries fire under label A (`high_sensor_radius_lineage`); 3/3 fire under label B (`high_tick50_readiness_fraction_lineage`); 0/3 wrong-sign under either. AND-gate trivially satisfied.
+3/3 primaries fire under label A (`high_sensor_radius_lineage`); 3/3 fire under label B (`high_tick50_readiness_fraction_lineage`); 0/3 wrong-sign under either. AND-gate satisfied cleanly.
 
 ### Paired Cohen's d per (label, primary observable) — all six cells fire
 
@@ -328,7 +328,7 @@ The locked phrase is **correlational, not causal**:
 
 - **Observables #1 and #2 are perfectly proportional on this corpus.** `AteFood.food_gained` is a constant 20.0 per event under V0_25's defaults (verified post-hoc via the per-lineage CSV: ratio `pre50_food_energy_acquired / pre50_food_events_count == 20.0` exactly for every (run, lineage) row with non-zero events). Their paired_d values are therefore identical under each label by construction. The pre-reg's 3-observable primary set effectively has 2 independent dimensions on this corpus; the AND-gate over both labels (6 cells, 4 effectively-independent) still cleanly fires `_PRESENT` since observable #3 (distance) is a genuinely independent channel and fires strongly under both labels.
 - **Agreement rate of 0.547 is itself a finding.** The two labels disagree on ~46% of runs yet produce concordant spatial-bridge signals. This is consistent with `sensor_radius` and tick-50 readiness fraction being partial — not redundant — proxies for the same underlying foraging-success structure; it is not consistent with one being a strict subset of the other.
-- **Tautology pressure on observables #1 and #2 vs. label B.** Lineages with higher tick-50 readiness fraction must have more living agents at tick 50, which (loosely) requires more pre-50 food acquisition. Label B's firings on observables #1 and #2 are therefore partially anticipated by the label's own definition; observable #3 (distance) is the cleanest test under label B because it does not directly depend on the readiness predicate. Distance still fires at +1.179 under label B — the bridge is not an artefact of definitional overlap.
+- **Tautology pressure on observables #1 and #2 vs. label B.** Label B has tautology pressure for observables #1 and #2 because readiness fraction is downstream of survival, energy state, and reproduction opportunity. Lineages that reach high tick-50 readiness fraction are expected to have had stronger pre-50 resource access. However, readiness fraction does not itself require larger lineage size; observable #3, distance to nearest food, is therefore the cleaner bridge metric because it is not directly part of the readiness predicate. Distance still fires at +1.179 under label B — the bridge is not an artefact of definitional overlap.
 - **Cross-version pooling** valid by H2e regression on each version's branch (A_null arms byte-identical to `optional_intervention=None`); identical pooling discipline as v0.46 / v0.47.
 - **No claim about post-tick-200 dynamics**, no claim about other layouts (open_field / hazard_band), no claim about non-V0_25 anchors.
 
