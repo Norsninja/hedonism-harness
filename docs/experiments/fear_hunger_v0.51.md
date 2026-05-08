@@ -453,4 +453,190 @@ No other files modified.
 
 ## Results
 
-**Status:** pending reducer run.
+**Status:** reducer executed 2026-05-08 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~10 minutes. **All re-anchors PASS:** Tier-1 bridge re-anchor (A_null vs v0.48) max drift 0.0004; Tier-2 founder-clamp re-anchor (B vs v0.49 B) max drift 0.0004; corpus re-anchor (`a_share_h8`) max drift 0.0003. No opposite-sign firings under any gating label. 0 listener patch failures.
+
+### Rollup verdict — `FOUNDER_CLAMP_REPRODUCED` fires
+
+> **Locked phrase fires verbatim:** "v0.51 reproduces v0.49's founder-clamp finding under both founder-only and lineage-wide `sensor_radius` clamps on the modern A_null corpus: the v0.48 spatial / foraging bridge does not fire under Label B in either clamp arm, and clamping descendants in addition to founders does not change the categorical verdict."
+
+Sub-verdicts:
+
+| arm | sub-verdict |
+|---|---|
+| A_null | `A_NULL_BRIDGE_PRESENT` |
+| B_founder_clamp_4 | `B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND` |
+| C_lineage_clamp_4 | `C_LINEAGE_CLAMP_LABEL_B_BRIDGE_NOT_FOUND` |
+
+The (PRESENT, NOT_FOUND, NOT_FOUND) triple is the REPRODUCED pattern — clamping descendants in addition to founders did not change the categorical verdict on the modern A_null corpus.
+
+### Tier-1 bridge re-anchor — A_null arm reproduces v0.48 within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 ≪ 1e-3. v0.51's A_null arm is byte-compatible with v0.48 / v0.49 / v0.50's A_null path; B and C interpretations are anchored at the same baseline.
+
+### Tier-2 founder-clamp re-anchor — B arm reproduces v0.49 B within 1e-3
+
+| label | observable | v0.49 B published | v0.51 B derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius (diagnostic) | pre50_food_events_count | −0.243 | −0.243 | 0.0003 |
+| label_a_sensor_radius (diagnostic) | pre50_food_energy_acquired | −0.243 | −0.243 | 0.0003 |
+| label_a_sensor_radius (diagnostic) | mean_distance_to_nearest_food_cell | −0.732 | −0.732 | 0.0004 |
+| label_b_readiness_fraction (gating) | pre50_food_events_count | +0.182 | +0.182 | 0.0000 |
+| label_b_readiness_fraction (gating) | pre50_food_energy_acquired | +0.182 | +0.182 | 0.0000 |
+| label_b_readiness_fraction (gating) | mean_distance_to_nearest_food_cell | −0.181 | −0.181 | 0.0003 |
+
+Max drift 0.0004. v0.51's B arm reproduces v0.49's B-arm signed_d cells within published precision — the founder-clamp baseline is byte-compatible with v0.49.
+
+### Per-arm signed_d (sign-aware)
+
+#### Arm A_null — sub-verdict `A_NULL_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | **+1.066** | YES |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | **+1.066** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **+1.916** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.916** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.916** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.179** | YES |
+
+#### Arm B_founder_clamp_4 — sub-verdict `B_FOUNDER_CLAMP_LABEL_B_BRIDGE_NOT_FOUND`
+
+Label A (diagnostic-only; `label_a_gating_valid = False`):
+
+| observable | sign | signed_d |
+|---|:-:|:-:|
+| pre50_food_events_count | + | −0.243 |
+| pre50_food_energy_acquired | + | −0.243 |
+| mean_distance_to_nearest_food_cell | − | −0.732 |
+
+Label B (gating):
+
+| observable | sign | signed_d | fires |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | +0.182 | no |
+| pre50_food_energy_acquired | + | +0.182 | no |
+| mean_distance_to_nearest_food_cell | − | −0.181 | no |
+
+0/3 primaries clear +0.5 under Label B; 0 wrong-sign under the gating label. Diagnostic Label A's `−0.732` on `mean_distance_to_nearest_food_cell` does NOT trigger `INTERVENTION_OPPOSITE_SIGN_HALT` (per pre-reg's diagnostic-only gating).
+
+#### Arm C_lineage_clamp_4 — sub-verdict `C_LINEAGE_CLAMP_LABEL_B_BRIDGE_NOT_FOUND`
+
+Label A (diagnostic-only; `label_a_gating_valid = False`):
+
+| observable | sign | signed_d |
+|---|:-:|:-:|
+| pre50_food_events_count | + | −0.243 |
+| pre50_food_energy_acquired | + | −0.243 |
+| mean_distance_to_nearest_food_cell | − | −0.732 |
+
+Label B (gating):
+
+| observable | sign | signed_d | fires |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | +0.182 | no |
+| pre50_food_energy_acquired | + | +0.182 | no |
+| mean_distance_to_nearest_food_cell | − | −0.181 | no |
+
+**The C arm produces byte-identical signed_d cells to the B arm.** See structural finding below.
+
+### Listener aggregate (C arm only, 64 runs)
+
+```
+n_births_seen_total                       = 1539
+n_births_patched_total                    = 1539
+n_births_already_sensor_radius_4_total    = 1539
+n_birth_patch_failures_total              = 0
+```
+
+The descendant-clamp listener fired on every single one of the 1539 newborn events across the 64 C-arm runs. It successfully patched every one of them. **All 1539 newborns already had `sensor_radius == 4` before the patch fired** — i.e., every patch was a no-op write. Zero failures.
+
+### Structural finding — descendant drift is empirically zero on this corpus
+
+The C arm produces byte-identical paired_d cells to the B arm. The listener counters explain why: every newborn under C was already at `sensor_radius=4` pre-patch (`n_births_already_sensor_radius_4 == n_births_patched == n_births_seen` for every run). Under V0_25's `TraitConfig(unbounded_mutation=True)` mutation pipeline, when a parent's `sensor_radius` is exactly 4, the integer-quantized child draw is also exactly 4 with probability 1 across all 1539 reproductive events in this corpus. The mutation noise applied to a parent's `sensor_radius=4` never moved the integer-quantized result to a different value within the locked V0_25 anchor.
+
+**Implication for v0.51's interpretive scope.** The slice was designed to probe whether descendant drift in `sensor_radius` (which v0.49 left as a residual channel) contributes to the v0.48 bridge on top of founder variation. The empirical answer on the V0_25 corpus is that the residual channel does not exist: descendants of clamped founders do not drift to non-4 `sensor_radius` values within the integer-quantized mutation pipeline. The C arm's listener therefore had nothing to do beyond no-op writes. The categorical verdict `FOUNDER_CLAMP_REPRODUCED` is correct, but the *evidence* it rests on is "C is byte-equivalent to B" rather than "C produces a different behavioral trajectory than B and the bridge still does not fire". v0.51 cannot distinguish "descendant variation is irrelevant to the bridge" from "descendant variation never occurred in the first place".
+
+The locked phrase still fires verbatim: clamping descendants did not change the categorical verdict, on the modern A_null corpus, under V0_25. Magnitude differences between B and C are zero by construction here.
+
+### Corpus re-anchor
+
+A_null arm — all PASS:
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+B and C arms (informational only; identical between B and C, consistent with the structural finding above):
+
+| arm | v0.42 | v0.43R | v0.44 | v0.45 |
+|---|:-:|:-:|:-:|:-:|
+| B_founder_clamp_4 | 0.382 | 0.438 | 0.430 | 0.481 |
+| C_lineage_clamp_4 | 0.382 | 0.438 | 0.430 | 0.481 |
+
+B and C have byte-identical `a_share_h8` values across every (version, h=8) bucket — confirming the simulation trajectories are byte-identical under V0_25 mutation. v0.49's B-arm `a_share_h8` published values (0.382 / 0.438 / 0.430 / 0.481) reproduce here exactly.
+
+### Reading the result correlationally
+
+The locked phrase says **"reproduces"** — not "rules out", not "proves", not "is causal for". v0.51 establishes:
+
+- ✓ The v0.49 founder-clamp NOT_FOUND verdict reproduces under v0.51's B arm (Tier-2 re-anchor passes within 0.0004).
+- ✓ Adding lineage-wide descendant clamping to the founder clamp does not change the categorical verdict — the bridge remains NOT_FOUND under Label B.
+- ✓ The descendant-clamp listener fires on every newborn (1539/1539), single-channel-patches every body, halts loud on any non-`sensor_radius` field difference (zero failures across the corpus), and disconnects in `finally` blocks.
+- ✓ The `model.trait_fingerprints` audit-truth lock holds (test #9 enforces zero AST references in the v0.51 audit script).
+
+What v0.51 does NOT establish:
+
+- ✗ **That descendant variation in `sensor_radius` is irrelevant to the bridge.** The empirical descendant-drift channel was zero on this corpus; v0.51 cannot probe a channel that does not exist.
+- ✗ **Mechanism**. v0.51 is single-channel and observational of the categorical verdict structure, not of the route by which `sensor_radius` produces spatial advantage.
+- ✗ **Generalisation beyond V0_25 / tight_gradient / 5 founders / height-6**. Layout, policy, reproduction config, and trait config are all V0_25 anchor. Cross-anchor pipelines may show non-zero descendant drift; v0.51 does not test them.
+- ✗ **Causality for post-tick-50 dominance**. v0.51 measures the v0.48 bridge; the v0.46 dominance question remains separate.
+
+### Caveats
+
+- **C arm is empirically equivalent to B arm on this corpus.** This is the headline structural caveat. The pre-reg's expectation was that arms B and C might produce different magnitudes; in practice they produce byte-identical signed_d cells because the mutation pipeline did not move any newborn's `sensor_radius` away from 4. Future slices probing different anchors (cross-policy, cross-layout, larger trait noise) may produce non-zero descendant drift and recover the original C-vs-B contrast.
+- **Listener counters confirm the C arm's intervention machinery works correctly even when the empirical patch volume is zero.** Single-channel invariant fires zero false halts; weak=False + finally disconnect logic both verified by tests #6 and #7. The slice's *implementation* is sound; the *evidence* is constrained by the V0_25 mutation pipeline's quantization behavior, not by an implementation bug.
+- **Cross-version pooling validity** carries forward from v0.46–v0.50 (A_null arms byte-identical to `optional_intervention=None`); B and C pooling validity is by construction (identical V0_25 anchor, identical single-channel founder patch, identical listener wiring).
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED via clamp + permutation) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST under shifted-top + permutation) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED; descendant-drift channel empirically zero) |
+
+The v0.46→v0.51 stack: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → that contribution survives shifted-top + permuted founder positions → and the founder-clamp NOT_FOUND result is preserved under lineage-wide clamping (with the structural caveat that descendants did not drift to non-4 values in the first place).
+
+### v0.52 candidates (open; not locked)
+
+Per the pre-reg's "Open framing" + new follow-ups suggested by v0.51's structural finding:
+
+- **v0.52 — `sensor_radius_metabolic_cost = 0`**. Decouples sensing radius from metabolic burden; isolates "information radius" from "metabolic cost". Independent of v0.51's descendant-drift question.
+- **v0.53 — cross-layout generalisation**. Run v0.48–v0.51 on `widened_gradient` and / or `food_ladder`. Layouts with different reproduction schedules may produce non-zero descendant drift in `sensor_radius` and let v0.51's C-vs-B contrast become live.
+- **Larger mutation-noise calibration probe**. A slice that runs the v0.51 listener under a perturbed `TraitConfig` with elevated `sensor_radius` mutation noise would probe whether the C arm's empirical equivalence to B is V0_25-specific or a general feature of the integer-quantized mutation pipeline.
+- **Eventual fresh-stream calibration** (v0.30-style) on the v0.46–v0.51 conclusion stack — needed for any "mechanism" declaration.
+
+### CI gate at v0.51 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1664 passed, 7 skipped (was 1648, +16 v0.51)
+uv run python scripts/core_smoke_test.py                      ok
+uv run python scripts/v0_51_descendant_drift_audit.py         FOUNDER_CLAMP_REPRODUCED
+```
