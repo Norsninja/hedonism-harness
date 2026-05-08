@@ -7,6 +7,14 @@
 
 v0.46 established that the eventual top lineage is already differentially advantaged at tick 50 along readiness axes. v0.47 fingered `sensor_radius` as the single firing founder-trait predictor of tick-50 readiness fraction (signed paired_d = +0.937, large effect). v0.47's locked phrase is correlational; the trait→readiness link is consistent with — but does not establish — a spatial/foraging mechanism. v0.48 is the **first observational bridge slice** asking whether the same lineages that win on `sensor_radius` (label A) and on tick-50 readiness fraction (label B) also win on three pre-committed pre-50 spatial / foraging observables. Bridge-present is the strongest claim allowed; mechanism declarations are forbidden.
 
+## Pre-implementation correction (2026-05-08, before any reducer run)
+
+After wiring the reducer and exercising test #1, one item from the locked spec was clarified before any data was generated. The correction is dated and recorded here for the historical record (per CLAUDE.md "pre-reg stands as the historical record"). No data has been seen yet — this is a pre-data design fix.
+
+**Per-tick observer firing semantics.** `tick_observer` fires AFTER `model.step()` increments `tick_count` (per `fear_hunger_chamber.py`). When the observer sees `model.tick_count == k`, the model has just completed step `k-1`. Therefore the observer can directly produce 50 snapshots for `tick_count ∈ {1, 2, ..., 50}` (post-steps 0..49) but cannot observe the pre-step initial state. To honour the locked window of "ticks 0..50 inclusive" (51 snapshots), the reducer additionally captures the initial state inside `setup_observer` (which fires once before the first step, with `model.tick_count == 0` and `model.agents` already populated) and labels that snapshot `tick = 0`. Net: 51 per-tick snapshots covering `tick ∈ {0, 1, ..., 50}` exactly.
+
+This affects no other locked item. The observable definitions, aggregation rule, NaN handling, and verdict structure are unchanged. The implementation invariant `len(capture.tick_records) == 51` still holds.
+
 ## Conservation framing — unchanged from v0.46 / v0.47
 
 - **No `src/` modifications.** v0.48 is a pure consumer of `setup_observer` + `tick_observer` + `AgentBorn` / `AteFood` blinker signals. It adds nothing to the simulation surface and does not modify any chamber / population / policy / event module.
