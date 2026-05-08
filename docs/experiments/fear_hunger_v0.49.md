@@ -116,9 +116,10 @@ For each (version, seed, hazard) tuple, identical setup to B (normal `HHModel` c
      founders[i].body = dataclasses.replace(founders[i].body, traits=assigned_traits)
      ```
 4. Runtime invariant: for every founder, every field of `original_traits` other than `sensor_radius` equals the corresponding field of `assigned_traits`. Violation halts loud.
-5. Log per-founder `original_sensor_radius`, `assigned_sensor_radius`, `permutation_map_index = perm[i]`, `non_identity_permutation = True` (always), `applied_identity_rotation_fallback = True iff drawn perm was identity`.
+5. Log per-founder `original_sensor_radius`, `assigned_sensor_radius`, `permutation_map_index = perm[i]`, `non_identity_permutation = True` (always — by construction of the rotate-by-one fallback), `applied_identity_rotation_fallback = True iff drawn perm was identity`.
+6. Compute and log per-run `effective_sensor_radius_changed_count = sum(1 for i in range(5) if original_sr[i] != assigned_sr[i])`. **A non-identity permutation map does NOT guarantee that any founder's assigned `sensor_radius` value differs from its original.** When the original founder draw contains duplicate `sensor_radius` values (e.g., original `[3, 3, 3, 5, 5]`, perm `[1, 2, 3, 4, 0]` → assigned `[3, 3, 5, 5, 3]` — only 2 founders have changed values; the rest are duplicates being shuffled). `effective_sensor_radius_changed_count` is the honest measure of how much the assignment actually moved. v0.49 logs it per run, reports its distribution in the audit log, and **does not** exclude low-changed-count runs from C's paired_d pool — they are part of C's natural distribution given the V0_25 trait config (uniform over {1..6}, expected duplicates per 5-draw). If the distribution is dominated by low-changed-count runs in a way that compromises C's interpretive power, that is itself a finding to log in Results.
 
-The helper RNG is consumed **only** for the permutation map (5 integer draws per C-arm run). It does not touch `model.streams.mutation` or any per-agent `agent_rng`. Founder trait values come from the model's normal draw, modified only on the `sensor_radius` axis.
+The helper RNG is fully isolated from the model's RNG streams (see watch-outs). It does not touch `model.streams.mutation` or any per-agent `agent_rng`. Founder trait values come from the model's normal draw, modified only on the `sensor_radius` axis.
 
 **Label A under arm C is defined from `assigned_sensor_radius`.** That is, label A picks `argmax_lineage(assigned_sensor_radius)` — the lineage that received the highest `sensor_radius` after permutation, NOT the lineage whose founder originally drew the highest. This is the entire point of the arm: ask whether the bridge follows the *reassigned* trait. Tiebreak `min(lineage_id)` per v0.48.
 
@@ -284,7 +285,8 @@ runs/v0.49-causal-probe/per_run_per_lineage_v049.csv
 runs/v0.49-causal-probe/per_run_intervention_audit.csv
   columns: arm, version, seed, hazard, lineage_id, founder_index,
            original_sensor_radius, assigned_sensor_radius,
-           permutation_map_index, applied_identity_rotation_fallback
+           permutation_map_index, applied_identity_rotation_fallback,
+           effective_sensor_radius_changed_count  (per-run, repeated on each row of the run)
 
 runs/v0.49-causal-probe/audit_summary.csv
   columns: section, key, value
@@ -341,7 +343,7 @@ The reducer is fully self-contained: it reads no `runs/` artifacts. Wall time ~1
 
 - **B's metabolic uplift confound (logged above).** If B's Label-B bridge weakens, the slice cannot disentangle "loss of sensor_radius variation" from "uniform metabolic uplift +0.5 × sensor_radius_metabolic_cost". Future calibration may probe this.
 - **`AteFood.food_gained` is constant 20.0 per event under V0_25 defaults.** Observables #1 and #2 are perfectly proportional on this corpus (verified post-hoc in v0.48). Their per-arm paired_d values will be identical by construction. The 3-observable primary set has 2 effectively-independent channels; the AND-gate is unaffected because observable #3 (distance) is genuinely independent.
-- **Helper RNG is consumed only for the C-arm permutation map.** Use `np.random.default_rng(seed)` per run; do NOT use it to draw founder trait values. Founder traits come from the model's normal `random_traits` path. The helper RNG draws ≤ 5 integers per C run (one permutation), zero draws under A_null and B. Test #3 enforces that `streams.mutation` state is byte-identical across arms after `setup_observer` returns.
+- **Helper RNG is fully isolated from the model's RNG streams.** The C-arm permutation map is generated from a script-local `np.random.default_rng(seed)`; this helper instance is never used to draw founder trait values, never mixed into `model.streams.mutation`, never consumed by per-agent `agent_rng`s, and never seeded from any model state. Founder traits come exclusively from the model's normal `random_traits` path. A_null and B arms do not use the helper RNG at all. Test #3 enforces that `streams.mutation` state is byte-identical across arms after `setup_observer` returns.
 - **Patch order matters.** The trait patch must happen inside `setup_observer` *before* the v0.49 tick-0 snapshot is captured (which is also inside `setup_observer`, per the v0.48 pre-implementation correction pattern). The reducer's `setup_observer` applies the patch first, then captures founder audit + tick-0 snapshot from the patched bodies.
 - **`AgentBody` is `@dataclass(frozen=True)`; `HHAgent.body` is a reassignable attribute.** Verified: `body.py:31` declares `AgentBody` frozen; `mesa_agents.py:73, 184, 217, 231` reassign `self.body` to new `AgentBody` instances during normal simulation steps (e.g., after `apply_action` / `apply_metabolism` / `apply_damage`). The v0.49 patch follows the same idiom: `agent.body = dataclasses.replace(agent.body, traits=dataclasses.replace(agent.body.traits, sensor_radius=NEW_VALUE))`. No `src/` change is required to support this.
 - **A_null arm is byte-identical to v0.48's A_null path by construction.** The bridge re-anchor halt (priority 3) catches any drift; this is the v0.49 analog of v0.46's `CORPUS_REDERIVE_DRIFT_HALT`.
