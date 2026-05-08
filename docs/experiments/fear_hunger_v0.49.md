@@ -7,16 +7,42 @@
 
 v0.46–v0.48 are observational decompositions over the modern A_null corpus. v0.48's `_PRESENT` verdict is correlational — it cannot distinguish "founder `sensor_radius` is causal for the spatial bridge" from "founder `sensor_radius` is correlated with some other founder feature (position, trait covariance, lineage luck) that drives the bridge". v0.49 is the **first interventional probe**: it manipulates the founder `sensor_radius` distribution at tick 0 (before any agent step) and observes whether the locked v0.48 paired_d cells continue to clear the +0.5 threshold under the same observables and labels.
 
+## Pre-implementation correction (2026-05-08, before any reducer code)
+
+The original pre-reg draft specified the intervention via `FounderSpec.traits_override` plus a helper RNG (`np.random.default_rng(seed)`) to pre-draw founder trait vectors. This is **not single-channel** and was caught at design review before any code was written. Recorded here for the historical record (per CLAUDE.md "pre-reg stands as the historical record"). No data has been seen yet.
+
+**The bug.** `HHModel._spawn_founder` (model.py:355) draws each founder's traits via `random_traits(self.trait_config, self.streams.mutation)`, then calls `spawn_agent_rng(self.streams.mutation)` for the agent's per-agent RNG (model.py:377). When `traits_override` is supplied, `random_traits(...)` is skipped — but `spawn_agent_rng(...)` is still consumed. So `streams.mutation` reaches a *different* state at the start of the second founder's construction in B/C than under A_null. Every downstream `streams.mutation` consumer (subsequent founders' agent_rngs, every `mutate_traits` call during reproduction) thus diverges from A_null even before tick 0. That makes B/C multi-channel interventions: they vary founder `sensor_radius` AND every per-agent / per-mutation RNG draw thereafter.
+
+The helper-RNG path was also not equivalent to A_null's draws: A_null draws traits from `streams.mutation`, while the helper used `np.random.default_rng(seed)` directly. So even the "non-`sensor_radius` fields" the helper produced were not the values A_null would have produced for the same (version, seed, hazard) tuple.
+
+**The fix (locked).** All arms construct founders through the normal A_null path with `traits_override=None`. `HHModel` draws founder traits and agent RNGs exactly as A_null. **For B / C only**, the v0.49 reducer applies a **pre-tick-0 founder-body trait patch inside its `setup_observer` callback**, after `HHModel(...)` returns and before any `model.step()` runs. The patch is delivered as:
+
+```python
+# Read original traits from the live founder bodies.
+original_traits = agent.body.traits
+# Single-channel replacement of sensor_radius only.
+assigned_traits = dataclasses.replace(original_traits, sensor_radius=NEW_VALUE)
+# Atomically replace the body's traits field on the live agent.
+agent.body = dataclasses.replace(agent.body, traits=assigned_traits)
+```
+
+This preserves: normal founder trait draw order, normal `spawn_agent_rng` consumption, normal per-agent RNG streams, normal descendant mutation streams, and normal non-`sensor_radius` founder traits. Only the `sensor_radius` field on the founder bodies is changed, after construction and before tick 0 observation begins.
+
+**`HHModel.trait_fingerprints` warning.** `_record_trait_fingerprint` (model.py:386) is called inside `_spawn_founder` with the original (pre-patch) traits. After the v0.49 patch, `model.trait_fingerprints` will be stale for B / C. **v0.49 does NOT use `model.trait_fingerprints`** for any audit; it captures its own founder audit table from `model.agents` after the patch. `model.trait_fingerprints` is left untouched, byte-identical to its A_null form. This is the conservative choice (option A in the design discussion); option B (post-update the founder fingerprint entries) is rejected to avoid mutating historical machinery.
+
+**Affected pre-reg sections.** Conservation framing, the B_clamp_4 and C_permutation arm specs, the implementation plan, and three of the locked tests (#2, #3, #5) are revised in-place below to reflect the fix. The verdict structure, arm count, corpus, observable definitions, label definitions, effect-size rule, sub-verdict structure, slice rollup, and re-anchor halts are unchanged.
+
 ## Conservation framing — interventional, not observational
 
 v0.42–v0.48 preserved pre-50 reproduction byte-identity by construction (post-50 hooks only or read-only observation). v0.49 deliberately violates pre-50 byte-identity for the **B and C arms only** — the founder-time intervention is the slice's whole point. Specific guarantees:
 
-- **No `src/` modifications.** The intervention is delivered via the existing `FounderSpec.traits_override` field already supported by `model.HHModel._spawn_founder` (model.py:355). No new sweep arms, no chamber/policy/event/reproduction changes.
+- **No `src/` modifications.** The intervention is script-local and mutates founder body traits before tick 0 observation. All arms construct founders through the normal A_null path (`FounderSpec(traits_override=None)`); for B / C, the reducer's `setup_observer` callback applies a single-channel patch to `agent.body.traits.sensor_radius` after `HHModel(...)` returns and before any `model.step()` runs.
 - **No modifications to prior reducer or audit scripts.** v0.34's `lineage_replay.py`, v0.35's `lineage_survival_replay.py`, v0.36's `trait_replay.py`, the four substrate audits (v0.42 / v0.43R / v0.44 / v0.45), and v0.46 / v0.47 / v0.48's reducers remain byte-identical to their merged forms.
-- **A_null arm is byte-identical to v0.48's A_null path.** v0.49's A_null arm passes `traits_override=None` so the model draws founder traits from `streams.mutation` exactly as v0.42–v0.48's A_null arms did. No helper RNG is consumed before the model is built for A_null. Byte-identity verified by the bridge re-anchor halt below.
-- **B / C arms diverge from A_null at founder spawn.** This is intentional. Pre-50 byte-identity vs A_null does NOT hold for B / C. The slice's interpretive frame is not "is the metric the same as v0.48" but "does the v0.48 bridge fire under the intervention".
-- **Single-channel intervention.** B / C modify ONLY the `sensor_radius` field of the founder trait vector. All other founder fields (`reproduction_drive`, `metabolic_rate`, `hunger_pain_sensitivity`, ...) come from the same per-founder `random_traits(...)` draw they would have under A_null. A runtime invariant (`V049ReducerError`) guards this on every (arm, founder) pair.
+- **A_null arm is byte-identical to v0.48's A_null path.** v0.49's A_null arm applies no patch. Founder traits, agent RNGs, and `streams.mutation` state at every tick are identical to v0.48's A_null arm for the same (version, seed, hazard). Byte-identity verified by the bridge re-anchor halt below.
+- **B / C arms diverge from A_null at tick 0.** Only because `sensor_radius` differs on founder bodies. RNG streams (`streams.mutation`, per-agent RNGs) are byte-identical at the moment of the first `model.step()` across all three arms — only the founder-body trait values differ. Pre-50 byte-identity vs A_null does NOT hold for B / C from tick 1 onward (different sensor radii produce different sensing, action, and metabolic trajectories), but the divergence is *single-channel by construction*. The slice's interpretive frame is "does the v0.48 bridge fire under the intervention", not "is the metric the same as v0.48".
+- **Single-channel intervention.** B / C modify ONLY the `sensor_radius` field of the founder body trait vector. All other founder fields (`reproduction_drive`, `metabolic_rate`, `hunger_pain_sensitivity`, ...) come from the model's normal `random_traits(...)` draw. A runtime invariant (`V049ReducerError`) compares `original_traits` (read from `model.agents` before the patch) against `assigned_traits` (read after the patch) per founder and asserts equality on every field except `sensor_radius`.
 - **Descendant mutation proceeds normally.** Neither arm clamps descendants. v0.49 does NOT modify `mutate_traits`. Descendants of B-arm founders may drift away from `sensor_radius=4` via the normal mutation pipeline; descendants of C-arm founders mutate from their post-permutation parent traits. This is a deliberate design choice (see "Open framing" below).
+- **`model.trait_fingerprints` is left as-is.** It records original (pre-patch) founder traits because `_record_trait_fingerprint` runs inside `_spawn_founder` before the v0.49 reducer can intervene. v0.49's audit ignores `model.trait_fingerprints` and captures its own founder audit table from live bodies after the patch. The fingerprint machinery is not mutated for B / C.
 
 ## Corpus (locked, 64 × 3 arms = 192 runs)
 
@@ -44,15 +70,21 @@ Model draws each founder's traits via `random_traits(self.trait_config, self.str
 
 ### B_sensor_radius_founder_clamp_4
 
-For each (version, seed, hazard) tuple:
+For each (version, seed, hazard) tuple, the reducer constructs `HHModel` normally (`FounderSpec(traits_override=None)` for every founder) and applies the patch inside its `setup_observer` callback, before any `model.step()` runs:
 
-1. Pre-draw 5 founder trait vectors using a deterministic helper RNG: `helper_rng = np.random.default_rng(seed)`. The helper RNG is **isolated** from the model's `streams.mutation` so it does not perturb downstream RNG state for any arm. Pre-draw consumes the helper RNG only; no model RNG is touched.
-2. For each pre-drawn trait vector, replace the `sensor_radius` field with the integer **4**:
-   ```
+1. `HHModel(...)` returns with 5 founder agents constructed normally; `random_traits` and `spawn_agent_rng` consume from `streams.mutation` exactly as A_null.
+2. `run_chamber` calls `setup_observer(model)` (chamber.py:462). At this point the model is fully built, no step has been taken, and `setup_observer` fires with `model.tick_count == 0`.
+3. Inside `setup_observer`, for each agent in `model.agents`:
+   ```python
+   original_traits = agent.body.traits
    assigned_traits = dataclasses.replace(original_traits, sensor_radius=4)
+   agent.body = dataclasses.replace(agent.body, traits=assigned_traits)
    ```
-3. Pass the 5 `assigned_traits` to `FounderSpec(traits_override=assigned_traits, ...)` per founder.
-4. Runtime invariant: for every founder, `original_traits.<field> == assigned_traits.<field>` for all `<field>` ≠ `"sensor_radius"`. Violation halts loud (`V049ReducerError`).
+4. Runtime invariant: for every founder, every field of `original_traits` other than `sensor_radius` is equal to the corresponding field of `assigned_traits`. Violation halts loud (`V049ReducerError`).
+5. `setup_observer` then captures the v0.49 founder audit (lineage_id → original_sensor_radius, assigned_sensor_radius, all other founder traits) by reading the patched bodies from `model.agents`.
+6. The v0.49 tick-0 snapshot (per-tick observer's tick-0 capture, copy-local from v0.48) is taken *after* the patch is applied, so tick 0 already reflects the assigned `sensor_radius`.
+
+The model's `streams.mutation` is **not** consumed by the patch. Per-agent RNGs (`agent_rng`, populated by `spawn_agent_rng` during normal `_spawn_founder`) are unchanged by the patch.
 
 **Choice of clamp value (locked, pre-data).** V0_25's `TraitConfig` draws `sensor_radius` uniformly from {1, 2, 3, 4, 5, 6} → expectation 3.5. No integer equals 3.5; the rounded-up midpoint (4) is the locked clamp value. Rationale (per design discussion): rounding up avoids depressing the arm's mean sensory reach below A_null's expectation; rounding down would make the clamp arm subtly sensory-poor and confound interpretation. **Watch-out**: under arm B, every agent's per-tick metabolic cost is `sensor_radius_metabolic_cost × 4` — slightly higher than A_null's expectation `sensor_radius_metabolic_cost × 3.5`. v0.49 cannot disentangle "loss of sensor_radius variation" from "small uniform metabolic uplift" if B's Label-B bridge weakens; flagged in "What v0.49 cannot establish".
 
@@ -60,15 +92,33 @@ For each (version, seed, hazard) tuple:
 
 ### C_sensor_radius_founder_permutation
 
-For each (version, seed, hazard) tuple:
+For each (version, seed, hazard) tuple, identical setup to B (normal `HHModel` construction; patch in `setup_observer` before tick 0):
 
-1. Pre-draw 5 founder trait vectors via `helper_rng = np.random.default_rng(seed)` (same isolated helper RNG protocol as arm B; identical pre-draw bytes given the same seed).
-2. Extract the 5 `original_sensor_radius` values: `[t.sensor_radius for t in pre_drawn]`.
-3. Generate a permutation: `perm = helper_rng.permutation(5)`. If `perm == [0, 1, 2, 3, 4]` (identity), **rotate by one** so `perm = [1, 2, 3, 4, 0]`. The fallback fires only on identity draws and guarantees a non-identity permutation in every C run.
-4. Assign `assigned_sensor_radius[i] = original_sensor_radius[perm[i]]` for each founder `i`.
-5. Build assigned trait vectors: `assigned_traits[i] = dataclasses.replace(pre_drawn[i], sensor_radius=assigned_sensor_radius[i])`.
-6. Same single-channel runtime invariant as arm B (only `sensor_radius` differs between original and assigned).
-7. Log per-founder `original_sensor_radius`, `assigned_sensor_radius`, `permutation_map_index = perm[i]`, `non_identity_permutation = True` (always), `applied_identity_rotation_fallback = True iff drawn perm was identity`.
+1. `HHModel(...)` returns with 5 founders constructed normally.
+2. `run_chamber` calls `setup_observer(model)`.
+3. Inside `setup_observer`:
+   - Read the 5 `original_sensor_radius` values from the live founder bodies in lineage-id order:
+     ```python
+     founders = sorted(model.agents, key=lambda a: int(a.body.lineage_id))
+     original_sr = [int(a.body.traits.sensor_radius) for a in founders]
+     ```
+   - Generate a permutation using a script-local helper RNG (used **only** for the permutation map, never for trait values):
+     ```python
+     helper_rng = np.random.default_rng(seed)
+     perm = helper_rng.permutation(5)
+     if list(perm) == [0, 1, 2, 3, 4]:
+         perm = np.array([1, 2, 3, 4, 0])  # rotate-by-one fallback
+     ```
+   - Compute assigned values: `assigned_sr[i] = original_sr[perm[i]]`.
+   - For each founder `i`, patch the body atomically:
+     ```python
+     assigned_traits = dataclasses.replace(founders[i].body.traits, sensor_radius=int(assigned_sr[i]))
+     founders[i].body = dataclasses.replace(founders[i].body, traits=assigned_traits)
+     ```
+4. Runtime invariant: for every founder, every field of `original_traits` other than `sensor_radius` equals the corresponding field of `assigned_traits`. Violation halts loud.
+5. Log per-founder `original_sensor_radius`, `assigned_sensor_radius`, `permutation_map_index = perm[i]`, `non_identity_permutation = True` (always), `applied_identity_rotation_fallback = True iff drawn perm was identity`.
+
+The helper RNG is consumed **only** for the permutation map (5 integer draws per C-arm run). It does not touch `model.streams.mutation` or any per-agent `agent_rng`. Founder trait values come from the model's normal draw, modified only on the `sensor_radius` axis.
 
 **Label A under arm C is defined from `assigned_sensor_radius`.** That is, label A picks `argmax_lineage(assigned_sensor_radius)` — the lineage that received the highest `sensor_radius` after permutation, NOT the lineage whose founder originally drew the highest. This is the entire point of the arm: ask whether the bridge follows the *reassigned* trait. Tiebreak `min(lineage_id)` per v0.48.
 
@@ -252,29 +302,29 @@ runs/v0.49-causal-probe/audit_log.txt
 ## Implementation plan (locked)
 
 1. Fresh script `scripts/v0_49_sensor_radius_causal_probe_audit.py`. CLI: `uv run python scripts/v0_49_sensor_radius_causal_probe_audit.py [--out-dir runs/v0.49-causal-probe]`.
-2. Per (version, seed, hazard) tuple, run **3 arms**:
-   - **A_null**: `traits_override=None` for every founder. Same code path as v0.48's A_null.
-   - **B_clamp_4**: pre-draw 5 founders via `helper_rng = np.random.default_rng(seed)`; `dataclasses.replace(t, sensor_radius=4)`; assert single-channel invariant; pass `traits_override=` per founder.
-   - **C_permutation**: pre-draw 5 founders via the same helper RNG; permute `sensor_radius` field across founders with non-identity guarantee (rotate-by-one fallback); assert single-channel invariant; pass `traits_override=`.
-3. For each arm-run, attach v0.48-style `setup_observer` + `tick_observer` (copy-local from v0.48). Capture per-tick records for ticks 0..50 inclusive (51 snapshots), `AgentBorn` / `AteFood` / `HazardDamageApplied` listeners filtered by `sender=model`.
-4. Aggregate per-lineage primaries identical to v0.48. Compute per-arm label A and label B per the arm's specific sources (assigned for B/C; original = assigned for A).
+2. Per (version, seed, hazard) tuple, run **3 arms**. Every arm constructs `HHModel` via the normal A_null path (`FounderSpec(traits_override=None)`):
+   - **A_null**: no patch. `setup_observer` reads founder traits from `model.agents` and records them as `original == assigned`.
+   - **B_clamp_4**: inside `setup_observer`, before the tick-0 snapshot, replace `agent.body.traits.sensor_radius` with `4` on every founder via `dataclasses.replace`. Assert single-channel invariant (every non-`sensor_radius` field equal to the original).
+   - **C_permutation**: inside `setup_observer`, use a script-local `helper_rng = np.random.default_rng(seed)` to generate a non-identity permutation of `[0..4]` (rotate-by-one fallback if identity). Read original `sensor_radius` values from the founder bodies, compute assigned values via the permutation, and patch each founder's body. Assert single-channel invariant.
+3. For each arm-run, attach v0.48-style `setup_observer` + `tick_observer` (copy-local from v0.48). The setup_observer applies the trait patch (B / C) before capturing tick 0. Capture per-tick records for ticks 0..50 inclusive (51 snapshots); `AgentBorn` / `AteFood` / `HazardDamageApplied` listeners filtered by `sender=model`.
+4. Aggregate per-lineage primaries identical to v0.48. Compute per-arm label A and label B per the arm's specific sources (assigned for B/C; original = assigned for A_null).
 5. Compute paired_d per (arm, gating-label, observable) cell; classify per-arm sub-verdicts.
 6. **Bridge re-anchor** (priority-3 halt): for the A_null arm's six cells, compare derived signed_d to v0.48's hardcoded references; halt if any drift > 1e-3.
 7. **Corpus re-anchor** (priority-1 halt): for the A_null arm only, derive `a_share_h8` for v0.42 / v0.44 / v0.45; halt if any drift > 1e-3.
 8. **Opposite-sign halt** (priority-2): scan all (arm, gating-label, observable) cells; halt if any signed_d ≤ −0.5.
 9. Compute slice rollup verdict per the locked priority order; print + write the locked phrase verbatim.
 
-The reducer is fully self-contained: it reads no `runs/` artifacts. Wall time ~15–30 minutes for 192 runs. Determinism guaranteed by passing each (version, seed) the same V0_25 anchor config; the helper RNG (`np.random.default_rng(seed)`) is deterministic per run and isolated from `streams.mutation` so A_null's RNG state is byte-identical to v0.48's.
+The reducer is fully self-contained: it reads no `runs/` artifacts. Wall time ~15–30 minutes for 192 runs. Determinism guaranteed by passing each (version, seed) the same V0_25 anchor config; the helper RNG (used only for the C-arm permutation map) is deterministic per run and does not consume from `streams.mutation`, so A_null's RNG state at every tick is byte-identical to v0.48's.
 
 ## Test list (locked, 16 tests; extends v0.46–v0.48 7-point review pattern)
 
 `tests/test_v0_49_sensor_radius_causal_probe_audit.py`:
 
-1. `test_a_null_arm_traits_override_is_none` — assert that for arm A_null the reducer constructs `FounderSpec` with `traits_override=None`.
-2. `test_b_clamp_arm_assigns_sensor_radius_4_only` — pre-draw 5 founder trait vectors; apply B intervention; assert every assigned vector has `sensor_radius == 4` and every non-`sensor_radius` field is byte-identical to the original.
-3. `test_b_clamp_arm_helper_rng_is_isolated_from_streams_mutation` — invoke the helper RNG; assert the model's `streams.mutation` state after `_spawn_founder` is byte-identical to A_null arm's after `_spawn_founder` for the same seed (i.e., helper RNG does not perturb the model's stream — verified via reproducible founder draws across A_null arm executed under the same seed twice).
+1. `test_all_arms_construct_founders_via_normal_a_null_path` — assert that for every arm the reducer constructs `FounderSpec` with `traits_override=None`. The intervention lives in `setup_observer`, not in `FounderSpec`.
+2. `test_b_clamp_patch_replaces_only_sensor_radius_on_live_bodies` — construct `HHModel` for a representative (version, seed, hazard) tuple; capture pre-patch founder body traits; apply the B-arm patch; assert every founder's `body.traits.sensor_radius == 4` and every other field of `body.traits` is byte-identical to the pre-patch value.
+3. `test_a_null_arm_streams_mutation_state_byte_identical_across_arms` — for the same (version, seed, hazard), construct `HHModel` once; record `model.streams.mutation`'s state via a deterministic probe (next 8 draws); apply the B and C `setup_observer` patches in two separate model instances; assert the next 8 draws from `streams.mutation` are byte-identical across all three arms (the patch never consumes `streams.mutation`).
 4. `test_c_permutation_is_non_identity` — generate permutations under a deterministic helper seed that lands on identity; assert the rotate-by-one fallback fires and `assigned != original` for at least one founder.
-5. `test_c_permutation_assigns_only_sensor_radius` — apply C intervention; assert non-`sensor_radius` fields are byte-identical to the original draw for every founder.
+5. `test_c_permutation_patch_replaces_only_sensor_radius_on_live_bodies` — construct `HHModel` for a representative tuple; capture pre-patch founder body traits; apply the C-arm permutation patch; assert non-`sensor_radius` fields are byte-identical to pre-patch for every founder, and the assigned `sensor_radius` set equals a permutation of the original set.
 6. `test_c_permutation_label_a_uses_assigned_sensor_radius` — synthetic founder traits with original `[2, 5, 4, 1, 6]` and permutation `[1, 2, 3, 4, 0]` → assigned `[5, 4, 1, 6, 2]`; assert label A picks lineage 3 (highest assigned = 6).
 7. `test_b_clamp_label_a_is_diagnostic_only_with_csv_flag` — synthetic B-arm rows; assert `label_a_gating_valid = False` and that label A does not feed B's sub-verdict computation.
 8. `test_per_arm_subverdict_a_null_present_requires_both_labels_clear` — synthetic paired_d under A_null such that label A is (+0.6, +0.7, −0.3) and label B is (+0.6, +0.8, −0.2); assert sub-verdict = `A_NULL_BRIDGE_PRESENT`.
@@ -291,7 +341,9 @@ The reducer is fully self-contained: it reads no `runs/` artifacts. Wall time ~1
 
 - **B's metabolic uplift confound (logged above).** If B's Label-B bridge weakens, the slice cannot disentangle "loss of sensor_radius variation" from "uniform metabolic uplift +0.5 × sensor_radius_metabolic_cost". Future calibration may probe this.
 - **`AteFood.food_gained` is constant 20.0 per event under V0_25 defaults.** Observables #1 and #2 are perfectly proportional on this corpus (verified post-hoc in v0.48). Their per-arm paired_d values will be identical by construction. The 3-observable primary set has 2 effectively-independent channels; the AND-gate is unaffected because observable #3 (distance) is genuinely independent.
-- **Helper RNG must be isolated from `streams.mutation`.** Use `np.random.default_rng(seed)` per run; consume it only for B/C arms' founder pre-draw; do NOT seed it from `model.streams.mutation`. Test #3 enforces this invariant.
+- **Helper RNG is consumed only for the C-arm permutation map.** Use `np.random.default_rng(seed)` per run; do NOT use it to draw founder trait values. Founder traits come from the model's normal `random_traits` path. The helper RNG draws ≤ 5 integers per C run (one permutation), zero draws under A_null and B. Test #3 enforces that `streams.mutation` state is byte-identical across arms after `setup_observer` returns.
+- **Patch order matters.** The trait patch must happen inside `setup_observer` *before* the v0.49 tick-0 snapshot is captured (which is also inside `setup_observer`, per the v0.48 pre-implementation correction pattern). The reducer's `setup_observer` applies the patch first, then captures founder audit + tick-0 snapshot from the patched bodies.
+- **`AgentBody` is `@dataclass(frozen=True)`; `HHAgent.body` is a reassignable attribute.** Verified: `body.py:31` declares `AgentBody` frozen; `mesa_agents.py:73, 184, 217, 231` reassign `self.body` to new `AgentBody` instances during normal simulation steps (e.g., after `apply_action` / `apply_metabolism` / `apply_damage`). The v0.49 patch follows the same idiom: `agent.body = dataclasses.replace(agent.body, traits=dataclasses.replace(agent.body.traits, sensor_radius=NEW_VALUE))`. No `src/` change is required to support this.
 - **A_null arm is byte-identical to v0.48's A_null path by construction.** The bridge re-anchor halt (priority 3) catches any drift; this is the v0.49 analog of v0.46's `CORPUS_REDERIVE_DRIFT_HALT`.
 - **C_perm's identity fallback fires deterministically** when the helper RNG draws identity. Logged per-run via `applied_identity_rotation_fallback`. The expected fallback rate is 1/120 (1/5!).
 - **Single-channel invariant must halt loud** on any non-`sensor_radius` field difference between original and assigned trait vectors. This guards against `dataclasses.replace` semantics drift (e.g., if a future Traits field is added and not preserved).
