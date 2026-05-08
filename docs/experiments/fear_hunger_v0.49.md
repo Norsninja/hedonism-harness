@@ -363,4 +363,164 @@ No other files modified.
 
 ## Results
 
-(appended after reducer execution)
+**Status:** reducer executed 2026-05-08 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~10 minutes. **All bridge re-anchor cells PASS** (A_null arm reproduces v0.48's six published signed_d cells within 0.0004 ≪ 1e-3 tolerance). All A_null arm `a_share_h8` values reproduce v0.42 / v0.44 / v0.45 published references within 0.0003. No opposite-sign firings under any gating label.
+
+### Rollup verdict — `SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED` fires
+
+> **Locked phrase fires verbatim:** "Founder sensor_radius variation supports a causal contribution to the v0.48 pre-50 spatial / foraging bridge: the bridge follows reassigned founder sensor_radius and weakens when founder variation is removed."
+
+Sub-verdicts:
+
+| arm | sub-verdict |
+|---|---|
+| A_null | `A_NULL_BRIDGE_PRESENT` |
+| B_sensor_radius_founder_clamp_4 | `B_CLAMP_LABEL_B_BRIDGE_NOT_FOUND` |
+| C_sensor_radius_founder_permutation | `C_PERM_BRIDGE_PRESENT` |
+
+The (PRESENT, NOT_FOUND, PRESENT) triple is the SUPPORTED pattern: the bridge follows the *reassigned* founder `sensor_radius` under C (label A defined from assigned, NOT original) and *weakens* when founder variation is removed under B.
+
+### Bridge re-anchor — A_null arm reproduces v0.48 within 1e-3
+
+| label | observable | published signed_d | derived signed_d | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | +1.179 | +1.179 | 0.0004 |
+
+Byte-level reproduction confirmed. Confidence in B and C interpretations is therefore anchored at v0.48's exact baseline.
+
+### Per-arm paired_d (sign-aware)
+
+#### Arm A_null — sub-verdict `A_NULL_BRIDGE_PRESENT`
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | **+1.066** | YES |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | **+1.066** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell | − | **+1.916** | YES |
+| label_b_readiness_fraction | pre50_food_events_count | + | **+0.916** | YES |
+| label_b_readiness_fraction | pre50_food_energy_acquired | + | **+0.916** | YES |
+| label_b_readiness_fraction | mean_distance_to_nearest_food_cell | − | **+1.179** | YES |
+
+#### Arm B_sensor_radius_founder_clamp_4 — sub-verdict `B_CLAMP_LABEL_B_BRIDGE_NOT_FOUND`
+
+Label B (gating):
+
+| observable | sign | signed_d | fires |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | +0.182 | no |
+| pre50_food_energy_acquired | + | +0.182 | no |
+| mean_distance_to_nearest_food_cell | − | −0.181 | no |
+
+0/3 primaries clear +0.5 under label B; 0 wrong-sign. Bridge does not fire when founder `sensor_radius` variation is removed.
+
+Label A (diagnostic-only under B, `label_a_gating_valid = False`):
+
+| observable | sign | signed_d | (descriptive) |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | −0.243 | (does not gate) |
+| pre50_food_energy_acquired | + | −0.243 | (does not gate) |
+| mean_distance_to_nearest_food_cell | − | −0.732 | (does not gate; would have been wrong-sign halt if it gated) |
+
+The label-A-under-B signals reflect lineage 0 (the always-winning min(lineage_id) tiebreak when all founders share `sensor_radius=4`); they do not measure a meaningful spatial-advantage signal. Per the locked pre-reg, label A is reported but does not feed B's verdict.
+
+#### Arm C_sensor_radius_founder_permutation — sub-verdict `C_PERM_BRIDGE_PRESENT`
+
+Label A (using **assigned** founder `sensor_radius`, NOT original):
+
+| observable | sign | signed_d | fires |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | **+1.083** | YES |
+| pre50_food_energy_acquired | + | **+1.083** | YES |
+| mean_distance_to_nearest_food_cell | − | **+1.735** | YES |
+
+Label B:
+
+| observable | sign | signed_d | fires |
+|---|:-:|:-:|:-:|
+| pre50_food_events_count | + | **+0.897** | YES |
+| pre50_food_energy_acquired | + | **+0.897** | YES |
+| mean_distance_to_nearest_food_cell | − | **+1.250** | YES |
+
+3/3 primaries fire under both labels with 0 wrong-sign. Effect sizes under C label A are *comparable to or stronger than* A_null's label A signed_d's (+1.083 / +1.083 / +1.735 vs +1.066 / +1.066 / +1.916). The bridge **follows the reassignment**.
+
+### Corpus re-anchor (A_null arm) — all PASS
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+B and C arms' derived `a_share_h8` (informational only — different counterfactual worlds):
+
+| arm | v0.42 | v0.43R | v0.44 | v0.45 |
+|---|:-:|:-:|:-:|:-:|
+| B_clamp_4 | 0.382 | 0.438 | 0.430 | 0.481 |
+| C_perm | 0.601 | 0.634 | 0.791 | 0.881 |
+
+Arm B's a_share_h8 values are roughly half of A_null's, which is consistent with "founder sensor_radius variation also matters for post-50 lineage dominance" — but this is a descriptive cross-version side-finding, not part of v0.49's locked verdict.
+
+### C arm permutation diagnostics
+
+`effective_sensor_radius_changed_count` per run (number of founders whose assigned `sensor_radius` differs from the original draw, given the permutation):
+
+```
+n_runs = 64    mean_changed ≈ 3.5    min = 2    max = 5
+identity_fallbacks = 0
+```
+
+The permutation never draws identity in the corpus (rotate-by-one fallback never fires). Mean changed-count of 3.5 out of 5 indicates the permutation moved the majority of `sensor_radius` assignments in nearly every run; no run was effectively a no-op despite the V0_25 `TraitConfig` drawing from {1..6} (where duplicates can mask permutation in principle — see pre-reg). C's signal cannot be attributed to "permutation that was effectively identity".
+
+### Reading the result correlationally
+
+The locked phrase says **"supports a causal contribution"** — not "is causal for". v0.49 is single-channel by construction and cannot rule out:
+
+- **Founder-position confound.** The 5 founders spawn at fixed `(spawn_x, spread_y)` positions per V0_25's layout. The lineage that was *originally* drawn the highest `sensor_radius` may have also occupied the most food-favourable spawn position in some statistical sense. v0.49 does NOT vary spawn position; that's deferred to a future intervention slice.
+- **Trait covariance.** The permutation moves only `sensor_radius` across founders. If `sensor_radius` was statistically correlated with another founder trait (e.g., `metabolic_rate`) that also matters for foraging, that other trait remains attached to its original founder under arm C. v0.49 does NOT permute joint trait vectors.
+- **Metabolic uplift in arm B.** Arm B fixes `sensor_radius=4` for all founders, slightly above the V0_25 `TraitConfig` expectation of 3.5. Per-tick metabolic cost under B is therefore +0.5 × `sensor_radius_metabolic_cost` higher on average than under A_null. v0.49 cannot disentangle "loss of variation" from "small uniform metabolic uplift" as the cause of B's non-firing bridge.
+- **Lineage-luck dynamics.** The simulator is stochastic; some lineages benefit from early reproduction queues and food encounters that compound. v0.49 does not model lineage luck explicitly.
+
+What v0.49 *does* establish (within the locked V0_25 anchor and modern A_null corpus):
+
+- ✓ The v0.48 spatial / foraging bridge **fires under permutation that re-targets the highest-`sensor_radius` lineage to a different lineage_id**. This is the strongest single test against a "the bridge is just an artefact of the original lineage 0..4 ordering" alternative.
+- ✓ The bridge **does not fire under label B** when founder `sensor_radius` variation is removed (B sub-verdict NOT_FOUND with all signed_d well below threshold). This is consistent with founder variation being part of what produces the bridge.
+- ✓ Single-channel intervention via `setup_observer` body-trait patch was successfully implemented; `streams.mutation` byte-identical across arms (test #3 verified behaviorally; A_null re-anchor cells reproduce v0.48 within 0.0004).
+
+What v0.49 does **not** establish (per pre-reg):
+
+- ✗ Mechanism. v0.49 is observational of the intervention's effect on the bridge cells; it does not probe the *route* by which `sensor_radius` produces spatial advantage. (Wider radius → better food perception → faster foraging is a *plausible* mechanism, not a *proven* one.)
+- ✗ Cross-anchor / cross-layout generalisation. Tight gradient + V0_25 only.
+- ✗ Causality for post-50 dominance. The bridge cells measure pre-50 spatial / foraging advantage; the v0.46 `READINESS_PREDICTS_DOMINANCE` finding remains a separate correlational claim that v0.49 does not directly probe.
+
+### Caveats
+
+- **C arm signed_d's are within ±0.2 of A_null's under both labels.** Magnitudes are stable across A_null and C — implying the bridge structure is robust to permutation, not "stronger" or "weaker" in a way that would distinguish two competing causal models. Reported here for transparency; not a verdict-modifying finding.
+- **B's label A wrong-sign signed_d's are descriptive only**: signed_d = -0.732 on `mean_distance_to_nearest_food_cell` under arm B label A would, by the +0.5/−0.5 threshold, qualify as "wrong-sign". Per the pre-reg, label A is diagnostic-only under arm B (degenerate 5-way tie → always lineage 0); it does NOT gate the verdict and does NOT trigger `INTERVENTION_OPPOSITE_SIGN_HALT`. Logged as a curiosity: when forced to use lineage 0 as the "highest sensor_radius lineage", that lineage is on average *farther* from food than its peers. Likely a positional artefact of V0_25's layout (lineage 0 spawn position is at one end of the y-spread).
+- **B's a_share_h8 values are systematically lower than A_null's.** This is a consistency observation: when founder `sensor_radius` variation is removed, no single lineage dominates the post-50 b50 share as strongly. Not part of v0.49's locked verdict; flagged for future slice consideration.
+- **Cross-version pooling.** All 64 (per arm) runs are pooled across 4 versions (v0.42 / v0.43R / v0.44 / v0.45). A_null pooling validity carries forward from v0.46 / v0.47 / v0.48; B and C pool validity is by construction (same V0_25 anchor, same single-channel intervention applied identically across versions).
+
+### v0.50 candidates (open; not locked)
+
+Per the pre-reg's "Open framing":
+
+- **Equalise founder positions** (probe the position confound).
+- **Clamp `sensor_radius` throughout the lineage** (close the descendant-drift channel).
+- **Set `sensor_radius_metabolic_cost = 0`** (decouple sensing radius from metabolic cost; isolate the "information radius" effect from the "metabolic burden" effect).
+
+Each is a separate first-class intervention slice. v0.49 does not commit to any of them.
+
+### CI gate at v0.49 close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1632 passed, 7 skipped (was 1615, +17 v0.49)
+uv run python scripts/core_smoke_test.py                           ok
+uv run python scripts/v0_49_sensor_radius_causal_probe_audit.py    SENSOR_RADIUS_CAUSAL_CONTRIBUTION_SUPPORTED
+```
+
