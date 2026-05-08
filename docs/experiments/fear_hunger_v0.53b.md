@@ -9,7 +9,7 @@ v0.53 closed the cross-layout generalization frame with a `BRIDGE_PARTIALLY_GENE
 
 v0.53b is that disambiguation. It re-runs the same 192-run corpus shape with the per-tick observer extended to tick-100 (still well within the 200-tick simulation length — no sim extension needed) and asks whether B_widened's bridge-measurability and / or bridge-firing changes under the longer window. The primary question is **about B_widened only**; A_null_V0_25 and C_food_ladder tick-100 paired_d cells are descriptive context for the Results section unless they fire `LAYOUT_OPPOSITE_SIGN_HALT`.
 
-If B_widened fires PRESENT at tick-100 with non-trivial reachability, v0.53's NOT_FOUND was the 50-tick window's artifact and the bridge generalizes given longer measurement time. If B_widened still has near-zero reachability at tick-100, the layout is structurally unreachable on this substrate and the NOT_FOUND verdict is itself reachability-bound (no claim about bridge presence is possible). If B_widened has measurable reachability AND sub-verdict still ∈ {PARTIAL, NOT_FOUND}, the bridge fails to fire on this layout despite agents reaching food — a layout-specific failure that is NOT reducible to reachability censoring.
+If B_widened fires PRESENT at tick-100 with non-trivial reachability, v0.53's NOT_FOUND was the 50-tick window's artifact and the bridge generalizes given longer measurement time. If B_widened's reachability falls below the locked 25% threshold at tick-100, the layout is below the measurability floor on this substrate and the NOT_FOUND verdict is itself reachability-bound (no claim about bridge presence is possible). If B_widened has measurable reachability AND sub-verdict still ∈ {PARTIAL, NOT_FOUND}, the bridge fails to fire on this layout despite agents reaching food — a layout-specific failure that is NOT reducible to reachability censoring.
 
 ## Pre-implementation note (2026-05-08, before any reducer code)
 
@@ -118,7 +118,7 @@ b_reachability_run_share_tick_100 =
     pre100_food_events_count > 0
 ```
 
-Domain: 64 runs (B_widened arm only, all four versions × two hazards × eight seeds, hazard ∈ {0, 8}, seeds 41..72). The metric is a fraction in [0, 1]. Locked threshold for the rollup: **`B_REACHABILITY_THRESHOLD = 0.25`** (≥ 25% of B-arm runs have ≥ 1 founder lineage with non-zero pre100 food events). Pre-committed pre-data; rationale: 25% is a conservative floor that excludes "uniformly zero or near-zero" reachability while admitting cases where a meaningful fraction (but not the full corpus) of runs achieves food access by tick-100. If reachability is ≥ 25%, paired_d cells are guaranteed to have non-degenerate variance under at least some seeds; if reachability is < 25%, the structurally-unreachable verdict is locked.
+Domain: 64 runs (B_widened arm only, all four versions × two hazards × eight seeds, hazard ∈ {0, 8}, seeds 41..72). The metric is a fraction in [0, 1]. Locked threshold for the rollup: **`B_REACHABILITY_THRESHOLD = 0.25`** (≥ 25% of B-arm runs have ≥ 1 founder lineage with non-zero pre100 food events). Pre-committed pre-data; rationale: 25% is a conservative floor that excludes "uniformly zero or near-zero" reachability while admitting cases where a meaningful fraction (but not the full corpus) of runs achieves food access by tick-100. If reachability is ≥ 25%, food access is no longer uniformly zero and the bridge can be evaluated as measurable, subject to the usual paired_d NaN / variance handling. If reachability is < 25%, the below-threshold verdict is locked.
 
 ## Per-arm sub-verdicts (locked, 4-way each)
 
@@ -139,10 +139,10 @@ Priority order (first-matching wins). The non-halt outcomes (priorities 4–6) g
 
 1. `CORPUS_REDERIVE_DRIFT_HALT`
 2. `BRIDGE_REPLICATION_HALT` (Tier-1 A_null_V0_25 tick-50 vs v0.48 / v0.53)
-3. `LAYOUT_OPPOSITE_SIGN_HALT` (any non-V0_25 arm wrong-sign at tick-100)
+3. `LAYOUT_OPPOSITE_SIGN_HALT` (any tick-100 wrong-sign across A_null_V0_25, B_widened_gradient, or C_food_ladder)
 4. `WIDENED_REACHABILITY_CENSORED_RESOLVED` (B reachability ≥ 25% AND B tick-100 sub-verdict = PRESENT)
 5. `WIDENED_REACHABILITY_RESOLVED_BRIDGE_NOT_FOUND` (B reachability ≥ 25% AND B tick-100 sub-verdict ∈ {PARTIAL, NOT_FOUND})
-6. `WIDENED_STRUCTURALLY_UNREACHABLE_AT_TICK_100` (B reachability < 25%)
+6. `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_100` (B reachability < 25%)
 
 ### Halt conditions
 
@@ -150,7 +150,7 @@ Priority order (first-matching wins). The non-halt outcomes (priorities 4–6) g
 |---|---|---|---|
 | 1 | `CORPUS_REDERIVE_DRIFT_HALT` | A_null_V0_25 arm `a_share_h8` for any of v0.42 / v0.44 / v0.45 drifts > 1e-3 from the published reference | "Halt: A_null_V0_25 re-anchor drifted from the published Results value for {version}; v0.53b's deterministic re-execution of the V0_25 corpus does not reproduce the published metric within 1e-3." |
 | 2 | `BRIDGE_REPLICATION_HALT` | (a) A_null_V0_25 tick-50 signed_d for any of the six v0.48 / v0.53 cells drifts > 1e-3 from the published value, OR (b) A_null_V0_25 tick-50 sub-verdict ≠ PRESENT | "Halt: v0.53b's A_null_V0_25 arm does not reproduce v0.48 / v0.53's tick-50 spatial bridge — either a paired_d cell drifts beyond 1e-3 of the published value, or the tick-50 sub-verdict does not resolve to PRESENT. v0.53b cannot interpret the tick-100 cells without an established baseline." |
-| 3 | `LAYOUT_OPPOSITE_SIGN_HALT` | any tick-100 gating-label primary signed_d ≤ −0.5 under arm A_null_V0_25, B, or C | "Halt: a v0.53b tick-100 spatial / foraging primary fires in the WRONG direction under a gating label; the window extension surfaces an intervention-incompatible regime that the locked expected signs do not anticipate." |
+| 3 | `LAYOUT_OPPOSITE_SIGN_HALT` | any tick-100 gating-label primary signed_d ≤ −0.5 under arm A_null_V0_25, B_widened_gradient, or C_food_ladder | "Halt: a v0.53b tick-100 spatial / foraging primary fires in the WRONG direction under a gating label; the window extension surfaces a regime incompatible with the locked expected signs." |
 
 ### Tier-1 (priority 2) re-anchor — A_null_V0_25 tick-50 cells
 
@@ -175,7 +175,7 @@ Drift tolerance = 1e-3. Same protocol as v0.49–v0.53. `label_b_readiness_fract
 |---|---|---|---|
 | 4 | `WIDENED_REACHABILITY_CENSORED_RESOLVED` | B_widened reachability ≥ 25% AND B_widened tick-100 sub-verdict = `B_WIDENED_TICK100_BRIDGE_PRESENT` | "On the modern A_null corpus with the V0_25 substrate held constant and the observation window extended from tick-50 to tick-100, the v0.48 spatial / foraging bridge fires PRESENT on `widened_gradient` under the locked +0.5 paired_d threshold. v0.53's `B_WIDENED_BRIDGE_NOT_FOUND` was reachability-censored by the 50-tick window; the bridge is measurable on `widened_gradient` given longer observation time." |
 | 5 | `WIDENED_REACHABILITY_RESOLVED_BRIDGE_NOT_FOUND` | B_widened reachability ≥ 25% AND B_widened tick-100 sub-verdict ∈ {`B_WIDENED_TICK100_BRIDGE_PARTIAL`, `B_WIDENED_TICK100_BRIDGE_NOT_FOUND`} | "On the modern A_null corpus with the V0_25 substrate held constant and the observation window extended from tick-50 to tick-100, the v0.48 spatial / foraging bridge does NOT fire PRESENT on `widened_gradient` despite measurable reachability (≥ 25% of runs producing pre100 food access). The NOT_FOUND outcome is not reducible to reachability censoring on this layout; the bridge fails to fire under longer observation even when food primaries become measurable. Layout-specific failure logged in Results." |
-| 6 | `WIDENED_STRUCTURALLY_UNREACHABLE_AT_TICK_100` | B_widened reachability < 25% | "On the modern A_null corpus with the V0_25 substrate held constant and the observation window extended from tick-50 to tick-100, fewer than 25% of `widened_gradient` runs have any founder lineage with pre100 food events. The bridge cannot be measured on `widened_gradient` at this window length on this substrate; the layout is structurally unreachable at tick-100. v0.53's `B_WIDENED_BRIDGE_NOT_FOUND` is itself reachability-bound and no claim about bridge presence is established by v0.53b." |
+| 6 | `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_100` | B_widened reachability < 25% | "On the modern A_null corpus with the V0_25 substrate held constant and the observation window extended from tick-50 to tick-100, fewer than 25% of `widened_gradient` runs have any founder lineage with pre100 food events. B_widened's reachability is below the locked 25% threshold; the bridge cannot be measured on `widened_gradient` at this window length on this substrate. v0.53's `B_WIDENED_BRIDGE_NOT_FOUND` is itself reachability-bound and no claim about bridge presence is established by v0.53b." |
 
 The rollup is **categorical-only** — magnitude differences in A_null_V0_25 / C_food_ladder tick-100 cells are reported descriptively in Results but do not alter the verdict. PARTIAL on B_widened is folded into priority 5 (since the locked question is "does the bridge fire"; PARTIAL ≠ PRESENT is the relevant distinction). PARTIAL on A_null_V0_25 / C_food_ladder is descriptive only (does NOT halt or fire any outcome).
 
@@ -183,7 +183,7 @@ The 3 non-halt outcomes form a total partition of (B reachability ≥ 0.25, B su
 
 ## Cautious framing (per CLAUDE.md)
 
-- "**Reachability-censored**", "**reachability-bound**", "**structurally unreachable at tick-100**", "**measurable on this layout given longer observation time**" — NOT "**proves**", "**causes**", or "**rules out**".
+- "**Reachability-censored**", "**reachability-bound**", "**below the locked 25% reachability threshold at tick-100**", "**measurable on this layout given longer observation time**" — NOT "**proves**", "**causes**", or "**rules out**".
 - "**On the modern A_null corpus with the V0_25 substrate held constant and the observation window extended from tick-50 to tick-100**" — NOT a substrate-independent claim, NOT a window-independent claim.
 - "**Layout-specific failure**" (priority 5) specifically refers to: B reachability ≥ 25% AND B tick-100 sub-verdict ∈ {PARTIAL, NOT_FOUND}. It is a categorical observation that the bridge does not fire on `widened_gradient` even when food primaries become measurable; it does NOT establish a mechanism for that failure (different food density per cell, different hazard placement, longer effective traversal, etc.).
 - v0.53b explicitly does not establish: cross-layout generalization to layouts not in the {`tight_gradient`, `widened_gradient`, `food_ladder`} set, mechanism for any layout-specific outcome, generalization to non-V0_25 substrates, behavior at tick-150 / tick-200 / longer windows, causal contribution per layout (Reading-A causal-generalization slice remains the deferred candidate).
@@ -280,11 +280,11 @@ The reducer is fully self-contained: it reads no `runs/` artifacts. Wall time es
 11. **`test_pre100_window_strictly_extends_pre50_window`** *(window-extension test)* — synthetic per-tick AteFood event stream with events at ticks 10, 30, 60, 90; assert `pre50_food_events_count = 2`, `pre100_food_events_count = 4`. Confirms the per-tick observer accumulates events through tick-100 (inclusive) on the upper window AND through tick-50 (inclusive) on the lower window.
 12. `test_paired_d_signed_d_ge_05_fires_present_threshold` — synthetic 6-cell pool with signed_d ≥ +0.5 under both labels → tick-100 sub-verdict PRESENT.
 13. `test_paired_d_signed_d_le_neg_05_fires_opposite_sign_halt_per_arm` — synthetic any tick-100 cell signed_d = −0.5 → tick-100 sub-verdict OPPOSITE_SIGN_HALT for that arm.
-14. **`test_b_reachability_threshold_partition`** — synthetic `b_reachability = 0.20` (< 0.25) → priority 6 STRUCTURALLY_UNREACHABLE fires regardless of sub-verdict. Synthetic `b_reachability = 0.30` AND B sub-verdict = PRESENT → priority 4 RESOLVED. Synthetic `b_reachability = 0.30` AND B sub-verdict ∈ {PARTIAL, NOT_FOUND} → priority 5 RESOLVED_BRIDGE_NOT_FOUND.
+14. **`test_b_reachability_threshold_partition`** — synthetic `b_reachability = 0.20` (< 0.25) → priority 6 BELOW_REACHABILITY_THRESHOLD fires regardless of sub-verdict. Synthetic `b_reachability = 0.30` AND B sub-verdict = PRESENT → priority 4 RESOLVED. Synthetic `b_reachability = 0.30` AND B sub-verdict ∈ {PARTIAL, NOT_FOUND} → priority 5 RESOLVED_BRIDGE_NOT_FOUND.
 15. `test_rollup_locked_phrases_fire_verbatim` — synthetic each of the three priority-4/5/6 outcomes → assert locked phrase contains its diagnostic substring verbatim:
     - RESOLVED: `"v0.53's \`B_WIDENED_BRIDGE_NOT_FOUND\` was reachability-censored by the 50-tick window"`
     - RESOLVED_BRIDGE_NOT_FOUND: `"the bridge fails to fire under longer observation even when food primaries become measurable"`
-    - STRUCTURALLY_UNREACHABLE: `"fewer than 25% of \`widened_gradient\` runs have any founder lineage with pre100 food events"`
+    - BELOW_REACHABILITY_THRESHOLD: `"B_widened's reachability is below the locked 25% threshold"`
 16. **`test_rollup_priority_cascade_and_partition_total`** — synthesize `CORPUS_REDERIVE_DRIFT_HALT` (priority 1) alongside `BRIDGE_REPLICATION_HALT` (priority 2) and `LAYOUT_OPPOSITE_SIGN_HALT` (priority 3); assert priority 1 fires first. Then priority 2 + 3 only; assert 2 fires first. Exhaustively iterate (B reachability ≥ 0.25, B sub-verdict ∈ {PRESENT, PARTIAL, NOT_FOUND}) ∪ (B reachability < 0.25) under A_null_V0_25 / C_food_ladder ∈ {PRESENT, PARTIAL, NOT_FOUND, OPPOSITE_SIGN_HALT}; assert the rollup gates only on B (A/C non-OPPOSITE outcomes have no effect on priority 4/5/6).
 
 ## Watch-outs (for future-Chronus)
