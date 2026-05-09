@@ -173,9 +173,9 @@ Identical structure to v0.53c, one verdict per arm at tick-200:
 
 | condition | A_null_V0_25 (tick-200) | B_widened_V0_25 (tick-200) | C_widened_relaxed (tick-200) |
 |---|---|---|---|
-| both labels clear ≥ 2/3 firing cells (NaN cells excluded), 0 wrong-sign | `A_NULL_V025_TICK200_BRIDGE_PRESENT` | `B_WIDENED_V025_TICK200_BRIDGE_PRESENT` | `C_RELAXED_TICK200_BRIDGE_PRESENT` |
-| exactly one label clears ≥ 2/3 firing cells, 0 wrong-sign | `A_NULL_V025_TICK200_BRIDGE_PARTIAL` | `B_WIDENED_V025_TICK200_BRIDGE_PARTIAL` | `C_RELAXED_TICK200_BRIDGE_PARTIAL` |
-| neither label clears ≥ 2/3 firing cells, 0 wrong-sign | `A_NULL_V025_TICK200_BRIDGE_NOT_FOUND` | `B_WIDENED_V025_TICK200_BRIDGE_NOT_FOUND` | `C_RELAXED_TICK200_BRIDGE_NOT_FOUND` |
+| both labels clear ≥ 2/3 of the three locked cells, with NaN treated as non-firing, 0 wrong-sign | `A_NULL_V025_TICK200_BRIDGE_PRESENT` | `B_WIDENED_V025_TICK200_BRIDGE_PRESENT` | `C_RELAXED_TICK200_BRIDGE_PRESENT` |
+| exactly one label clears ≥ 2/3 of the three locked cells, with NaN treated as non-firing, 0 wrong-sign | `A_NULL_V025_TICK200_BRIDGE_PARTIAL` | `B_WIDENED_V025_TICK200_BRIDGE_PARTIAL` | `C_RELAXED_TICK200_BRIDGE_PARTIAL` |
+| neither label clears ≥ 2/3 of the three locked cells, with NaN treated as non-firing, 0 wrong-sign | `A_NULL_V025_TICK200_BRIDGE_NOT_FOUND` | `B_WIDENED_V025_TICK200_BRIDGE_NOT_FOUND` | `C_RELAXED_TICK200_BRIDGE_NOT_FOUND` |
 | any primary signed_d ≤ −0.5 under either label | `A_NULL_V025_TICK200_OPPOSITE_SIGN_HALT` | `B_WIDENED_V025_TICK200_OPPOSITE_SIGN_HALT` | `C_RELAXED_TICK200_OPPOSITE_SIGN_HALT` |
 
 **Strict NaN-counts-toward-denominator rule preserved from v0.48–v0.53c.** A label with 3 cells of which 2 are NaN and 1 fires expected has 1/3 firing-cell ratio (NaN counts toward 3, not toward 1) → does not clear 2/3. A label with 3 NaN cells clears 0/3 → does not fire. Test #12 enforces.
