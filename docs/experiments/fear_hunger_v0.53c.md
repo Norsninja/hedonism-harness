@@ -355,4 +355,163 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-(To be appended after the reducer runs against the 192-run corpus. Status: pre-reg locked; reducer not yet implemented.)
+**Status:** reducer executed 2026-05-09 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~15 minutes. **Tier-1 bridge re-anchor PASSES at tick-50** (A_null_V0_25 reproduces v0.48 / v0.53 / v0.53b's six published signed_d cells within max drift 0.0004 ≪ 1e-3). Corpus re-anchor (`a_share_h8`) max drift 0.0003 on v0.42. **Zero opposite-sign halts** under any tick-200 gating-label cell on any of the three arms.
+
+### Rollup verdict — `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with the V0_25 substrate held constant and the observation window extended from tick-100 to tick-200 (the full simulation length), fewer than 25% of `widened_gradient` runs have any founder lineage with pre200 food events. B_widened's reachability is below the locked 25% threshold under maximum observation; the bridge cannot be measured on `widened_gradient` at any window length the V0_25 substrate's `N_TICKS=200` simulation can deliver. v0.53's `BRIDGE_PARTIALLY_GENERALIZES` verdict scope is now formally bounded along the (V0_25 substrate × `widened_gradient`) cell; substrate-variation disambiguation (v0.53d candidate) is the natural follow-up."
+
+Sub-verdicts:
+
+| arm | tick-50 (anchor) | tick-100 (descriptive) | tick-200 (verdict-gating) |
+|---|---|---|---|
+| A_null_V0_25 | `A_NULL_V025_TICK50_BRIDGE_PRESENT` | PRESENT | `A_NULL_V025_TICK200_BRIDGE_PRESENT` (descriptive) |
+| B_widened_gradient | n/a | n/a | `B_WIDENED_TICK200_BRIDGE_NOT_FOUND` (drives priority-6 verdict) |
+| C_food_ladder | n/a | PARTIAL | `C_LADDER_TICK200_BRIDGE_PARTIAL` (descriptive) |
+
+The locked verdict is gated only on B_widened's reachability metric: `b_reachability_run_share_tick_200 = 0.0000` (0 of 64 runs have any founder lineage with `pre200_food_events_count > 0`). Far below the locked 25% threshold; priority 6 fires with full margin.
+
+### B_widened reachability across all three windows — central finding
+
+| window | reachability | n_runs | passes 25% threshold? |
+|---|:-:|:-:|:-:|
+| tick-50 | **0.0000** | 64 | False |
+| tick-100 | **0.0000** | 64 | False |
+| tick-200 | **0.0000** | 64 | False (verdict-gating) |
+
+**Triple-zero reachability across the entire V0_25 simulation lifetime.** On `widened_gradient` no founder lineage produces a single `AteFood` event in any of the 64 runs at any tick from 0 to 200. The 9-cell traversal from spawn (x=1) to food (x ∈ [10..14]) past a 3-wide hazard band is unreachable at every window length the V0_25 substrate's `N_TICKS=200` simulation can deliver.
+
+### B_widened population-stability trajectory
+
+| window | living_population_run_share | label_a_n | label_b_n |
+|---|:-:|:-:|:-:|
+| tick-50 | 1.0000 | 64 | 64 |
+| tick-100 | 0.5000 | 64 | 32 |
+| tick-200 | **0.0000** | 64 | **0** |
+
+By tick-200, **every B_widened population is extinct in every one of the 64 runs**. The label_a_n stays at 64 (Label A is trait-resolved on founder records, which persist after extinction); label_b_n drops to 0 (no living lineages → 3-tier readiness-fraction tiebreak resolves to no winner). This is consistent with the V0_25 starting-energy + base-metabolic-cost budget: with no food access, founders deplete energy at the V0_25 metabolic rate × tick count and die before reproducing. Reachability and survival fail together on this layout × substrate.
+
+### Tier-1 bridge re-anchor — A_null_V0_25 tick-50 reproduces v0.48 / v0.53 / v0.53b within 1e-3
+
+Same six cells as v0.48 / v0.53 / v0.53b; max drift 0.0004 (within 1e-3). All cells PASS.
+
+### A_null_V0_25 — three-window paired_d (anchor + descriptive)
+
+| label | observable | tick-50 | tick-100 | tick-200 |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | events | +1.066 | +1.028 | **+0.929** (FIRES) |
+| label_a_sensor_radius | energy | +1.066 | +1.028 | **+0.929** (FIRES) |
+| label_a_sensor_radius | distance | +1.916 | +2.153 | **+2.170** (FIRES) |
+| label_b_readiness_fraction_tick{N} | events | +0.916 | +0.790 | **+1.155** (FIRES) |
+| label_b_readiness_fraction_tick{N} | energy | +0.916 | +0.790 | **+1.155** (FIRES) |
+| label_b_readiness_fraction_tick{N} | distance | +1.179 | +1.264 | **+2.141** (FIRES) |
+
+All 6 tick-200 cells FIRE under both labels (sub-verdict PRESENT). **Notable secondary finding:** Label B (`high_tickN_readiness_fraction_lineage`) strengthens substantially from tick-100 to tick-200 on `tight_gradient` — events/energy go +0.790 → +1.155 (43% increase), distance goes +1.264 → +2.141 (69% increase). The bridge is more discriminative under longer observation on the V0_25-anchored layout, not less. This is descriptive only — does not gate the verdict — but the trajectory is interpretively interesting: dominance dynamics produce stronger Label B–bridge alignment as runs progress, suggesting the lineage that's leading at tick-200 is more strongly correlated with the highest founder sensor_radius than the lineage leading at tick-50.
+
+### B_widened_gradient — three-window paired_d (descriptive at tick-50/100; verdict-gating at tick-200)
+
+| label | observable | tick-50 | tick-100 | tick-200 |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | events | nan (n=64) | nan (n=64) | nan (n=64) |
+| label_a_sensor_radius | energy | nan (n=64) | nan (n=64) | nan (n=64) |
+| label_a_sensor_radius | distance | −0.062 (n=64) | −0.078 (n=64) | −0.041 (n=64) |
+| label_b_readiness_fraction_tick{N} | events | nan (n=64) | nan (n=32) | nan (**n=0**) |
+| label_b_readiness_fraction_tick{N} | energy | nan (n=64) | nan (n=32) | nan (**n=0**) |
+| label_b_readiness_fraction_tick{N} | distance | +7.766 (n=64; degenerate) | +0.460 (n=32) | nan (**n=0**) |
+
+Label B at tick-200 is **fully degenerate** (`n=0` on all 3 cells — no surviving lineages to assign Label B). Label A's food-events / food-energy cells are uniformly zero across all 64 runs (no `AteFood` events ever fired). The lone non-`nan` Label A distance cell at signed_d = −0.041 is far above the −0.5 opposite-sign threshold; no halt fires.
+
+Per the locked strict NaN-counts-toward-denominator sub-verdict rule: Label A clears 0/3 firing cells at tick-200 (3 NaN cells under the rule); Label B clears 0/3 (all NaN due to n=0). **Sub-verdict NOT_FOUND.** B_widened tick-200 is gated by reachability (priority 6); the sub-verdict NOT_FOUND is consistent with reachability=0 and provides no additional information about bridge presence.
+
+### C_food_ladder — three-window paired_d (descriptive)
+
+| label | observable | tick-50 | tick-100 | tick-200 |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | events | +1.186 (FIRES) | +1.148 (FIRES) | **+1.039** (FIRES) |
+| label_a_sensor_radius | energy | +1.186 (FIRES) | +1.148 (FIRES) | **+1.039** (FIRES) |
+| label_a_sensor_radius | distance | +1.804 (FIRES) | +1.882 (FIRES) | **+1.789** (FIRES) |
+| label_b_readiness_fraction_tick{N} | events | +0.621 (FIRES) | +0.342 | **+0.211** |
+| label_b_readiness_fraction_tick{N} | energy | +0.621 (FIRES) | +0.342 | **+0.211** |
+| label_b_readiness_fraction_tick{N} | distance | +0.939 (FIRES) | +0.730 (FIRES) | **+0.800** (FIRES) |
+
+Sub-verdict trajectory across windows: PRESENT (tick-50) → PARTIAL (tick-100) → PARTIAL (tick-200). **Notable secondary finding:** Label B's bridge degrades systematically across windows on `food_ladder`. Events/energy go +0.621 → +0.342 → +0.211 (steady decline below the +0.5 threshold from tick-100 onward); distance stays above threshold (+0.939 → +0.730 → +0.800) but weakens from tick-50 to tick-100 then partially recovers at tick-200. Label A holds across all three windows (3/3 FIRES at every window). The asymmetric Label A vs Label B trajectory on `food_ladder` is interesting — it suggests dominance dynamics at tick-100/200 on `food_ladder` are **less aligned** with the lineage that produces highest tick-N readiness fraction, possibly because the pre-food column at x=4 lets multiple lineages reach reproductive eligibility at similar rates (compressing Label B's discriminative power) while sensor_radius continues to track spatial advantage. Descriptive only — does not gate the verdict.
+
+### v0.53b's tick-100 cells re-anchor (SECONDARY, non-gating)
+
+A_null_V0_25 tick-100 cells reproduce v0.53b's tick-100 measurements byte-equivalently (logged in `audit_summary.csv` `bridge_reanchor_tick100` section). Same RNG / founder draw / per-tick world dynamics under tick-100 accumulation across v0.53b → v0.53c. No drift; the SECONDARY anchor passes as expected.
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+### What v0.53c can safely claim
+
+- ✓ **A_null_V0_25 tick-50 anchor PASSES** within 0.0004 of v0.48 / v0.53 / v0.53b. Reducer machinery (paired_d formula, three-window observer, three Label B variants, label assignment) is correct.
+- ✓ **A_null_V0_25 tick-200 sub-verdict is PRESENT** (6/6 cells fire) — the bridge holds on `tight_gradient` under maximum observation. Label B's bridge **strengthens** at tick-200 (events/energy +0.790 → +1.155; distance +1.264 → +2.141). Descriptive — does not gate.
+- ✓ **B_widened reachability is exactly 0.0000 at all three windows** (tick-50, tick-100, tick-200). 0 of 64 runs produce any `AteFood` event. The `widened_gradient` layout × V0_25 substrate combination structurally prevents food access at every window length the available 200-tick simulation can deliver.
+- ✓ **B_widened populations go to full extinction by tick-200** (living_population_run_share = 0.0000 at tick-200; was 0.5000 at tick-100 and 1.0000 at tick-50). Reachability and survival fail together on this layout × substrate.
+- ✓ **v0.53's `BRIDGE_PARTIALLY_GENERALIZES` verdict scope is now formally bounded along the (V0_25 substrate × `widened_gradient`) cell.** The B_widened NOT_FOUND is reachability-bound at every measurable window; it is NOT a window artifact. The verdict scope is "the V0_25 substrate cannot measure the bridge on `widened_gradient` in any window the available simulation can deliver".
+- ✓ **C_food_ladder Label A bridge holds at every window** (3/3 FIRES at tick-50, tick-100, tick-200). The bridge magnitude on `food_ladder` is comparable to V0_25 across windows under Label A.
+- ✓ **No opposite-sign halts.** All 18 tick-200 paired_d cells across the three arms either fire expected, fall sub-threshold, or are `nan`; none falls below −0.5.
+
+### What v0.53c cannot claim
+
+- ✗ **"`widened_gradient` is universally unreachable."** v0.53c tests V0_25 substrate × N_TICKS=200 only. Different metabolic / energy / policy parameters may admit reachability. v0.53d (substrate variation) is the natural follow-up.
+- ✗ **"Population extinction on `widened_gradient` is layout-caused."** The triple-zero reachability + full extinction under V0_25 is consistent with both "geometry too far for the substrate's energy budget" and "substrate's energy budget too small for the geometry's traversal cost". v0.53c does not isolate which.
+- ✗ **A revised v0.53 / v0.53b verdict.** Both stand. v0.53c is the maximum-window probe within the locked V0_25 substrate.
+- ✗ **Causal contribution of `sensor_radius` per layout.** v0.53c is observational. Reading-A causal-generalization slice remains the deferred candidate (and would naturally exclude `widened_gradient` per v0.53c's finding).
+- ✗ **Mechanism behind the A_null_V0_25 Label B strengthening at tick-200** (a notable secondary finding — events/energy go +0.790 → +1.155). Plausible: tick-200 dominance dynamics filter for high-sensor_radius lineages more strongly than tick-100 readiness alone. Not formally established.
+- ✗ **Mechanism behind the C_food_ladder Label B degradation across windows** (events/energy go +0.621 → +0.342 → +0.211). Plausible: pre-food column compresses Label B's discriminative power as multiple lineages converge on similar readiness fractions. Not formally established.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge | interventional (B PRESENT) |
+| v0.52b | modern A_null | bridge follows information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT) |
+| v0.53 | modern A_null | bridge fires PRESENT on `tight_gradient` and `food_ladder`, NOT_FOUND on `widened_gradient` | observational (PARTIALLY_GENERALIZES) |
+| v0.53b | modern A_null | `widened_gradient` NOT_FOUND at tick-100 is reachability-bound (0/64 reach food, 50% extinction) | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_100) |
+| v0.53c | modern A_null | `widened_gradient` reachability = 0/64 at every window 50/100/200; full extinction by tick-200; v0.53's `BRIDGE_PARTIALLY_GENERALIZES` verdict scope is now formally bounded to (V0_25 substrate × `widened_gradient`) cell | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_200; substrate-variation = v0.53d candidate) |
+
+The v0.46→v0.53c stack now reads: ... → v0.53 says the bridge fires on `tight_gradient` and `food_ladder` but not on `widened_gradient` at tick-50 → v0.53b says `widened_gradient`'s tick-100 NOT_FOUND is reachability-bound → **v0.53c says `widened_gradient`'s reachability is zero at every window the V0_25 substrate's 200-tick simulation can deliver, and populations go to full extinction by tick-200; the layout × V0_25 substrate combination structurally prevents food access; v0.53's verdict scope is formally bounded to layouts that admit reachability under V0_25.**
+
+### Notable secondary findings (descriptive only)
+
+1. **A_null_V0_25 Label B bridge strengthens at tick-200** on `tight_gradient`: events/energy go +0.790 (tick-100) → +1.155 (tick-200), distance goes +1.264 → +2.141. Suggests tick-200 dominance dynamics filter for high-sensor_radius lineages more strongly than tick-100 readiness alone. Worth tracking in any future Reading-A causal-generalization slice on `tight_gradient`.
+
+2. **C_food_ladder Label B bridge degrades systematically across windows** on `food_ladder`: events/energy go +0.621 (tick-50) → +0.342 (tick-100) → +0.211 (tick-200). Below the +0.5 threshold from tick-100 onward. Distance cell stays above threshold across all windows. The asymmetric Label A vs Label B trajectory on `food_ladder` warrants flagging as a layout-window interaction worth investigating in future slices.
+
+### Next-step candidates (open; not locked)
+
+The v0.53c verdict closes the window-extension question definitively for `widened_gradient` × V0_25 and motivates substrate variation as the next disambiguation:
+
+- **v0.53d — substrate-variation disambiguation on `widened_gradient`.** Modify V0_25 substrate parameters (lower `base_metabolic_cost`, higher `starting_energy` / `max_energy`, etc.) on `widened_gradient` only; tests whether reachability is parameter-bound or geometry-bound. Independent observational slice; introduces 1+ new arms with explicit substrate variants.
+- **v0.53e (or later) — Reading-A causal-generalization slice on layouts admitting the bridge.** Re-run v0.49's null + clamp_4 + permutation_5! per layout that admits measurement (`tight_gradient` + `food_ladder`); skip `widened_gradient` per v0.53c's finding. ~384 runs.
+- **v0.53f (or later) — investigate the C_food_ladder Label B degradation trajectory.** Why does Label B's bridge weaken from tick-50 to tick-200 specifically on `food_ladder` while Label A holds? Could be a dominance-dynamics question or a readiness-fraction-discriminative-power question. Per-tick-window paired_d trajectory probe.
+- **v0.54 — joint ablation** (zero-cost AND shuffle). Channel-interaction question. Independent of layout-axis findings.
+- **Eventual fresh-stream calibration** on the v0.46–v0.53c conclusion stack — needed for any "mechanism" declaration. Longer-horizon.
+
+User has not locked which slice is next.
+
+### CI gate at v0.53c close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok
+uv run pytest                   1744 passed, 7 skipped (was 1728; +16 v0.53c)
+uv run python scripts/core_smoke_test.py                                ok (default behavior preserved; src/ untouched)
+uv run python scripts/v0_53c_reachability_disambiguation_tick200_audit.py        WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200
+```
