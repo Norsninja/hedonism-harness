@@ -298,6 +298,7 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     condition: str | None = None,
     trait_config: TraitConfig | None = None,
     reproduction_config: ReproductionConfig | None = None,
+    body_config: BodyConfig | None = None,
     use_memory: bool = False,
     memory_type: str = "cell_exact",
     food_respawn_cooldown: int | None = None,
@@ -324,6 +325,12 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     ``reproduction_config``: when provided, replaces the SPEC §7/§14 default
     ``ReproductionConfig`` (the v0.7 reproduction-emergence seam). When
     ``None`` the SPEC defaults hold.
+
+    ``body_config``: when provided, replaces the default ``BodyConfig()``
+    instance used to construct founder bodies (the v0.53e substrate-axis
+    seam — additive, default-preserving). When ``None`` (default) the
+    ``BodyConfig()`` defaults are used, preserving byte-identity for every
+    v0.7..v0.52b call site.
 
     ``use_memory``: when ``True``, every founder is created with a fresh
     memory of the type chosen by ``memory_type`` (the v0.9 memory-arm seam,
@@ -388,7 +395,7 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
         # rejects influx > 0 without a pool — preserves the conservation
         # framing.
         world_cfg = world_cfg.model_copy(update={"ambient_influx_rate": ambient_influx_rate})
-    body_cfg = BodyConfig()
+    body_cfg = body_config if body_config is not None else BodyConfig()
     action_cfg = ActionConfig()
     repro_cfg = reproduction_config if reproduction_config is not None else ReproductionConfig()
     if child_funding_mode is not None:
