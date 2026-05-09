@@ -372,4 +372,157 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-(To be appended after the reducer run.)
+**Status:** reducer executed 2026-05-09 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time well under the 12–25 minute estimate. **Tier-1 bridge re-anchor PASSES at tick-50** (A_null_V0_25 reproduces v0.48–v0.53f's six published signed_d cells within max drift 0.0004 ≪ 1e-3). **Tier-2 categorical anchor PASSES** (B_widened_V0_25 reachability = exactly 0/64 at tick-200, matching v0.53c–v0.53f's lock). Corpus re-anchor (`a_share_h8`) max drift 0.0003 on v0.42. **The reducer landed cleanly on priority 5** — C reachability remained `0/64` at tick-200 even under the most aggressive defensible single-arm budget envelope. **Reachability-gating did not activate** because C had no wrong-sign cells (C tick-200 sub-verdict = `BRIDGE_NOT_FOUND`, not `OPPOSITE_SIGN_HALT`); the framework remains battle-tested via v0.53f only.
+
+### Rollup verdict — `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_COMBINED_SE100_BMC010` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with the V0_25 substrate held constant except for the combined founder-facing budget relaxation `BodyConfig(starting_energy=100.0, base_metabolic_cost=0.10)` on `widened_gradient`, fewer than 25% of C_widened_combined_se100_bmc010 runs have any founder lineage with pre200 food events. C_widened_combined_se100_bmc010's reachability is below the locked 25% threshold at tick-200; the geometry/substrate cell that v0.53c locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200`, v0.53d locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX`, v0.53e locked as `RELAXED_OPPOSITE_SIGN_HALT`, and v0.53f locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010` remains below the reachability threshold under the combined founder-facing budget envelope. The bridge is not rescued by `BodyConfig(starting_energy=100.0, base_metabolic_cost=0.10)` under V0_25 × `widened_gradient` × N_TICKS=200; the (V0_25 × `widened_gradient`) reachability ceiling is not lifted by any conservative single- or two-knob founder-facing budget envelope tested in the v0.53d→v0.53g stack. v0.53h (or later) candidates shift toward non-budget axes: geometry calibration (corridor width, food placement, hazard-band geometry), policy / hazard-avoidance dynamics, or N_TICKS=200 horizon extension: `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_COMBINED_SE100_BMC010`."
+
+**Bounded claim:** Under V0_25 × `widened_gradient` × N_TICKS=200, reachability is not restored by the tested conservative single- or two-knob founder-facing budget relaxations.
+
+Sub-verdicts:
+
+| arm | tick-50 (anchor) | tick-100 (descriptive) | tick-200 (verdict-gating) |
+|---|---|---|---|
+| A_null_V0_25 | `A_NULL_V025_TICK50_BRIDGE_PRESENT` | PRESENT | `A_NULL_V025_TICK200_BRIDGE_PRESENT` (descriptive) |
+| B_widened_V0_25 | n/a (categorical anchor at 0/64) | n/a | `B_WIDENED_V025_TICK200_BRIDGE_NOT_FOUND` (informational; reachability anchor holds) |
+| C_widened_combined_se100_bmc010 | n/a | n/a | `C_COMBINED_SE100_BMC010_TICK200_BRIDGE_NOT_FOUND` (drives priority-5 verdict via reachability < 0.25) |
+
+### Central scientific finding — survival-extension and food-reachability are decoupled on `widened_gradient`
+
+The combined two-knob conjunction extended survival ~9× over v0.53e and ~5.6× over v0.53f, with founders carrying the most aggressive defensible single-arm budget envelope (`starting_energy=100`, `base_metabolic_cost=0.10`) without raising `max_energy`. **At ~87.5% population alive at tick-200, the substrate axis is responsive — yet not a single founder lineage in any of the 64 C runs reached food.**
+
+| slice | C arm knob(s) | C tick-200 living_share | C tick-200 reachability |
+|---|---|:-:|:-:|
+| v0.53e | `starting_energy=100` | 0.0938 (~9.4%) | 0/64 |
+| v0.53f | `base_metabolic_cost=0.10` | 0.1562 (~15.6%) | 0/64 |
+| **v0.53g** | **both combined** | **0.8750 (~87.5%)** | **0/64** |
+
+This breaks the "they just die too soon" explanation for the v0.53d–v0.53f null results. Survival-extension and food-reachability are decoupled on `widened_gradient`. The combined budget relaxation worked dramatically on survival (the body_config seam is fully responsive; the substrate axis is real) but food contact remained zero. The candidate space for v0.53h+ shifts away from founder-facing budget axes; the bottleneck is something else.
+
+### Reachability across all three windows
+
+| window | A_null_V0_25 | B_widened_V0_25 | C_widened_combined_se100_bmc010 | C ≥ 0.25? |
+|---|:-:|:-:|:-:|:-:|
+| tick-50 | 1.0000 | 0.0000 | 0.0000 | False (descriptive) |
+| tick-100 | 1.0000 | 0.0000 | 0.0000 | False (descriptive) |
+| tick-200 | 1.0000 | 0.0000 (Tier-2 categorical anchor) | **0.0000** | False (priority 5) |
+
+C reachability is uniformly zero across all windows — matching v0.53e/f's single-knob patterns. The seam is responsive on survival but does not propagate to reachability under any tested envelope.
+
+### Population-stability trajectory — substrate-axis stack
+
+| arm | tick-50 living_share | tick-100 living_share | tick-200 living_share |
+|---|:-:|:-:|:-:|
+| A_null_V0_25 | 1.0000 | 1.0000 | 1.0000 |
+| B_widened_V0_25 | 1.0000 | 0.5000 | **0.0000** (full extinction) |
+| C_widened_combined_se100_bmc010 | 1.0000 | **1.0000** | **0.8750** (~87.5% alive) |
+
+C maintains 100% population through tick-100 (v0.53e/f also reached tick-100 fully alive on C, but tick-200 dropped to 9.4%/15.6%). v0.53g's combined relaxation maintains ~87.5% to tick-200 — a dramatic survival horizon extension that confirms the body_config seam is fully functional on both knobs.
+
+### Reachability-gating did not activate this slice
+
+Per the v0.53f-introduced reachability-gated priority 3 trigger, priority 3 fires iff (C sub-verdict = `OPPOSITE_SIGN_HALT`) AND (`c_reachability_tick_200 ≥ 0.25`). Neither condition held in v0.53g:
+
+- C tick-200 sub-verdict = `C_COMBINED_SE100_BMC010_TICK200_BRIDGE_NOT_FOUND` (no wrong-sign cells; no Label A nor Label B primary signed_d ≤ −0.5 at tick-200).
+- C tick-200 reachability = 0.0000 (< 0.25).
+
+The `wrong_sign_cells_under_reachability_below_threshold` section in `audit_summary.csv` is empty. The reachability-gating framework remains battle-tested via v0.53f only; v0.53g did not exercise the framework on live data because no wrong-sign cells emerged. (The framework code path is exercised in v0.53g's test #13 with synthetic fixtures.)
+
+### Tier-1 bridge re-anchor — A_null_V0_25 tick-50 reproduces v0.48–v0.53f within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| `label_a_sensor_radius` | `pre50_food_events_count` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `pre50_food_energy_acquired` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `mean_distance_to_nearest_food_cell_tick50` | +1.916 | +1.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_events_count` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_energy_acquired` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `mean_distance_to_nearest_food_cell_tick50` | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 (≤ 1e-3). All cells PASS.
+
+### Tier-2 categorical anchor — B_widened_V0_25 reachability_run_share at tick-200
+
+| anchor | locked value | derived | passes |
+|---|:-:|:-:|:-:|
+| `b_widened_v025_reachability_run_share_tick_200` | **0.0** (0/64) | 0.0000 (0/64) | True (categorical match) |
+
+v0.53c–v0.53f's locked `0/64` reachability anchor holds.
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+### What v0.53g can safely claim
+
+- ✓ **A_null_V0_25 tick-50 anchor PASSES** within 0.0004 of v0.48–v0.53f. Reducer machinery (paired_d formula, three-window observer, three Label B variants, BodyConfig override path with two simultaneous knobs, reachability-gated priority-3 trigger) is correct.
+- ✓ **B_widened_V0_25 categorical Tier-2 anchor PASSES exactly** (0/64 at tick-200). Predecessor lock holds.
+- ✓ **The combined two-knob `body_config` override is fully functional.** B and C diverge dramatically — C reaches tick-200 at ~87.5% population alive, an order of magnitude above v0.53e (9.4%) and v0.53f (15.6%). The substrate axis is responsive on both knobs simultaneously.
+- ✓ **`BodyConfig(starting_energy=100.0, base_metabolic_cost=0.10)` does NOT restore food reachability on `widened_gradient` × V0_25 × N_TICKS=200.** C reachability_run_share remains exactly `0.0000` at every window. No founder lineage in any of the 64 C runs produces a single `AteFood` event.
+- ✓ **Survival-extension and food-reachability are decoupled on `widened_gradient`.** The combined budget relaxation extended survival ~9× over v0.53e and ~5.6× over v0.53f without lifting reachability above 0/64. This breaks the "they just die too soon" explanation.
+- ✓ **Under V0_25 × `widened_gradient` × N_TICKS=200, reachability is not restored by the tested conservative single- or two-knob founder-facing budget relaxations.**
+- ✓ **The reachability-gated priority-3 framework continues to behave correctly** (no wrong-sign cells emerged on live data; the synthetic test fixture in test #13 still passes).
+
+### What v0.53g cannot claim
+
+- ✗ **"`widened_gradient` is impossible"** under priority 5. v0.53g tested one combined-knob envelope at one dose. Stronger doses, additional knobs (`max_energy` co-raised), N_TICKS extension, or other axes (geometry / policy) remain untested.
+- ✗ **"Geometry is fundamental."** The empirical result is that the tested founder-facing budget envelopes are insufficient. The result does not localize the bottleneck to geometry specifically — it could equally be policy / hazard-avoidance, N_TICKS horizon, or unmodeled dynamics. Cautious framing per CLAUDE.md.
+- ✗ **"Budget is irrelevant."** v0.53g (combined relaxation) extended survival ~9× over v0.53e — budget is dramatically responsive on survival. The empirical claim is that the tested founder-facing budget envelopes do not lift reachability, NOT that budget has no effect.
+- ✗ **A revised v0.53–v0.53f verdict.** All six predecessor verdicts stand as historical contracts.
+- ✗ **Mechanism for the survival-extension-vs-reachability decoupling.** The 87.5% population at tick-200 with 0/64 food contact is a striking observation; no mechanism is formally established. Plausible interpretations (not formally established): policy doesn't drive founders into the corridor under any budget; hazard band blocks traversal regardless of energy; corridor exceeds the per-tick step-count any policy can deliver in 200 ticks; N_TICKS=200 is the binding horizon. v0.53h+ disambiguates.
+- ✗ **Generalization beyond the tested arms.** Verdict scope is bounded to (`tight_gradient` × V0_25, `widened_gradient` × V0_25, `widened_gradient` × V0_25 with `BodyConfig(se100, bmc010)`) at `N_TICKS=200`.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge | interventional (B PRESENT) |
+| v0.52b | modern A_null | bridge follows information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT) |
+| v0.53 | modern A_null | bridge fires PRESENT on `tight_gradient` and `food_ladder`, NOT_FOUND on `widened_gradient` | observational (PARTIALLY_GENERALIZES) |
+| v0.53b | modern A_null | `widened_gradient` NOT_FOUND at tick-100 is reachability-bound | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_100) |
+| v0.53c | modern A_null | `widened_gradient` reachability = 0/64 at every window 50/100/200 under V0_25 | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_200) |
+| v0.53d | modern A_null | doubling `ambient_influx_rate` is mechanically inert under no-food-contact extinction | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX) |
+| v0.53e | modern A_null | `BodyConfig.starting_energy=100` extends survival ~9% but does NOT lift reachability; locked-sign halt fired on measurement-edge wrong-sign cell at n=6 | observational (RELAXED_OPPOSITE_SIGN_HALT) |
+| v0.53f | modern A_null | `BodyConfig.base_metabolic_cost=0.10` extends survival ~16% but does NOT lift reachability; reachability-gated priority-3 trigger validated on the v0.53e-style edge case | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010) |
+| v0.53g | modern A_null | combined `BodyConfig(starting_energy=100, base_metabolic_cost=0.10)` extends survival ~87.5% (~9× v0.53e, ~5.6× v0.53f) but does NOT lift reachability above 0/64; survival-extension and food-reachability are decoupled on `widened_gradient`; under V0_25 × `widened_gradient` × N_TICKS=200, reachability is not restored by the tested conservative single- or two-knob founder-facing budget relaxations | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_COMBINED_SE100_BMC010; central finding: survival-extension ⊥ reachability) |
+
+The v0.46→v0.53g stack now reads: ... → v0.53e/f individually extended survival ~9-16% but did not lift reachability → **v0.53g's combined two-knob relaxation extended survival to ~87.5% alive at tick-200 — vastly more than either single-knob axis — yet still produced 0/64 reachability. Survival-extension and food-reachability are decoupled on `widened_gradient`; the candidate space for v0.53h+ shifts away from founder-facing budget axes.**
+
+### Next-step candidates (open)
+
+The combined budget result is strong enough to pivot away from budget-axis exploration. Three-knob budget co-variation (e.g., `max_energy` co-raised, or `base_metabolic_cost=0.05`) is deferred — the empirical signal that ~87.5% C survival without any food contact is informative on its own. The natural next step is to disambiguate the bottleneck along non-budget axes:
+
+- **v0.53h — N_TICKS extension on `widened_gradient` under combined SE100/BMC010.** Recommended next slice. Test whether the bottleneck is the 200-tick simulation horizon by extending N_TICKS (e.g., to 400 or 800) on `widened_gradient` with the v0.53g combined budget envelope. C arm has ~87.5% survival at tick-200 — there's substantial unused horizon for traversal. If extended N_TICKS lifts reachability above 0.25, the bottleneck is the simulation horizon (a question of "how long until founders reach food given enough budget"). If it doesn't, the bottleneck is structural (policy, geometry, or unmodeled dynamics). Likely requires a small additive `src/` seam to expose `n_ticks` as a `run_chamber()` override (analogous to v0.53e's body_config seam); test #8 would re-pin chamber driver.
+- **v0.53i (or later) — geometry calibration probe.** Vary corridor width, food placement, or hazard-band geometry on `widened_gradient`. May require new layout(s) and possibly src/ change to expose layout parameters.
+- **v0.53j (or later) — policy / hazard-avoidance probe.** Vary `hazard_avoidance_weight` or other policy knobs on `widened_gradient` under V0_25 substrate.
+- **v0.53k (or later) — three-knob founder-budget co-variation.** Add `max_energy=200` (or similar) to v0.53g's two-knob envelope. Deferred per the above pivot.
+- **v0.53l (or later) — investigate the C_food_ladder Label B degradation trajectory.** Per-tick-window paired_d trajectory probe.
+- **v0.53m (or later) — Reading-A causal-generalization slice on layouts admitting the bridge.**
+- **v0.54 — joint ablation** (zero-cost AND shuffle).
+- **Eventual fresh-stream calibration** on the v0.46–v0.53g conclusion stack.
+
+User has not locked which slice is next.
+
+### CI gate at v0.53g close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok (236 files already formatted)
+uv run pytest                   1808 passed, 7 skipped (was 1792; +16 v0.53g)
+uv run python scripts/core_smoke_test.py                                ok (determinism north star intact; no src/ changes)
+uv run python scripts/v0_53g_substrate_axis_combined_se100_bmc010_audit.py   WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_COMBINED_SE100_BMC010 (priority 5; reachability-gating did not activate — no wrong-sign cells)
+```
