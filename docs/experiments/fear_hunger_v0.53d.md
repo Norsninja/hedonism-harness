@@ -383,4 +383,183 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-(To be appended after the reducer run.)
+**Status:** reducer executed 2026-05-09 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~8 minutes (faster than the 18–30 minute estimate due to early extinction in B_widened_V0_25 / C_widened_relaxed runs). **Tier-1 bridge re-anchor PASSES at tick-50** (A_null_V0_25 reproduces v0.48 / v0.53 / v0.53b / v0.53c's six published signed_d cells within max drift 0.0004 ≪ 1e-3). **Tier-2 categorical anchor PASSES** (B_widened_V0_25 reachability = exactly 0/64 at tick-200, matching v0.53c's lock). Corpus re-anchor (`a_share_h8`) max drift 0.0003 on v0.42. **Zero opposite-sign halts** under any C_widened_relaxed tick-200 gating-label cell.
+
+### Rollup verdict — `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with the V0_25 substrate held constant except for `ambient_influx_rate = 2.0` / tick (doubled from the V0_25 baseline of `1.0` / tick) on `widened_gradient`, fewer than 25% of C_widened_relaxed runs have any founder lineage with pre200 food events. C_widened_relaxed's reachability is below the locked 25% threshold at tick-200; the geometry/substrate cell that v0.53c locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200` remains below the reachability threshold under the tested relaxed-influx envelope. The bridge is not rescued by `ambient_influx_rate = 2.0` under V0_25 × `widened_gradient` × N_TICKS=200; v0.53e (or later) substrate disambiguation along a different knob, a stronger dose, or multi-knob co-variation remains the natural follow-up: `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX`."
+
+**Headline interpretation:** `ambient_influx_rate = 2.0` does not rescue `widened_gradient` under V0_25 × N_TICKS=200.
+
+Sub-verdicts:
+
+| arm | tick-50 (anchor) | tick-100 (descriptive) | tick-200 (verdict-gating) |
+|---|---|---|---|
+| A_null_V0_25 | `A_NULL_V025_TICK50_BRIDGE_PRESENT` | PRESENT | `A_NULL_V025_TICK200_BRIDGE_PRESENT` (descriptive) |
+| B_widened_V0_25 | n/a (categorical anchor) | n/a | `B_WIDENED_V025_TICK200_BRIDGE_NOT_FOUND` (informational; reachability anchor at 0/64 holds) |
+| C_widened_relaxed | n/a | n/a | `C_RELAXED_TICK200_BRIDGE_NOT_FOUND` (drives priority-5 verdict via reachability < 0.25) |
+
+The locked verdict is gated on C_widened_relaxed's reachability metric: `c_widened_relaxed_reachability_run_share_tick_200 = 0.0000` (0 of 64 runs have any founder lineage with `pre200_food_events_count > 0`). Far below the locked 25% threshold; priority 5 fires with full margin.
+
+### Reachability across all three windows — central finding
+
+| window | A_null_V0_25 | B_widened_V0_25 | C_widened_relaxed | C ≥ 0.25? |
+|---|:-:|:-:|:-:|:-:|
+| tick-50 | 1.0000 | **0.0000** | **0.0000** | False (descriptive) |
+| tick-100 | 1.0000 | **0.0000** | **0.0000** | False (descriptive) |
+| tick-200 | 1.0000 | **0.0000** (Tier-2 categorical anchor) | **0.0000** | False (verdict-gating) |
+
+**Triple-zero reachability on both `widened_gradient` arms across the entire V0_25 simulation lifetime, regardless of `ambient_influx_rate` ∈ {1.0, 2.0}.** Doubling the ambient influx did not lift reachability at any window from tick-50 through tick-200.
+
+### Population-stability trajectory
+
+| window | A_null_V0_25 | B_widened_V0_25 | C_widened_relaxed |
+|---|:-:|:-:|:-:|
+| tick-50 living_share / label_b_n | 1.0000 / 64 | 1.0000 / 64 | 1.0000 / 64 |
+| tick-100 living_share / label_b_n | 1.0000 / 64 | 0.5000 / 32 | 0.5000 / 32 |
+| tick-200 living_share / label_b_n | 1.0000 / 64 | **0.0000 / 0** | **0.0000 / 0** |
+
+A_null_V0_25 holds full population on `tight_gradient` across all three windows. B_widened_V0_25 and C_widened_relaxed share an identical extinction trajectory — 50% of populations extinct by tick-100, **100% extinct by tick-200**.
+
+### Tier-1 bridge re-anchor — A_null_V0_25 tick-50 reproduces v0.48 / v0.53 / v0.53b / v0.53c within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| `label_a_sensor_radius` | `pre50_food_events_count` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `pre50_food_energy_acquired` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `mean_distance_to_nearest_food_cell_tick50` | +1.916 | +1.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_events_count` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_energy_acquired` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `mean_distance_to_nearest_food_cell_tick50` | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 (≤ 1e-3). All cells PASS.
+
+### Tier-2 categorical anchor — B_widened_V0_25 reachability_run_share at tick-200
+
+| anchor | locked value | derived | passes |
+|---|:-:|:-:|:-:|
+| `b_widened_v025_reachability_run_share_tick_200` | **0.0** (0/64) | 0.0000 (0/64) | True (categorical match) |
+
+v0.53c's locked `0/64` reachability for `widened_gradient` × V0_25 at tick-200 reproduces byte-identically. Predecessor coupling holds.
+
+### A_null_V0_25 — three-window paired_d (anchor + descriptive)
+
+| label | observable | tick-50 | tick-100 | tick-200 |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | events | +1.066 | +1.028 | **+0.929** (FIRES) |
+| label_a_sensor_radius | energy | +1.066 | +1.028 | **+0.929** (FIRES) |
+| label_a_sensor_radius | distance | +1.916 | +2.153 | **+2.170** (FIRES) |
+| label_b_readiness_fraction_tick{N} | events | +0.916 | +0.790 | **+1.155** (FIRES) |
+| label_b_readiness_fraction_tick{N} | energy | +0.916 | +0.790 | **+1.155** (FIRES) |
+| label_b_readiness_fraction_tick{N} | distance | +1.179 | +1.264 | **+2.141** (FIRES) |
+
+All 6 tick-200 cells FIRE under both labels (sub-verdict PRESENT). Reproduces v0.53c's A_null_V0_25 trajectory byte-equivalently across all three windows (Label B strengthens at tick-200; Label A holds across windows).
+
+### B_widened_V0_25 — three-window paired_d (descriptive; Tier-2 categorical anchor at tick-200)
+
+| label | observable | tick-50 | tick-100 | tick-200 |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | events | nan (n=64) | nan (n=64) | nan (n=64) |
+| label_a_sensor_radius | energy | nan (n=64) | nan (n=64) | nan (n=64) |
+| label_a_sensor_radius | distance | −0.062 (n=64) | −0.078 (n=64) | −0.041 (n=64) |
+| label_b_readiness_fraction_tick{N} | events | nan (n=64; degenerate) | nan (n=32) | nan (**n=0**) |
+| label_b_readiness_fraction_tick{N} | energy | nan (n=64; degenerate) | nan (n=32) | nan (**n=0**) |
+| label_b_readiness_fraction_tick{N} | distance | +7.766 (n=64; degenerate) | +0.460 (n=32) | nan (**n=0**) |
+
+Mirrors v0.53c's B_widened_gradient trajectory byte-equivalently. Sub-verdict tick-200 NOT_FOUND under the strict NaN-treated-as-non-firing rule (Label A clears 0/3 firing cells; Label B clears 0/3 with n=0).
+
+### C_widened_relaxed — three-window paired_d (verdict-gating at tick-200)
+
+| label | observable | tick-50 | tick-100 | tick-200 |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | events | nan (n=64) | nan (n=64) | nan (n=64) |
+| label_a_sensor_radius | energy | nan (n=64) | nan (n=64) | nan (n=64) |
+| label_a_sensor_radius | distance | −0.062 (n=64) | −0.078 (n=64) | −0.041 (n=64) |
+| label_b_readiness_fraction_tick{N} | events | nan (n=64; degenerate) | nan (n=32) | nan (**n=0**) |
+| label_b_readiness_fraction_tick{N} | energy | nan (n=64; degenerate) | nan (n=32) | nan (**n=0**) |
+| label_b_readiness_fraction_tick{N} | distance | +7.766 (n=64; degenerate) | +0.460 (n=32) | nan (**n=0**) |
+
+Sub-verdict tick-200 NOT_FOUND. The lone non-NaN Label A distance cell at signed_d = −0.041 is far above the −0.5 opposite-sign threshold; no priority-3 halt fires.
+
+### Notable secondary finding: doubled ambient_influx_rate was functionally inert under widened_gradient extinction conditions
+
+B_widened_V0_25 and C_widened_relaxed produced byte-identical reachability, extinction, label availability, and paired_d summaries across all windows. Because the only configured difference was `ambient_influx_rate`, and because `widened_gradient` founders never reached food or reproduced, the doubled influx had no observable path into founder survival or foraging behavior in this regime. This is logged as a secondary mechanistic interpretation, not as an additional verdict.
+
+Concretely: B and C arms both produce `delta_mean = −0.0981, sd = 0.0126` on the Label B `mean_distance_tick50` cell; both produce identical living_population_run_share across all three windows (1.000 / 0.500 / 0.000); both produce identical `label_b_n` (64 / 32 / 0). The pool-funded reproduction path that would consume the additional ambient energy is never exercised on either arm because no founder lineage produces an `AteFood` event, and starting-energy budgets deplete at the V0_25 metabolic rate independent of pool state.
+
+The verdict (priority 5) stands as locked. The framing is **descriptive of why** the doubled-influx envelope did not move the reachability needle: the knob's effect path is inactive under the extinction regime tested. This finding directly informs the v0.53e (or later) candidate selection (see "Next-step candidates" below).
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+### What v0.53d can safely claim
+
+- ✓ **A_null_V0_25 tick-50 anchor PASSES** within 0.0004 of v0.48 / v0.53 / v0.53b / v0.53c. Reducer machinery (paired_d formula, three-window observer, three Label B variants, label assignment, layout assertions, ambient-influx override path) is correct.
+- ✓ **B_widened_V0_25 categorical Tier-2 anchor PASSES exactly** (0/64 at tick-200). v0.53c's predecessor lock holds byte-equivalently.
+- ✓ **C_widened_relaxed reachability is exactly 0.0000 at all three windows** (tick-50, tick-100, tick-200). 0 of 64 runs produce any `AteFood` event under doubled `ambient_influx_rate`.
+- ✓ **C_widened_relaxed populations go to full extinction by tick-200** (living_population_run_share = 0.0000 at tick-200), matching B_widened_V0_25's trajectory exactly.
+- ✓ **`ambient_influx_rate = 2.0` does not rescue `widened_gradient` under V0_25 × N_TICKS=200.** v0.53c's `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200` verdict scope remains below threshold under the tested relaxed-influx envelope.
+- ✓ **v0.53's `BRIDGE_PARTIALLY_GENERALIZES` and v0.53c's `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200` verdict scopes both stand**; v0.53d adds a single substrate-axis bound (relaxed-influx envelope at dose 2.0) without altering either predecessor's contract.
+- ✓ **No opposite-sign halts.** All 18 tick-200 paired_d cells across the three arms either fire expected, fall sub-threshold, are degenerate, or are NaN; none falls below −0.5.
+- ✓ **Notable secondary finding** (descriptive only): B and C arms produce byte-identical metrics under the conditions tested, consistent with the influx knob's effect path (pool-funded reproduction) being inactive when no agent reaches food.
+
+### What v0.53d cannot claim
+
+- ✗ **"`widened_gradient` is geometry-fundamental."** v0.53d tests V0_25 substrate × `ambient_influx_rate=2.0` × N_TICKS=200 only. Different metabolic / starting-energy / pool / cooldown parameters (single-knob or multi-knob), or stronger influx doses, may admit reachability. v0.53e remains the natural follow-up.
+- ✗ **"`ambient_influx_rate` is useless."** The knob has demonstrated effects elsewhere (v0.21 productivity transition under `tight_gradient` and `food_ladder` admitting reachability). v0.53d's finding is regime-specific: under widened_gradient extinction, the knob's effect path is inactive.
+- ✗ **"Ambient influx cannot rescue `widened_gradient`."** v0.53d tested one dose (`2.0`) at one window (tick-200) under one substrate envelope (V0_25). Stronger doses or multi-knob configurations remain untested.
+- ✗ **A revised v0.53 / v0.53b / v0.53c verdict.** All three stand. v0.53d is the substrate-axis probe along a single knob and dose.
+- ✗ **Mechanism for the byte-identity between B and C arms.** The interpretive frame (pool-funded reproduction inactive under no-food-contact extinction) is consistent with the configuration but not formally established as causal. Cautious framing per CLAUDE.md.
+- ✗ **Generalization beyond the tested arms.** Verdict scope is bounded to (`tight_gradient` × V0_25, `widened_gradient` × V0_25, `widened_gradient` × V0_25 with `ambient_influx_rate=2.0`) at `N_TICKS=200`.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge | interventional (B PRESENT) |
+| v0.52b | modern A_null | bridge follows information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT) |
+| v0.53 | modern A_null | bridge fires PRESENT on `tight_gradient` and `food_ladder`, NOT_FOUND on `widened_gradient` | observational (PARTIALLY_GENERALIZES) |
+| v0.53b | modern A_null | `widened_gradient` NOT_FOUND at tick-100 is reachability-bound | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_100) |
+| v0.53c | modern A_null | `widened_gradient` reachability = 0/64 at every window 50/100/200 under V0_25 | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_200) |
+| v0.53d | modern A_null | doubling `ambient_influx_rate` from 1.0 to 2.0 does not rescue `widened_gradient` under V0_25 × N_TICKS=200; B and C arms produce byte-identical metrics, consistent with the influx knob's effect path being inactive under no-food-contact extinction | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX) |
+
+The v0.46→v0.53d stack now reads: ... → v0.53c says `widened_gradient`'s reachability is zero at every window the V0_25 substrate's 200-tick simulation can deliver → **v0.53d says doubling `ambient_influx_rate` does not lift that reachability ceiling on `widened_gradient`, and the byte-identity between baseline and relaxed-influx arms is consistent with the influx knob's effect path (pool-funded reproduction) being inactive under no-food-contact extinction; v0.53e should target a founder-facing budget knob, not a stronger influx dose.**
+
+### Next-step candidates (open; not locked)
+
+The v0.53d verdict closes the substrate-axis question along the `ambient_influx_rate` knob at dose 2.0. The notable secondary finding informs the v0.53e candidate selection: prefer knobs with effect paths that reach founders directly under no-food-contact extinction, not knobs that gate on reproduction or food-contact events.
+
+- **v0.53e — substrate-axis disambiguation along a founder-facing budget knob.**
+  - **Primary**: `base_metabolic_cost` lowered (slows founder energy depletion; effect path is per-tick, independent of food contact or reproduction).
+  - **Secondary candidate**: `starting_energy` raised (more initial headroom for founders to traverse the corridor).
+  - **Defer**: `food_respawn_cooldown` (gates on food contact — moot while reachability = 0/64), `ambient_influx_rate` dose-response (knob's effect path is inactive — see secondary finding), `energy_pool_initial` (gates on pool draws — also inactive without reproduction).
+- **v0.53f (or later) — investigate the C_food_ladder Label B degradation trajectory.** Why does Label B's bridge weaken from tick-50 to tick-200 specifically on `food_ladder` while Label A holds? Per-tick-window paired_d trajectory probe. Independent of v0.53d outcome.
+- **v0.53g (or later) — Reading-A causal-generalization slice on layouts admitting the bridge.** Re-run v0.49's null + clamp_4 + permutation_5! per layout that admits measurement. Includes `tight_gradient` and `food_ladder`; includes `widened_gradient` only if v0.53e (or later substrate slice) admits measurement under any envelope.
+- **v0.54 — joint ablation** (zero-cost AND shuffle). Channel-interaction question. Independent of layout × substrate-axis findings.
+- **Eventual fresh-stream calibration** on the v0.46–v0.53d conclusion stack — needed for any "mechanism" declaration. Longer-horizon.
+
+User has not locked which slice is next.
+
+### CI gate at v0.53d close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok (230 files already formatted)
+uv run pytest                   1760 passed, 7 skipped (was 1744; +16 v0.53d)
+uv run python scripts/core_smoke_test.py                                ok (default behavior preserved; src/ untouched since v0.52b)
+uv run python scripts/v0_53d_substrate_axis_relaxed_influx_audit.py     WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX
+```
