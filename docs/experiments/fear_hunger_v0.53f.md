@@ -405,4 +405,163 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-(To be appended after the reducer run.)
+**Status:** reducer executed 2026-05-09 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~12 minutes. **Tier-1 bridge re-anchor PASSES at tick-50** (A_null_V0_25 reproduces v0.48 / v0.53 / v0.53b / v0.53c / v0.53d / v0.53e's six published signed_d cells within max drift 0.0004 ≪ 1e-3). **Tier-2 categorical anchor PASSES** (B_widened_V0_25 reachability = exactly 0/64 at tick-200, matching v0.53c / v0.53d / v0.53e's lock). Corpus re-anchor (`a_share_h8`) max drift 0.0003 on v0.42. **The reducer landed cleanly on priority 5** — the reachability-gated priority-3 trigger SKIPPED on the v0.53e-style measurement-edge case it was designed to exclude, and the rollup fell through to the substantive verdict without a halt. This is the central methodological result of v0.53f.
+
+### Rollup verdict — `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with the V0_25 substrate held constant except for `BodyConfig.base_metabolic_cost = 0.10` (a 60% reduction from the V0_25 baseline of `0.25` per tick) on `widened_gradient`, fewer than 25% of C_widened_metabolic_010 runs have any founder lineage with pre200 food events. C_widened_metabolic_010's reachability is below the locked 25% threshold at tick-200; the geometry/substrate cell that v0.53c locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200`, v0.53d locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX`, and v0.53e locked as `RELAXED_OPPOSITE_SIGN_HALT` remains below the reachability threshold under the relaxed-metabolic-cost envelope. The bridge is not rescued by `BodyConfig.base_metabolic_cost = 0.10` under V0_25 × `widened_gradient` × N_TICKS=200; v0.53g multi-knob co-variation (`starting_energy=100 + base_metabolic_cost=0.10` together) remains the natural follow-up: `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010`."
+
+**Headline interpretation:** `base_metabolic_cost=0.10` extends survival on `widened_gradient` further than v0.53e's `starting_energy=100`, but does not restore food reachability. Both tested single-knob founder-facing budget relaxations failed to lift reachability above 0/64.
+
+Sub-verdicts:
+
+| arm | tick-50 (anchor) | tick-100 (descriptive) | tick-200 (verdict-gating) |
+|---|---|---|---|
+| A_null_V0_25 | `A_NULL_V025_TICK50_BRIDGE_PRESENT` | PRESENT | `A_NULL_V025_TICK200_BRIDGE_PRESENT` (descriptive) |
+| B_widened_V0_25 | n/a (categorical anchor at 0/64) | n/a | `B_WIDENED_V025_TICK200_BRIDGE_NOT_FOUND` (informational; reachability anchor holds) |
+| C_widened_metabolic_010 | n/a | n/a | `C_METABOLIC_010_TICK200_OPPOSITE_SIGN_HALT` (per-arm sub-verdict; priority-3 SKIPPED under reachability-gating; rollup falls through to priority 5) |
+
+### Reachability-gating activation — central methodological result
+
+The reachability-gated priority-3 trigger performed exactly as designed on the v0.53e-style edge case it was designed to exclude:
+
+| condition | observed value | priority-3 fires? |
+|---|---|:-:|
+| C tick-200 sub-verdict | `OPPOSITE_SIGN_HALT` (1 wrong-sign cell on Label B distance) | (gating leg 1: TRUE) |
+| C tick-200 reachability_run_share | `0.0000` (< 0.25) | (gating leg 2: FALSE) |
+| **Combined (AND)** | — | **NO** (priority 3 SKIPPED) |
+
+The wrong-sign cell:
+
+| arm | label | observable | paired_d | signed_d | n |
+|---|---|---|:-:|:-:|:-:|
+| C_widened_metabolic_010 | `label_b_readiness_fraction_tick200` | `mean_distance_to_nearest_food_cell_tick200` | +0.759 | **−0.759** (≤ −0.5) | 10 |
+
+This cell is recorded in `audit_summary.csv` under the new section `wrong_sign_cells_under_reachability_below_threshold` with the row `(C_widened_metabolic_010, label_b_readiness_fraction_tick200, mean_distance_to_nearest_food_cell_tick200, +0.759, −0.759, 10)` AND the marker `priority3_skipped_under_reachability_below_threshold=True`. The wrong-sign signal is logged descriptively but does not fire a halt — the rollup falls through to priority 5.
+
+This validates v0.53f's forward-looking design improvement (informed by v0.53e's methodological lesson) on the exact case it was designed for: under reachability=0, the wrong-sign signal at small `n` lives at the edge of the bridge framework's validity, where readiness winners are selected among a tiny surviving subset without food contact. Under v0.53e's locked priority cascade, this would have fired a halt; under v0.53f's reachability-gated trigger, it lands cleanly on the substantive priority-5 verdict.
+
+### Reachability across all three windows
+
+| window | A_null_V0_25 | B_widened_V0_25 | C_widened_metabolic_010 | C ≥ 0.25? |
+|---|:-:|:-:|:-:|:-:|
+| tick-50 | 1.0000 | 0.0000 | 0.0000 | False (descriptive) |
+| tick-100 | 1.0000 | 0.0000 | 0.0000 | False (descriptive) |
+| tick-200 | 1.0000 | 0.0000 (Tier-2 categorical anchor) | **0.0000** | False (verdict-gating; priority 5) |
+
+C reachability is uniformly zero across all windows, matching v0.53e's pattern.
+
+### Population-stability trajectory — v0.53d/e/f comparison
+
+The body_config seam is responsive on the metabolic-cost axis as it was on the starting-energy axis. C and B diverge from tick-100 onward, with v0.53f's metabolic-cost reduction extending survival further than v0.53e's starting-energy boost:
+
+| slice | C knob varied | C tick-100 living_share | C tick-200 living_share | C tick-200 reachability |
+|---|---|:-:|:-:|:-:|
+| v0.53d | `ambient_influx_rate=2.0` | 0.5000 (mechanically inert; matches B) | **0.0000** (matches B) | 0/64 |
+| v0.53e | `BodyConfig.starting_energy=100` | **1.0000** | 0.0938 (~9% alive) | 0/64 |
+| **v0.53f** | `BodyConfig.base_metabolic_cost=0.10` | **1.0000** | **0.1562 (~16% alive)** | **0/64** |
+
+Both tested single-knob founder-facing budget relaxations failed to lift reachability above 0/64. The metabolic-cost reduction is a stronger lever than the one-time starting-energy boost (15.6% vs 9.4% alive at tick-200), but neither alone clears the reachability ceiling on `widened_gradient` × V0_25 × N_TICKS=200.
+
+Per-arm full breakdown:
+
+| arm | tick-50 | tick-100 | tick-200 |
+|---|:-:|:-:|:-:|
+| A_null_V0_25 (living_share / label_b_n) | 1.0000 / 64 | 1.0000 / 64 | 1.0000 / 64 |
+| B_widened_V0_25 (living_share / label_b_n) | 1.0000 / 64 | 0.5000 / 32 | **0.0000 / 0** (full extinction) |
+| C_widened_metabolic_010 (living_share / label_b_n) | 1.0000 / 64 | **1.0000 / 64** (no extinction yet) | **0.1562 / 10** (~16% alive) |
+
+By tick-100, B has lost 50% of its populations; C has lost 0%. The 60% per-tick depletion reduction holds C at 100% population through tick-100, then C suffers extinction through tick-200 but retains 10/64 surviving runs at tick-200. Notable: at tick-100 v0.53e showed C at 1.0000 / 64 and at tick-200 at 0.0938 / 6 — v0.53f's metabolic-cost knob preserves more survivors at tick-200 than v0.53e's starting-energy knob despite both arms reaching tick-100 fully alive.
+
+### Tier-1 bridge re-anchor — A_null_V0_25 tick-50 reproduces v0.48 / v0.53 / v0.53b / v0.53c / v0.53d / v0.53e within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| `label_a_sensor_radius` | `pre50_food_events_count` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `pre50_food_energy_acquired` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `mean_distance_to_nearest_food_cell_tick50` | +1.916 | +1.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_events_count` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_energy_acquired` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `mean_distance_to_nearest_food_cell_tick50` | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 (≤ 1e-3). All cells PASS.
+
+### Tier-2 categorical anchor — B_widened_V0_25 reachability_run_share at tick-200
+
+| anchor | locked value | derived | passes |
+|---|:-:|:-:|:-:|
+| `b_widened_v025_reachability_run_share_tick_200` | **0.0** (0/64) | 0.0000 (0/64) | True (categorical match) |
+
+v0.53c / v0.53d / v0.53e's locked `0/64` reachability anchor holds.
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+### What v0.53f can safely claim
+
+- ✓ **A_null_V0_25 tick-50 anchor PASSES** within 0.0004 of v0.48 / v0.53 / v0.53b / v0.53c / v0.53d / v0.53e. Reducer machinery (paired_d formula, three-window observer, three Label B variants, BodyConfig override path via the v0.53e seam, **reachability-gated priority-3 trigger**) is correct.
+- ✓ **B_widened_V0_25 categorical Tier-2 anchor PASSES exactly** (0/64 at tick-200). v0.53c / v0.53d / v0.53e's predecessor lock holds byte-equivalently.
+- ✓ **The reachability-gated priority-3 trigger performs exactly as designed.** On the v0.53e-style edge case (C sub-verdict OPPOSITE_SIGN_HALT under reachability < 0.25), priority 3 SKIPPED and the rollup landed cleanly on priority 5. The wrong-sign cell is logged descriptively in `audit_summary.csv` under the new `wrong_sign_cells_under_reachability_below_threshold` section. v0.53e's locked priority cascade and locked phrases stand unchanged as historical contract.
+- ✓ **`BodyConfig.base_metabolic_cost = 0.10` extends survival on `widened_gradient` × V0_25 further than v0.53e's `starting_energy = 100`** (15.6% alive at tick-200 vs v0.53e's 9.4%). At tick-100, C is still 100% alive (B is at 50%). Both single-knob founder-facing budget relaxations are responsive at the per-arm population level.
+- ✓ **`BodyConfig.base_metabolic_cost = 0.10` does NOT restore food reachability on `widened_gradient` × V0_25 × N_TICKS=200.** C reachability_run_share remains exactly `0.0000` at every window. No founder lineage in any of the 64 C runs produces a single `AteFood` event.
+- ✓ **Both tested single-knob founder-facing budget relaxations failed to lift reachability above 0/64.** v0.53e (`starting_energy=100`) and v0.53f (`base_metabolic_cost=0.10`) both produce extended survival without restored reachability. The reachability ceiling on `widened_gradient` × V0_25 × N_TICKS=200 is bounded by something other than these two single-axis founder-facing budget knobs at their tested doses.
+
+### What v0.53f cannot claim
+
+- ✗ **"`widened_gradient` is geometry-fundamental"** under priority 5. v0.53f tests V0_25 substrate × `BodyConfig.base_metabolic_cost=0.10` × N_TICKS=200 only. Multi-knob founder-budget co-variations (e.g., `starting_energy=100 + base_metabolic_cost=0.10` together) remain untested. v0.53g remains the natural follow-up.
+- ✗ **"`base_metabolic_cost` is useless on `widened_gradient`."** The knob has demonstrated effects (extended survival to 15.6% alive at tick-200, vs 0% under V0_25 baseline). v0.53f's finding is regime-specific: under V0_25 substrate × widened geometry × N_TICKS=200 × single-knob variation, the 60% per-tick depletion reduction extends survival but does not lift reachability.
+- ✗ **"Both founder-facing budget axes are exhausted."** v0.53f tested one dose along each axis (one per slice). Stronger doses (e.g., `base_metabolic_cost=0.05` or co-raised `starting_energy + max_energy`) remain untested. Multi-knob co-variation (v0.53g candidate) is the natural follow-up.
+- ✗ **A revised v0.53 / v0.53b / v0.53c / v0.53d / v0.53e verdict.** All five stand as historical contracts. v0.53e's `RELAXED_OPPOSITE_SIGN_HALT` verdict is unchanged — v0.53f's reachability-gated priority-3 trigger is a forward-looking design improvement, not a retroactive correction.
+- ✗ **Mechanism behind any rescue or non-rescue outcome.** Population dynamics under V0_25 × `widened_gradient` × `base_metabolic_cost=0.10` are descriptively logged; no mechanism is formally established.
+- ✗ **Generalization beyond the tested arms.** Verdict scope is bounded to (`tight_gradient` × V0_25, `widened_gradient` × V0_25, `widened_gradient` × V0_25 with `base_metabolic_cost=0.10`) at `N_TICKS=200`.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge | interventional (B PRESENT) |
+| v0.52b | modern A_null | bridge follows information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT) |
+| v0.53 | modern A_null | bridge fires PRESENT on `tight_gradient` and `food_ladder`, NOT_FOUND on `widened_gradient` | observational (PARTIALLY_GENERALIZES) |
+| v0.53b | modern A_null | `widened_gradient` NOT_FOUND at tick-100 is reachability-bound | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_100) |
+| v0.53c | modern A_null | `widened_gradient` reachability = 0/64 at every window 50/100/200 under V0_25 | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_200) |
+| v0.53d | modern A_null | doubling `ambient_influx_rate` is mechanically inert under no-food-contact extinction | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX) |
+| v0.53e | modern A_null | `BodyConfig.starting_energy=100` extends survival ~9% at tick-200 but does NOT lift reachability; locked sign discipline fired priority-3 halt on a measurement-edge wrong-sign cell at n=6 with reachability=0; methodological lesson logged for v0.53f | observational (RELAXED_OPPOSITE_SIGN_HALT — locked-sign discipline fired) |
+| v0.53f | modern A_null | `BodyConfig.base_metabolic_cost=0.10` extends survival ~16% at tick-200 (further than v0.53e) but does NOT lift reachability; the v0.53e methodological lesson applied as a reachability-gated priority-3 trigger performed exactly as designed (priority 3 SKIPPED on the v0.53e-style edge case; rollup landed cleanly on priority 5); both tested single-knob founder-facing budget relaxations failed to lift reachability above 0/64 | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010; reachability-gating activated correctly) |
+
+The v0.46→v0.53f stack now reads: ... → v0.53e says `starting_energy=100` extends survival but does not lift reachability (priority-3 halt fired on measurement-edge wrong-sign cell) → **v0.53f says `base_metabolic_cost=0.10` extends survival further (15.6% vs 9.4% alive at tick-200) but also does not lift reachability; the reachability-gated priority-3 trigger (the v0.53e methodological lesson applied forward) performed exactly as designed by skipping the halt on the v0.53e-style edge case and landing the rollup on priority 5; both tested single-knob founder-facing budget relaxations failed to lift reachability above 0/64. v0.53g multi-knob co-variation (`starting_energy=100 + base_metabolic_cost=0.10` together) remains the natural follow-up.**
+
+### Next-step candidates (open; not locked)
+
+The v0.53f verdict closes the per-tick metabolic-cost axis along the single-knob `base_metabolic_cost=0.10` value, with the v0.53e methodological lesson successfully applied as a forward-looking design improvement. Together with v0.53e's `starting_energy=100` result, both single-knob founder-facing budget axes have been tested at one dose each; neither lifts reachability above 0/64. The natural next step is multi-knob co-variation:
+
+- **v0.53g — multi-knob founder-budget co-variation: `starting_energy=100 + base_metabolic_cost=0.10` together.** Tests whether the combined effect of doubling starting energy AND reducing per-tick depletion 60% can lift reachability above the 25% threshold on `widened_gradient`. Expected combined effect on survival horizon: starting_energy contributes ~67% more initial budget; metabolic_cost contributes ~150% more runtime per unit of energy; together founders should have ~4-5× the V0_25 baseline survival horizon at tick-0. If even this combined relaxation fails to lift reachability, the bottleneck is something other than founder-facing budget (geometry calibration, policy/avoidance, hazard distribution, or N_TICKS=200 horizon itself). No `src/` change required (v0.53e seam carries forward). Reachability-gated priority 3 carries forward from v0.53f.
+- **v0.53h (or later) — investigate the C_food_ladder Label B degradation trajectory.** Per-tick-window paired_d trajectory probe.
+- **v0.53i (or later) — Reading-A causal-generalization slice on layouts admitting the bridge.**
+- **v0.54 — joint ablation** (zero-cost AND shuffle).
+- **Eventual fresh-stream calibration** on the v0.46–v0.53f conclusion stack — needed for any "mechanism" declaration.
+
+User has not locked which slice is next.
+
+### CI gate at v0.53f close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok (234 files already formatted)
+uv run pytest                   1792 passed, 7 skipped (was 1776; +16 v0.53f)
+uv run python scripts/core_smoke_test.py                                ok (determinism north star intact; no src/ changes)
+uv run python scripts/v0_53f_substrate_axis_base_metabolic_cost_audit.py   WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010 (priority 5, reachability-gated priority 3 SKIPPED correctly)
+```
