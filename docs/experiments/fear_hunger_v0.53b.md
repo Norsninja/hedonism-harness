@@ -311,4 +311,191 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-(To be appended after the reducer runs against the 192-run corpus. Status: pre-reg locked; reducer not yet implemented.)
+**Status:** reducer executed 2026-05-09 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~14 minutes. **Tier-1 bridge re-anchor PASSES at tick-50** (A_null_V0_25 reproduces v0.48 / v0.53's six published signed_d cells within max drift 0.0004 ≪ 1e-3). Corpus re-anchor (`a_share_h8`) max drift 0.0003 on v0.42. **Zero opposite-sign halts** under any gating-label tick-100 cell on any arm.
+
+### Rollup verdict — `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_100` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with the V0_25 substrate held constant and the observation window extended from tick-50 to tick-100, fewer than 25% of `widened_gradient` runs have any founder lineage with pre100 food events. B_widened's reachability is below the locked 25% threshold; the bridge cannot be measured on `widened_gradient` at this window length on this substrate. v0.53's `B_WIDENED_BRIDGE_NOT_FOUND` is itself reachability-bound and no claim about bridge presence is established by v0.53b."
+
+Sub-verdicts:
+
+| arm | layout | tick-50 sub-verdict (anchor) | tick-100 sub-verdict (verdict-gating) |
+|---|---|---|---|
+| A_null_V0_25 | `tight_gradient` | `A_NULL_V025_TICK50_BRIDGE_PRESENT` | `A_NULL_V025_TICK100_BRIDGE_PRESENT` (descriptive) |
+| B_widened_gradient | `widened_gradient` | n/a (anchor is A_null only) | `B_WIDENED_TICK100_BRIDGE_NOT_FOUND` |
+| C_food_ladder | `food_ladder` | n/a | `C_LADDER_TICK100_BRIDGE_PARTIAL` (descriptive) |
+
+The locked verdict is **gated only on B_widened's reachability metric**: `b_reachability_run_share_tick_100 = 0.0000` (0 of 64 runs have any founder lineage with `pre100_food_events_count > 0`). Far below the locked 25% threshold; priority 6 fires by a wide margin.
+
+### B_widened reachability — central finding
+
+| metric | value |
+|---|:-:|
+| `b_reachability_run_share_tick_100` | **0.0000** |
+| n_runs (B_widened) | 64 |
+| `B_REACHABILITY_THRESHOLD` (locked, pre-data) | 0.25 |
+| passes threshold? | **False** (0.0000 < 0.25) |
+| margin below threshold | 0.25 (full margin) |
+
+Zero out of 64 B_widened_gradient runs produced any founder lineage with non-zero `pre100_food_events_count`. The 9-cell traversal from spawn (x=1) to food (x ∈ [10..14]) past a 3-wide hazard band on `widened_gradient` is unreachable not just within v0.53's 50-tick window but also within v0.53b's 100-tick window on this substrate. **v0.53's `B_WIDENED_BRIDGE_NOT_FOUND` is itself reachability-bound; v0.53b does NOT establish that the bridge fails to fire on `widened_gradient` even given longer observation — the bridge cannot be measured on this layout at this window length, and no claim about bridge presence is established.**
+
+### Tier-1 bridge re-anchor — A_null_V0_25 tick-50 reproduces v0.48 / v0.53 within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | pre50_food_energy_acquired | +1.066 | +1.066 | 0.0004 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick50 | +1.916 | +1.916 | 0.0001 |
+| label_b_readiness_fraction_tick50 | pre50_food_events_count | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction_tick50 | pre50_food_energy_acquired | +0.916 | +0.916 | 0.0001 |
+| label_b_readiness_fraction_tick50 | mean_distance_to_nearest_food_cell_tick50 | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 ≪ 1e-3. v0.53b's A_null_V0_25 arm is byte-compatible with v0.48 / v0.53 A_null path at tick-50.
+
+### Per-arm tick-50 signed_d (anchor + descriptive)
+
+#### Arm A_null_V0_25 — tick-50 sub-verdict `A_NULL_V025_TICK50_BRIDGE_PRESENT`
+
+Identical numerically to v0.53's A_null_V0_25 arm (anchor passes within 0.0004). All six cells fire.
+
+#### Arm B_widened_gradient — tick-50 (descriptive; matches v0.53)
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre50_food_events_count | + | nan | — |
+| label_a_sensor_radius | pre50_food_energy_acquired | + | nan | — |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick50 | − | **−0.062** | NO |
+| label_b_readiness_fraction_tick50 | pre50_food_events_count | + | nan | — |
+| label_b_readiness_fraction_tick50 | pre50_food_energy_acquired | + | nan | — |
+| label_b_readiness_fraction_tick50 | mean_distance_to_nearest_food_cell_tick50 | − | **+7.766** | YES (degenerate; same v0.53 finding) |
+
+Tick-50 cells reproduce v0.53's B_widened cells byte-equivalently (same RNG / founder draws / per-tick world dynamics under tick-50 accumulation).
+
+#### Arm C_food_ladder — tick-50 (descriptive; matches v0.53)
+
+All six cells fire (3/3 under both labels), reproducing v0.53's C_food_ladder result byte-equivalently.
+
+### Per-arm tick-100 signed_d (verdict-gating for B_widened; descriptive for A_null_V0_25 and C_food_ladder)
+
+#### Arm A_null_V0_25 — tick-100 sub-verdict `A_NULL_V025_TICK100_BRIDGE_PRESENT` (descriptive)
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre100_food_events_count | + | **+1.028** | YES |
+| label_a_sensor_radius | pre100_food_energy_acquired | + | **+1.028** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick100 | − | **+2.153** | YES |
+| label_b_readiness_fraction_tick100 | pre100_food_events_count | + | **+0.790** | YES |
+| label_b_readiness_fraction_tick100 | pre100_food_energy_acquired | + | **+0.790** | YES |
+| label_b_readiness_fraction_tick100 | mean_distance_to_nearest_food_cell_tick100 | − | **+1.264** | YES |
+
+A_null_V0_25 bridge holds under longer observation. Label A magnitudes shift modestly (events / energy: +1.066 → +1.028; mean_distance: +1.916 → +2.153 — the spatial structure strengthens). Label B magnitudes weaken slightly (events / energy: +0.916 → +0.790; mean_distance: +1.179 → +1.264). All 6 cells fire with 0 wrong-sign. **Descriptive only** — does not gate the verdict.
+
+#### Arm B_widened_gradient — tick-100 sub-verdict `B_WIDENED_TICK100_BRIDGE_NOT_FOUND`
+
+| label | observable | sign | signed_d | n | fires |
+|---|---|:-:|:-:|:-:|:-:|
+| label_a_sensor_radius | pre100_food_events_count | + | nan | 64 | — |
+| label_a_sensor_radius | pre100_food_energy_acquired | + | nan | 64 | — |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick100 | − | **−0.078** | 64 | NO |
+| label_b_readiness_fraction_tick100 | pre100_food_events_count | + | nan | 32 | — |
+| label_b_readiness_fraction_tick100 | pre100_food_energy_acquired | + | nan | 32 | — |
+| label_b_readiness_fraction_tick100 | mean_distance_to_nearest_food_cell_tick100 | − | **+0.460** | 32 | NO |
+
+Label B's cells are computed on `n=32` instead of `n=64` because in 32 of the 64 B_widened runs the population is extinct by tick-100, so `is_high_tick100_readiness_fraction_lineage` is undefined (no living agents at the snapshot tick → `tick100_above_threshold_fraction = NaN` for every lineage → 3-tier tiebreak resolves to no winner). The 4 food-related cells remain `nan` (uniformly-zero food primaries on the surviving 32-run subset). The non-`nan` distance cells are not degenerate but do not clear the +0.5 threshold under either label. **Sub-verdict NOT_FOUND.**
+
+The lone non-`nan` cell at signed_d = −0.078 (Label A × distance) is far above the −0.5 opposite-sign halt threshold; no halt fires.
+
+#### Arm C_food_ladder — tick-100 sub-verdict `C_LADDER_TICK100_BRIDGE_PARTIAL` (descriptive)
+
+| label | observable | sign | signed_d | fires |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre100_food_events_count | + | **+1.148** | YES |
+| label_a_sensor_radius | pre100_food_energy_acquired | + | **+1.148** | YES |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick100 | − | **+1.882** | YES |
+| label_b_readiness_fraction_tick100 | pre100_food_events_count | + | **+0.342** | NO |
+| label_b_readiness_fraction_tick100 | pre100_food_energy_acquired | + | **+0.342** | NO |
+| label_b_readiness_fraction_tick100 | mean_distance_to_nearest_food_cell_tick100 | − | **+0.730** | YES |
+
+Label A clears 3/3 with magnitudes slightly weaker than tick-50 (events / energy: +1.186 → +1.148; mean_distance: +1.804 → +1.882 — distance strengthens). Label B clears 1/3 (the food-events / food-energy cells drop from +0.621 at tick-50 to +0.342 at tick-100, below the +0.5 threshold; the distance cell weakens from +0.939 to +0.730 but still fires). Per the locked sub-verdict rule (≥ 2/3 clear per label; PARTIAL = exactly one label clears), C tick-100 is **PARTIAL — descriptive only, does not gate the verdict.**
+
+### Implementation note: tick-record invariant relaxation
+
+The merged reducer (`scripts/v0_53b_reachability_disambiguation_audit.py:648-670`) uses a relaxed contiguous-prefix invariant on `capture.tick_records` (`1 ≤ len ≤ TICK_100 + 1`, all consecutive starting from tick 0) instead of the strict equality `len == TICK_100 + 1` used by v0.49–v0.53. The change is forced by `run_chamber`'s tick-loop break-on-extinction behavior: in 32 of 64 B_widened runs and a smaller fraction of C_food_ladder runs, the population goes extinct before tick-100 and the per-tick observer is not called for the remaining ticks. The strict equality would `V053bReducerError`-halt these runs and prevent v0.53b from reaching its priority-6 verdict. The relaxed invariant still enforces (a) at least one tick record per run, (b) tick-0 record always present, (c) records are a contiguous prefix from tick 0. No locked phrase, threshold, decision rule, label definition, or rollup priority is altered. Logged here for transparency; future v0.5N slices that copy the v0.53b template should use the relaxed invariant when the substrate / layout combination admits early extinction.
+
+### Population extinction rate per arm (descriptive)
+
+| arm | runs with population extinct before tick-100 | rate |
+|---|:-:|:-:|
+| A_null_V0_25 | 0 / 64 | 0% |
+| B_widened_gradient | 32 / 64 | **50%** |
+| C_food_ladder | 0 / 64 | 0% |
+
+The B_widened extinction rate strengthens the priority-6 reading: not only does no founder lineage reach food in 100 ticks, half the B_widened populations die before the snapshot tick. The combination — 0% reachability AND 50% extinction-before-tick-100 — is consistent with a substrate-layout interaction where the 9-cell traversal across a 3-wide hazard band is incompatible with the V0_25 substrate's metabolic / reproductive parameters at the 100-tick window.
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.652 | 0.652 | 0.0003 |
+| v0.43R | 0.674 | — (informational) | — |
+| v0.44 | 0.878 | 0.878 | 0.0001 |
+| v0.45 | 0.818 | 0.818 | 0.0002 |
+
+B_widened_gradient and C_food_ladder are descriptive; not gating.
+
+### What v0.53b can safely claim
+
+- ✓ **A_null_V0_25 tick-50 anchor PASSES.** Reproduces v0.48 / v0.53's six published signed_d cells within 0.0004. Reducer machinery (paired_d formula, label assignment, tick-50 / tick-100 observable extraction, two-window per-tick observer) is correct.
+- ✓ **A_null_V0_25 tick-100 sub-verdict is PRESENT.** The bridge holds on `tight_gradient` under doubled observation window (50 → 100 ticks). All 6 tick-100 cells fire with 0 wrong-sign; magnitudes shift modestly relative to tick-50 (Label A spatial cell strengthens; Label B food cells weaken slightly).
+- ✓ **B_widened reachability = 0.0** (0 / 64 runs at tick-100). v0.53's `B_WIDENED_BRIDGE_NOT_FOUND` is **itself reachability-bound**: the layout admits no measurable food access within either the 50-tick or 100-tick window on this substrate. v0.53b does **NOT** establish that the bridge fails to fire on `widened_gradient`; the bridge cannot be measured on this layout at these window lengths.
+- ✓ **C_food_ladder bridge holds at tick-100 under Label A** (3/3, +1.148 / +1.148 / +1.882) and weakens to PARTIAL under Label B (1/3 clears: events / energy drop below the +0.5 threshold; distance still fires). Descriptive — does not gate the verdict.
+- ✓ **No opposite-sign halts.** All 18 tick-100 paired_d cells across the three arms either fire expected, fall sub-threshold, or are `nan`; none falls below −0.5.
+
+### What v0.53b cannot claim
+
+- ✗ **"The bridge is universally absent on `widened_gradient`."** v0.53b's NOT_FOUND under B is reachability-bound — no agent reached food in 100 ticks. Longer windows (tick-150, tick-200) or substrate variation may admit measurement. `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_100` is the literal verdict; do NOT paraphrase to "the bridge is absent on widened_gradient".
+- ✗ **"`widened_gradient` is unreachable in any general sense."** v0.53b establishes only that fewer than 25% of B_widened runs reach food at tick-100 on the V0_25 substrate. Different metabolic rates, energy pools, or policy parameters may admit reachability. The verdict is locked to (V0_25 substrate × tick-100 window).
+- ✗ **A revised v0.53 verdict.** v0.53's `BRIDGE_PARTIALLY_GENERALIZES` stands as the historical contract for the tick-50 window. v0.53b is a follow-up disambiguation — its scope is whether v0.53's B_widened NOT_FOUND was 50-tick-window-censored (it was reachability-censored; longer window did not resolve it).
+- ✗ **Causal contribution of `sensor_radius` per layout.** v0.53b is observational. Reading-A causal-generalization slice remains the deferred candidate.
+- ✗ **Mechanism behind any layout-specific outcome.** The structural reachability story (9-cell traversal × 3-wide hazard band × V0_25 metabolic parameters → 50% extinction by tick-100) is the most parsimonious explanation but is not formally established.
+- ✗ **Generalization beyond the three tested layouts** or beyond the V0_25 substrate.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED; descendant-drift channel empirically zero under V0_25) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge (B PRESENT); C arm halt-loud | interventional (B PRESENT confirms cost dispensable; C uniform-max regime-shift halt) |
+| v0.52b | modern A_null | bridge follows between-lineage information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT; lineage-coherent inheritance verified clean) |
+| v0.53 | modern A_null | bridge fires PRESENT on `tight_gradient` and `food_ladder`, NOT_FOUND on `widened_gradient` | observational (PARTIALLY_GENERALIZES) |
+| v0.53b | modern A_null | bridge holds on `tight_gradient` at tick-100; `widened_gradient` reachability = 0.0 (below 25% threshold) at tick-100; `food_ladder` Label A still PRESENT, Label B drops to PARTIAL at tick-100 | observational (`widened_gradient` NOT_FOUND is reachability-bound; v0.53's verdict not falsified — its scope is now formally bounded to layouts admitting reachability) |
+
+The v0.46→v0.53b stack now reads: tick-50 readiness predicts dominance → founder `sensor_radius` predicts readiness → `sensor_radius` co-occurs with spatial advantage → causal contribution from `sensor_radius` survives clamp + permutation → that contribution survives shifted-top + permuted founder positions → and the founder-clamp NOT_FOUND result is preserved under lineage-wide clamping → and the metabolic-cost channel of `sensor_radius` is not necessary for the bridge → and the bridge follows the assigned effective information radius when global information economy is preserved → and the bridge fires on `food_ladder` and not on `widened_gradient` under the V0_25 substrate's 50-tick window → **and v0.53b confirms the `widened_gradient` NOT_FOUND is reachability-bound (zero food access at tick-100, 50% population extinction by tick-100), bounding v0.53's verdict scope to layouts admitting reachability rather than falsifying it.**
+
+### Next-step candidates (open; not locked)
+
+The v0.53b result confirms `widened_gradient`'s NOT_FOUND is reachability-bound — closes one disambiguation question, opens others:
+
+- **v0.53c — extended observation window OR substrate variation on `widened_gradient`.** Pre-reg either (a) tick-150 or tick-200 window on `widened_gradient` (would need increased `n_ticks` in the sim), or (b) modified V0_25 substrate (lower metabolic cost / higher starting energy / etc.) on `widened_gradient` to test whether reachability is parameter-bound or geometry-bound. Either path is observational.
+- **Reading-A causal-generalization slice (deferred).** Re-run v0.49's null + clamp_4 + permutation_5! per layout that admits the bridge: `tight_gradient` + `food_ladder` only (skipping `widened_gradient` per v0.53b's finding). ~384 runs. Tests whether v0.49's causal verdict re-fires per layout that admits measurement.
+- **v0.54 — joint ablation** (`sensor_radius_metabolic_cost = 0` AND between-lineage shuffle of `effective_sensor_radius_override`). Tests for higher-order interactions between v0.52 / v0.52b channels. Independent of layout-axis findings.
+- **Eventual fresh-stream calibration** on the v0.46–v0.53b conclusion stack — needed for any "mechanism" declaration. Longer-horizon.
+
+User has not locked which slice is next.
+
+### CI gate at v0.53b close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok (226 files already formatted)
+uv run pytest                   1728 passed, 7 skipped (was 1712; +16 v0.53b)
+uv run python scripts/core_smoke_test.py                                ok (default behavior preserved; src/ untouched)
+uv run python scripts/v0_53b_reachability_disambiguation_audit.py       WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_100
+```
