@@ -411,4 +411,168 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-*(To be appended after reducer run.)*
+**Status:** reducer executed 2026-05-09 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time well under the 18–35 minute estimate. **Tier-1 bridge re-anchor PASSES at tick-50** (A_null_V0_25 reproduces v0.48–v0.53h's six published signed_d cells within max drift 0.000389 ≪ 1e-3). **Tier-2 categorical anchor PASSES** (B_widened_V0_25 reachability = exactly 0/64 at tick-200, matching v0.53c–v0.53h's lock). Corpus re-anchor (`a_share_h8`) max drift 0.000312 on v0.42. **The reducer landed on priority 4** — C tick-400 reachability = 35/64 (~54.7%) clears the locked 25% threshold, AND C tick-400 sub-verdict = `C_WIDENED_FOOD_NEAR2_TICK400_BRIDGE_PRESENT` (all 6 cells fire PRESENT under both gating labels, 0 wrong-sign). The reachability-gated `GEOMETRY_OPPOSITE_SIGN_HALT` framework code path is exercised by test #13 with synthetic fixtures; on live data no wrong-sign cells emerged at C tick-400.
+
+### Rollup verdict — `WIDENED_BRIDGE_RESCUED_BY_FOOD_NEAR2` fires
+
+> **Locked phrase fires verbatim:** "On the modern A_null corpus with the V0_25 substrate held constant except for the combined founder-facing budget relaxation `BodyConfig(starting_energy=100.0, base_metabolic_cost=0.10)` AND the simulation horizon doubled to `n_ticks=400` AND the post-hazard food distance reduced by two columns (food band moved from `x∈[10,14]` under `widened_gradient` to `x∈[8,12]` under the script-local `widened_food_near2` layout; corridor removed; hazard band, food width, spawn position, safe band, and chamber height preserved), the v0.48 sensor_radius spatial / foraging bridge fires PRESENT under the locked +0.5 paired_d threshold at tick-400. The geometry/substrate cell that v0.53c locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200`, v0.53d locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX`, v0.53e locked as `RELAXED_OPPOSITE_SIGN_HALT`, v0.53f locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010`, v0.53g locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_COMBINED_SE100_BMC010`, and v0.53h locked as `WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TIME_HORIZON_400` admits a measurable bridge under the geometric intervention: B_widened_V0_25 reachability remains `0/64` at tick-200 (predecessor lock holds), C reachability at tick-400 clears the locked 25% threshold, and ≥ 2/3 spatial / foraging primaries fire PRESENT under both gating labels at the tick-400 panel. Reducing post-hazard food distance by two columns is sufficient to restore measurable reachability and bridge expression under the combined-budget envelope at `n_ticks=400` on the V0_25 substrate. The v0.53c–v0.53h reachability ceiling is lifted by reducing post-hazard food distance under the tested envelope; this does NOT prove `geometry solved` — only that this specific 2-column reduction is sufficient under the tested envelope: `WIDENED_BRIDGE_RESCUED_BY_FOOD_NEAR2`."
+
+**Bounded claim:** Under V0_25 × `widened_food_near2` × combined SE100/BMC010 × `n_ticks=400`, the v0.53c–v0.53h reachability ceiling is lifted by reducing post-hazard food distance under the tested envelope.
+
+Sub-verdicts:
+
+| arm | tick-50 | tick-100 | tick-200 | tick-400 (verdict-gating on C) |
+|---|---|---|---|---|
+| A_null_V0_25 | `A_NULL_V025_TICK50_BRIDGE_PRESENT` (anchor) | PRESENT | PRESENT (descriptive) | n/a |
+| B_widened_V0_25 | NOT_FOUND (informational; reachability=0) | NOT_FOUND | NOT_FOUND (Tier-2 anchor on reachability) | n/a |
+| C_widened_food_near2_combined_N400 | PARTIAL (descriptive) | PRESENT (descriptive) | PRESENT (descriptive) | **PRESENT** (drives priority-4 verdict) |
+
+### Central scientific finding — geometric intervention rescues both reachability and bridge expression
+
+The 2-column reduction of post-hazard food distance is the **lone slice in the v0.53d→v0.53i substrate-axis stack** where C reachability goes from `0/64` (v0.53d–v0.53h null) to substantially above the locked 25% threshold. Comparative trajectory:
+
+| slice | C arm intervention | C verdict-window | C living_share | C reachability | C verdict-window sub-verdict |
+|---|---|:-:|:-:|:-:|---|
+| v0.53e | `starting_energy=100` | tick-200 | ~9.4% | 0/64 | OPPOSITE_SIGN_HALT (edge) |
+| v0.53f | `base_metabolic_cost=0.10` | tick-200 | ~15.6% | 0/64 | NOT_FOUND |
+| v0.53g | combined SE100/BMC010 | tick-200 | ~87.5% | 0/64 | NOT_FOUND |
+| v0.53h | combined + `n_ticks=400` | tick-400 | 0% (extinct) | 0/64 | NOT_FOUND |
+| **v0.53i** | **combined + `n_ticks=400` + FOOD_NEAR2** | **tick-400** | **~35.9%** | **35/64 (~54.7%)** | **PRESENT** |
+
+The single 2-column geometric intervention lifts both the survival horizon (v0.53h's 0% extinct → v0.53i's ~36% alive at tick-400) AND the reachability ceiling (v0.53d–v0.53h's 0/64 → v0.53i's 35/64). All six tick-400 paired_d cells fire PRESENT under both gating labels:
+
+| label | observable | signed_d | n_runs | fires_expected |
+|---|---|:-:|:-:|:-:|
+| `label_a_sensor_radius` | `pre400_food_events_count` | **+1.036** | 64 | True |
+| `label_a_sensor_radius` | `pre400_food_energy_acquired` | **+1.036** | 64 | True |
+| `label_a_sensor_radius` | `mean_distance_to_nearest_food_cell_tick400` | **+1.062** | 64 | True |
+| `label_b_readiness_fraction_tick400` | `pre400_food_events_count` | **+5.304** | 23 | True |
+| `label_b_readiness_fraction_tick400` | `pre400_food_energy_acquired` | **+5.304** | 23 | True |
+| `label_b_readiness_fraction_tick400` | `mean_distance_to_nearest_food_cell_tick400` | **+6.295** | 23 | True |
+
+All 6 cells ≥ +0.5 (firing threshold); 0 wrong-sign cells. Bridge expression is **strongly above threshold** under both labels. Label B paired_d at tick-400 is computed on n_runs=23 (the subset of C runs where the lineage with the highest tick-400 readiness fraction survives to tick-400); Label A on the full n=64.
+
+### Reachability across all four windows on C; three on A/B
+
+| window | A_null_V0_25 | B_widened_V0_25 | C_widened_food_near2_combined_N400 | C ≥ 0.25? |
+|---|:-:|:-:|:-:|:-:|
+| tick-50 | 1.0000 | 0.0000 | **0.5313 (34/64)** | True (descriptive) |
+| tick-100 | 1.0000 | 0.0000 | **0.5469 (35/64)** | True (descriptive) |
+| tick-200 | 1.0000 | 0.0000 (Tier-2 categorical anchor) | **0.5469 (35/64)** | True (descriptive) |
+| tick-400 | n/a (out of horizon) | n/a (out of horizon) | **0.5469 (35/64)** | **True (priority-4 trigger)** |
+
+C reachability stabilises at 35/64 from tick-100 onward — the bridge fires early, not late. Under v0.53d–v0.53h's null reachability, C reached zero food contact at every window; under v0.53i's geometric intervention, C reaches food contact in 53–55% of runs across all measured windows.
+
+### Population-stability trajectory — substrate-axis stack on C
+
+| arm | tick-50 living_share | tick-100 living_share | tick-200 living_share | tick-400 living_share |
+|---|:-:|:-:|:-:|:-:|
+| A_null_V0_25 | 1.0000 | 1.0000 | 1.0000 | n/a |
+| B_widened_V0_25 | 1.0000 | 0.5000 | **0.0000** (full extinction; predecessor lock) | n/a |
+| C_widened_food_near2_combined_N400 | 1.0000 | 1.0000 | **0.9375** | **0.3594** |
+
+C maintains 100% population through tick-100, ~94% through tick-200 (slightly above v0.53g's ~87.5%), and ~36% at tick-400 (vs v0.53h's full extinction at tick-400 under the same body_config × horizon). The geometric intervention extends the survival horizon AND lifts the reachability ceiling — survival-extension and food-reachability are no longer decoupled under this geometry.
+
+### `GEOMETRY_OPPOSITE_SIGN_HALT` did not activate this slice
+
+Per the v0.53f-introduced reachability-gated priority 3 trigger (renamed `GEOMETRY_OPPOSITE_SIGN_HALT` in v0.53i), priority 3 fires iff (C tick-400 sub-verdict = `OPPOSITE_SIGN_HALT`) AND (`c_reachability_tick_400 ≥ 0.25`). The first condition did not hold (no wrong-sign cells at C tick-400 — all 6 cells fire PRESENT in the expected direction). The second condition did hold (reachability 0.547 ≥ 0.25). Priority 4 fires instead (the cells are PRESENT, not OPPOSITE_SIGN). The `wrong_sign_cells_under_reachability_below_threshold` section in `audit_summary.csv` is empty. The reachability-gating framework remains battle-tested via v0.53f only on live data; v0.53i did not exercise the framework on live data because no wrong-sign cells emerged. (The framework code path is exercised in v0.53i's test #13 with synthetic fixtures.)
+
+### Tier-1 bridge re-anchor — A_null_V0_25 tick-50 reproduces v0.48–v0.53h within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| `label_a_sensor_radius` | `pre50_food_events_count` | +1.066 | +1.066 | 0.000366 |
+| `label_a_sensor_radius` | `pre50_food_energy_acquired` | +1.066 | +1.066 | 0.000366 |
+| `label_a_sensor_radius` | `mean_distance_to_nearest_food_cell_tick50` | +1.916 | +1.916 | 0.000068 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_events_count` | +0.916 | +0.916 | 0.000119 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_energy_acquired` | +0.916 | +0.916 | 0.000119 |
+| `label_b_readiness_fraction_tick50` | `mean_distance_to_nearest_food_cell_tick50` | +1.179 | +1.179 | 0.000389 |
+
+Max drift 0.000389 (≤ 1e-3). All cells PASS.
+
+### Tier-2 categorical anchor — B_widened_V0_25 reachability_run_share at tick-200
+
+| anchor | locked value | derived | passes |
+|---|:-:|:-:|:-:|
+| `b_widened_v025_reachability_run_share_tick_200` | **0.0** (0/64) | 0.0000 (0/64) | True (categorical match) |
+
+v0.53c–v0.53h's locked `0/64` reachability anchor holds.
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.000312):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.6523 | 0.652 | 0.000312 |
+| v0.43R | 0.6743 | — (informational) | — |
+| v0.44 | 0.8781 | 0.878 | 0.000091 |
+| v0.45 | 0.8182 | 0.818 | 0.000182 |
+
+### What v0.53i can safely claim
+
+- ✓ **A_null_V0_25 tick-50 anchor PASSES** within 0.000389 of v0.48–v0.53h. Reducer machinery (paired_d formula, four-window observer, four Label B variants, script-local layout propagation through `run_chamber()`, layout-geometry CSV capture) is correct.
+- ✓ **B_widened_V0_25 categorical Tier-2 anchor PASSES exactly** (0/64 at tick-200). Predecessor lock holds.
+- ✓ **The script-local `WIDENED_FOOD_NEAR2_LAYOUT` propagates correctly** through the chamber driver. C arm world width = 13, food_x_min = 8, food_x_max = 12, hazard band preserved at [5,7], spawn preserved at 1, safe band preserved at [0,4], height preserved at 6. Cross-arm contrast in test #5 verified end-to-end.
+- ✓ **The 2-column geometric intervention restores reachability above the locked 25% threshold.** C tick-400 reachability = 35/64 (~54.7%). At every measured window (tick-50 through tick-400), C reachability is in the range 0.531–0.547, well above 0.25.
+- ✓ **The v0.48 sensor_radius spatial / foraging bridge fires PRESENT** under both gating labels at the C tick-400 panel. All 6 cells fire ≥ +0.5; 0 wrong-sign cells. Label B signed_d values are particularly large (+5.304 / +5.304 / +6.295) reflecting strong concentration of food contact in the highest tick-400 readiness lineages.
+- ✓ **Reducing post-hazard food distance by two columns is sufficient to restore measurable reachability and bridge expression under the combined-budget envelope at `n_ticks=400` on the V0_25 substrate.**
+- ✓ **The v0.53c–v0.53h reachability ceiling is lifted by reducing post-hazard food distance under the tested envelope** — the lone slice in the v0.53d→v0.53i stack to lift the ceiling.
+- ✓ **The reachability-gated priority-3 framework continues to behave correctly** (no wrong-sign cells emerged on live data; the synthetic test fixture in test #13 still passes; halt name renamed `GEOMETRY_OPPOSITE_SIGN_HALT` reflects the geometric-intervention class).
+
+### What v0.53i cannot claim
+
+- ✗ **"Geometry solved"** under priority 4. v0.53i tested ONE geometric intervention (2-column food-near) under one combined-knob envelope at one horizon. Whether smaller (1-column) or larger (4-column) reductions, alternative geometric perturbations (corridor variation, hazard thickness, spawn shift), or non-V0_25 substrates would behave similarly is empirically untested.
+- ✗ **"Distance to food is the binding constraint."** The bounded claim is that this 2-column reduction is sufficient under the tested envelope — not that distance is the sole or even the principal explanation. v0.53i does NOT test smaller reductions (e.g., 1-column, food_x∈[9,13]) which could dose-respond and inform the role of distance more precisely.
+- ✗ **"Policy / hazard-avoidance is ruled out."** The intervention removed the post-hazard corridor; whether founders successfully traverse the hazard band itself (still 3 columns thick, hazard_x∈[5,7]) under v0.53i remains an open empirical question — the geometric change reduced cells founders need to traverse east of the hazard band, but the hazard band itself is unchanged. v0.53j+ probes can disambiguate hazard-band traversal mechanics from food-distance specifically.
+- ✗ **A revised v0.53–v0.53h verdict.** All eight predecessor verdicts stand as historical contracts.
+- ✗ **Mechanism behind the rescue.** Population dynamics and per-tick reachability trajectory under V0_25 × `widened_food_near2` × combined-budget × `n_ticks=400` are descriptively logged; no mechanism is formally established. Plausible interpretations (not formally established): the 2-column reduction shrinks the per-traverse hazard exposure window; sensor reach now overlaps the food band from spawn AFTER hazard traversal at sensor_radius ≥ ~7; the 2 corridor columns of B were stochastic-loss territory under the policy.
+- ✗ **Generalization beyond the tested arms.** Verdict scope is bounded to (`tight_gradient` × V0_25 at `n_ticks=200`, `widened_gradient` × V0_25 at `n_ticks=200`, `widened_food_near2` × V0_25 with `BodyConfig(se100, bmc010)` at `n_ticks=400`).
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge | interventional (B PRESENT) |
+| v0.52b | modern A_null | bridge follows information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT) |
+| v0.53 | modern A_null | bridge fires PRESENT on `tight_gradient` and `food_ladder`, NOT_FOUND on `widened_gradient` | observational (PARTIALLY_GENERALIZES) |
+| v0.53b | modern A_null | `widened_gradient` NOT_FOUND at tick-100 is reachability-bound | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_100) |
+| v0.53c | modern A_null | `widened_gradient` reachability = 0/64 at every window 50/100/200 under V0_25 | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_200) |
+| v0.53d | modern A_null | doubling `ambient_influx_rate` is mechanically inert | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX) |
+| v0.53e | modern A_null | `BodyConfig.starting_energy=100` extends survival ~9% but does NOT lift reachability | observational (RELAXED_OPPOSITE_SIGN_HALT) |
+| v0.53f | modern A_null | `BodyConfig.base_metabolic_cost=0.10` extends survival ~16% but does NOT lift reachability | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_BASE_METABOLIC_COST_010) |
+| v0.53g | modern A_null | combined SE100/BMC010 extends survival ~87.5% at tick-200 but does NOT lift reachability; survival-extension and food-reachability decoupled | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_COMBINED_SE100_BMC010; central finding) |
+| v0.53h | modern A_null | doubling `n_ticks` to 400 under combined envelope does NOT lift reachability AND C goes fully extinct by tick-400; survival horizon also has a ceiling | observational (BELOW_REACHABILITY_THRESHOLD_AT_TIME_HORIZON_400; central finding) |
+| v0.53i | modern A_null | reducing post-hazard food distance by 2 columns under combined envelope at `n_ticks=400` lifts reachability to 35/64 AND fires PRESENT under both gating labels at C tick-400 | observational (BRIDGE_RESCUED_BY_FOOD_NEAR2; the v0.53c–v0.53h reachability ceiling is lifted) |
+
+The v0.46→v0.53i stack now reads: ... → v0.53d–v0.53h's null reachability across budget AND horizon doublings (all priority 5) → **v0.53i's geometric intervention lifts the ceiling: reducing post-hazard food distance by 2 columns under the same combined-budget × `n_ticks=400` envelope rescues both reachability (0/64 → 35/64) and bridge expression (NOT_FOUND → PRESENT under both labels) at C tick-400.**
+
+### Next-step candidates (open)
+
+The geometric intervention's success opens a new design space:
+
+- **v0.53j candidate — dose-response within food-near axis.** Test `food_x∈[9,13]` (1-column near; corridor reduced from 2 to 1) and `food_x∈[7,11]` (3-column near; food band overlapping hazard?) to map the dose curve. The 2-column reduction is sufficient; whether smaller reductions also rescue reachability is an open question (Reading-A causal-generalization on the geometric axis).
+- **v0.53k candidate — disambiguate distance vs hazard-band traversal.** Hold food-near at 2 columns but vary hazard-band thickness. Tests whether the rescue is specifically about food being closer or about reduced-distance-east-of-hazard.
+- **v0.53l candidate — Reading-A causal-generalization slice on `widened_food_near2`.** With reachability now rescued on C, the v0.49–v0.52b causal-generalization framework can be re-anchored on this layout under the combined-budget × `n_ticks=400` envelope.
+- **v0.53m candidate — substrate cross-corpus calibration on `widened_food_near2`.** Test whether the v0.42–v0.45 corpus signed_d values reproduce on the new layout, anchoring whether the rescue is specific to V0_25 × widened_food_near2 or generalizes to non-V0_25 substrates.
+- **v0.53n candidate — alternative spawn position.** Move spawn closer to the hazard (e.g., `spawn_x=3`) on `widened_gradient` (NOT food-near2) to test whether perceptual reach alone, holding distance constant, suffices.
+- **v0.54 — joint ablation** (zero-cost AND shuffle).
+- **Eventual fresh-stream calibration** on the v0.46–v0.53i conclusion stack.
+
+User has not locked which slice is next.
+
+### CI gate at v0.53i close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok (240 files already formatted)
+uv run pytest                   1840 passed, 7 skipped (was 1824; +16 v0.53i)
+uv run python scripts/core_smoke_test.py                                ok (determinism north star intact; no src/ changes)
+uv run python scripts/v0_53i_geometry_food_near2_audit.py               WIDENED_BRIDGE_RESCUED_BY_FOOD_NEAR2 (priority 4; geometry-gating did not activate — no wrong-sign cells)
+```
