@@ -378,4 +378,172 @@ No other `src/` modifications. No prior reducer / audit / test / pre-reg files m
 
 ## Results
 
-(To be appended after the reducer run.)
+**Status:** reducer executed 2026-05-09 against the 192-run corpus (3 arms × 64 (version, seed, hazard) tuples). Wall time ~10 minutes. **Tier-1 bridge re-anchor PASSES at tick-50** (A_null_V0_25 reproduces v0.48 / v0.53 / v0.53b / v0.53c / v0.53d's six published signed_d cells within max drift 0.0004 ≪ 1e-3). **Tier-2 categorical anchor PASSES** (B_widened_V0_25 reachability = exactly 0/64 at tick-200, matching v0.53c / v0.53d's lock). Corpus re-anchor (`a_share_h8`) max drift 0.0003 on v0.42. **The reducer halted loud via `V053eReducerError` at priority 3** — the locked sign discipline fired on a measurement-edge wrong-sign cell; see "Locked verdict" + "Interpretive context" below.
+
+### Locked verdict — `RELAXED_OPPOSITE_SIGN_HALT` (priority 3) fires
+
+> **Locked phrase fires verbatim:** "Halt: a v0.53e C_widened_starting_energy_100 tick-200 spatial / foraging primary fires in the WRONG direction under a gating label; raising `BodyConfig.starting_energy` from V0_25 baseline `60.0` to the maximal legal `100.0` on the `widened_gradient` layout surfaces a regime incompatible with the locked expected signs."
+
+**Headline interpretation:** `starting_energy=100` extends survival on `widened_gradient`, but does not restore food reachability.
+
+Sub-verdicts:
+
+| arm | tick-50 (anchor) | tick-100 (descriptive) | tick-200 (verdict-gating) |
+|---|---|---|---|
+| A_null_V0_25 | `A_NULL_V025_TICK50_BRIDGE_PRESENT` | PRESENT | `A_NULL_V025_TICK200_BRIDGE_PRESENT` (descriptive) |
+| B_widened_V0_25 | n/a (categorical anchor at 0/64) | n/a | `B_WIDENED_V025_TICK200_BRIDGE_NOT_FOUND` (informational; reachability anchor holds) |
+| C_widened_starting_energy_100 | n/a | n/a | `C_STARTING_ENERGY_100_TICK200_OPPOSITE_SIGN_HALT` (drives priority-3 halt) |
+
+### Halt mechanics
+
+The wrong-sign cell is C's tick-200 Label B `mean_distance_to_nearest_food_cell` primary:
+
+- `paired_d = +1.227` at `n = 6` (only 6 of 64 C runs had a living Label B winner at tick-200).
+- Expected sign for the distance primary is `−` (winner closer to food); `signed_d = paired_d × −1 = −1.227`.
+- `signed_d ≤ −0.5` → priority-3 OPPOSITE_SIGN_HALT fires.
+- All other tick-200 cells across all three arms either fire expected, fall sub-threshold, are degenerate, or are NaN.
+
+At tick-200, only 6/64 C runs still had a living Label B winner. C reachability remained 0/64. The wrong-sign distance cell likely reflects survival/readiness decoupling from food approach under no-food-contact conditions.
+
+### Interpretive context (descriptive, separate from the locked verdict)
+
+Because C reachability is 0/64, the wrong-sign distance signal does not measure a recovered foraging bridge. It appears at the edge of the framework where tick-200 readiness winners are selected among a tiny surviving subset without food contact. Plausible mechanism (not formally established): under no-food-contact extinction, the lineages still registering reproductive readiness at tick-200 are those that DID NOT burn energy traversing toward food; the "readiness winner" is by selection an energy-conserving non-traveler, who is by definition farther from food than non-winners that did attempt traversal. This produces a positive paired_d on the distance primary (winner farther than non-winners), which under the expected-sign-negative convention reads as wrong-sign.
+
+The locked verdict is `RELAXED_OPPOSITE_SIGN_HALT`. The interpretive context is offered as descriptive framing; it does not modify, soften, or retrofit the verdict.
+
+### Notable secondary finding: `starting_energy=100` extends survival on `widened_gradient`, but does not restore food reachability
+
+The body_config seam took effect — B and C are NOT byte-identical (unlike v0.53d's ambient_influx_rate result). Population-stability diverges starkly:
+
+| arm | tick-50 living_share | tick-100 living_share | tick-200 living_share |
+|---|:-:|:-:|:-:|
+| A_null_V0_25 | 1.0000 | 1.0000 | 1.0000 |
+| B_widened_V0_25 | 1.0000 | 0.5000 | **0.0000** (full extinction) |
+| C_widened_starting_energy_100 | 1.0000 | **1.0000** | **0.0938** (6/64 runs alive) |
+
+The maximal one-knob `starting_energy=100` boost approximately doubled the survival horizon: B reaches 50% extinction by tick-100 and 100% extinction by tick-200; C remains 100% alive at tick-100 and is still 9.4% alive at tick-200. **But not a single C founder lineage produced an `AteFood` event at any tick.** Reachability stayed at exactly `0/64` at every window 50/100/200.
+
+This separates v0.53e from v0.53d:
+
+- **v0.53d:** ambient influx was mechanically inert (B and C byte-identical across all windows; the knob's effect path was inactive under no-food-contact extinction).
+- **v0.53e:** starting energy was behaviorally active, extended survival (~2× horizon on widened_gradient), but still produced 0/64 food reachability.
+
+The seam is functioning correctly; the substrate axis is responsive. The bottleneck on `widened_gradient` × V0_25 is not founder starting-energy budget at the maximal legal one-knob value — extra energy buys time but does not buy traversal.
+
+### Reachability across all three windows (descriptive)
+
+| window | A_null_V0_25 | B_widened_V0_25 | C_widened_starting_energy_100 | C ≥ 0.25? |
+|---|:-:|:-:|:-:|:-:|
+| tick-50 | 1.0000 | 0.0000 | 0.0000 | False (descriptive) |
+| tick-100 | 1.0000 | 0.0000 | 0.0000 | False (descriptive) |
+| tick-200 | 1.0000 | 0.0000 (Tier-2 categorical anchor) | **0.0000** | False |
+
+C reachability is uniformly zero across all windows — descriptively this is the priority-5 outcome (`WIDENED_BELOW_REACHABILITY_THRESHOLD_UNDER_STARTING_ENERGY_100`), but priority 3 takes precedence per the locked priority cascade. The wrong-sign signal at the n=6 tick-200 distance cell trips the OPPOSITE_SIGN halt before priority 5 is consulted.
+
+### Tier-1 bridge re-anchor — A_null_V0_25 tick-50 reproduces v0.48 / v0.53 / v0.53b / v0.53c / v0.53d within 1e-3
+
+| label | observable | published | derived | drift |
+|---|---|:-:|:-:|:-:|
+| `label_a_sensor_radius` | `pre50_food_events_count` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `pre50_food_energy_acquired` | +1.066 | +1.066 | 0.0004 |
+| `label_a_sensor_radius` | `mean_distance_to_nearest_food_cell_tick50` | +1.916 | +1.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_events_count` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `pre50_food_energy_acquired` | +0.916 | +0.916 | 0.0001 |
+| `label_b_readiness_fraction_tick50` | `mean_distance_to_nearest_food_cell_tick50` | +1.179 | +1.179 | 0.0004 |
+
+Max drift 0.0004 (≤ 1e-3). All cells PASS.
+
+### Tier-2 categorical anchor — B_widened_V0_25 reachability_run_share at tick-200
+
+| anchor | locked value | derived | passes |
+|---|:-:|:-:|:-:|
+| `b_widened_v025_reachability_run_share_tick_200` | **0.0** (0/64) | 0.0000 (0/64) | True (categorical match) |
+
+v0.53c / v0.53d's locked `0/64` reachability anchor holds.
+
+### Corpus re-anchor
+
+A_null_V0_25 arm — all PASS (max drift 0.0003):
+
+| version | derived `a_share_h8` | published | drift |
+|---|:-:|:-:|:-:|
+| v0.42 | 0.6517 | 0.652 | 0.0003 |
+| v0.43R | 0.6739 | — (informational) | — |
+| v0.44 | 0.8779 | 0.878 | 0.0001 |
+| v0.45 | 0.8178 | 0.818 | 0.0002 |
+
+### Methodological lesson for v0.53f (forward-looking design improvement, NOT a retroactive correction to v0.53e)
+
+v0.53e's priority-3 halt fired on a wrong-sign cell at `n=6` with `c_reachability_tick_200 = 0.0`. Mechanically the pre-reg's locked sign discipline performed exactly as designed; interpretively the signal lives at the edge of the bridge measurement framework's validity, where the tick-200 readiness-winner selection is decoupled from food approach due to no food contact at any tick.
+
+**Future widened-gradient rescue slices should reachability-gate opposite-sign halts, or at minimum classify wrong-sign signals under reachability=0 separately from wrong-sign signals under measurable food access.** This is a future design improvement to be incorporated into the v0.53f pre-reg, NOT a retroactive correction to v0.53e. v0.53e's locked priority cascade and locked phrases stand as the historical contract per CLAUDE.md.
+
+Concretely, v0.53f's pre-reg should consider one or more of:
+
+1. **Reachability-gated priority 3**: priority-3 OPPOSITE_SIGN_HALT trigger requires `c_reachability_tick_200 ≥ 0.25` (i.e., the bridge framework is meaningful) OR the halt downgrades to a sub-verdict descriptive-flag.
+2. **Minimum-`n` floor on opposite-sign**: priority-3 trigger requires the wrong-sign cell's `n` ≥ some-pre-committed-floor (e.g., `n ≥ 16`) to avoid edge-case fires on tiny surviving subsets.
+3. **Separate wrong-sign-under-reachability-zero classification**: a new sub-verdict labeled e.g., `OPPOSITE_SIGN_AT_REACHABILITY_ZERO` surfaces the signal as descriptive context without firing a halt.
+
+The choice between (1) / (2) / (3) (or a combination) is a design decision for the v0.53f pre-reg.
+
+### What v0.53e can safely claim
+
+- ✓ **A_null_V0_25 tick-50 anchor PASSES** within 0.0004 of v0.48 / v0.53 / v0.53b / v0.53c / v0.53d. Reducer machinery (paired_d formula, three-window observer, three Label B variants, label assignment, layout assertions, BodyConfig override path via the new chamber seam) is correct.
+- ✓ **B_widened_V0_25 categorical Tier-2 anchor PASSES exactly** (0/64 at tick-200). v0.53c / v0.53d's predecessor lock holds byte-equivalently.
+- ✓ **The chamber-driver `body_config` seam is additive and default-preserving.** All five CI gate checks pass: ruff, format, pytest (1776 passed; 1760 baseline + 16 v0.53e), smoke (determinism north star), reducer end-to-end. SHA-256 of `fear_hunger_chamber.py` is locked at `62d134c5d82b031a6fd2b7bbdf0412eb8362199c7bf60a59836cfca9134e2b6d` going forward.
+- ✓ **`BodyConfig.starting_energy = 100` extends survival on `widened_gradient` × V0_25** (full-extinction tick shifts from tick-200 to past tick-200 on ~9% of populations). Confirmed via population-stability divergence between B and C across all three windows.
+- ✓ **`BodyConfig.starting_energy = 100` does NOT restore food reachability on `widened_gradient` × V0_25 × N_TICKS=200.** C reachability_run_share remains exactly `0.0000` at every window. No founder lineage in any of the 64 C runs produces a single `AteFood` event.
+- ✓ **The (V0_25 × `widened_gradient`) reachability ceiling at the maximal one-knob `starting_energy=100` value is bounded by something other than founder starting-energy budget.** Whether the bottleneck is per-tick metabolic rate (v0.53f candidate along `base_metabolic_cost`), policy / hazard-avoidance dynamics, or geometry calibration, is not established by v0.53e.
+- ✓ **The reducer halted loud via `V053eReducerError` at priority 3.** Halt-loud discipline performed exactly as designed; the verdict is `RELAXED_OPPOSITE_SIGN_HALT`.
+
+### What v0.53e cannot claim
+
+- ✗ **"`widened_gradient` is geometry-fundamental."** v0.53e tests V0_25 substrate × `BodyConfig.starting_energy=100.0` × N_TICKS=200 only. Different metabolic / multi-knob co-variation parameters may admit reachability. v0.53f along `base_metabolic_cost` lowered remains the natural follow-up.
+- ✗ **"`starting_energy` is useless on `widened_gradient`."** The knob has demonstrated effects (extended survival ~2× horizon on the widened layout). v0.53e's finding is regime-specific: under V0_25 metabolic schedule × widened geometry × N_TICKS=200, the maximum legal one-knob starting-energy boost extends survival but does not lift reachability.
+- ✗ **"The bridge regime is mechanistically broken under `starting_energy=100`."** The priority-3 halt fired on a wrong-sign signal at n=6 with reachability=0. The signal is consistent with "no food contact → readiness winner decoupled from food proximity" (interpretive context above), not with a mechanistic breakdown of the bridge regime. Cautious framing per CLAUDE.md.
+- ✗ **A revised v0.53 / v0.53b / v0.53c / v0.53d verdict.** All four stand as historical contracts. v0.53e is the founder-starting-energy-axis probe; its scope is v0.53d's deferred follow-up question along a different (founder-facing) knob.
+- ✗ **Mechanism for the survival extension or for the wrong-sign distance signal.** Population dynamics under V0_25 × `widened_gradient` × `starting_energy=100` are descriptively logged; no mechanism is formally established.
+- ✗ **Generalization beyond the tested arms.** Verdict scope is bounded to (`tight_gradient` × V0_25, `widened_gradient` × V0_25, `widened_gradient` × V0_25 with `starting_energy=100`) at `N_TICKS=200`.
+
+### Cross-corpus context
+
+| slice | corpus | claim | strength |
+|---|---|---|---|
+| v0.46 | modern A_null | tick-50 readiness predicts dominance | observational (PRESENT) |
+| v0.47 | modern A_null | founder `sensor_radius` predicts tick-50 readiness | observational (PARTIAL) |
+| v0.48 | modern A_null | `sensor_radius` ↔ spatial bridge | observational (PRESENT under both labels) |
+| v0.49 | modern A_null | founder `sensor_radius` causal contribution | interventional (SUPPORTED) |
+| v0.50 | modern A_null | v0.49's contribution survives position controls | interventional (ROBUST) |
+| v0.51 | modern A_null | founder-clamp NOT_FOUND result preserved under lineage-wide clamp | interventional (REPRODUCED) |
+| v0.52 | modern A_null | metabolic-cost channel not necessary for bridge | interventional (B PRESENT) |
+| v0.52b | modern A_null | bridge follows information-radius assignment under preserved global ecology | interventional (FOLLOWS_ASSIGNMENT) |
+| v0.53 | modern A_null | bridge fires PRESENT on `tight_gradient` and `food_ladder`, NOT_FOUND on `widened_gradient` | observational (PARTIALLY_GENERALIZES) |
+| v0.53b | modern A_null | `widened_gradient` NOT_FOUND at tick-100 is reachability-bound | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_100) |
+| v0.53c | modern A_null | `widened_gradient` reachability = 0/64 at every window 50/100/200 under V0_25 | observational (BELOW_REACHABILITY_THRESHOLD_AT_TICK_200) |
+| v0.53d | modern A_null | doubling `ambient_influx_rate` is mechanically inert under no-food-contact extinction | observational (BELOW_REACHABILITY_THRESHOLD_UNDER_RELAXED_INFLUX) |
+| v0.53e | modern A_null | `BodyConfig.starting_energy=100` extends survival on `widened_gradient` (~2× horizon, 9% of C runs alive at tick-200 vs B's 0%) but does NOT lift reachability (0/64 at every window); priority-3 OPPOSITE_SIGN halt fires on a measurement-edge wrong-sign cell at n=6 with reachability=0 | observational (RELAXED_OPPOSITE_SIGN_HALT — locked-sign discipline fired; methodological lesson logged for v0.53f) |
+
+The v0.46→v0.53e stack now reads: ... → v0.53d says doubling `ambient_influx_rate` is mechanically inert under no-food-contact extinction → **v0.53e says raising `BodyConfig.starting_energy` to the maximal one-knob value extends survival on `widened_gradient` but does not restore reachability; the substrate axis is responsive (B and C diverge from tick-100 onward) but the bottleneck is not founder starting-energy budget at the `max_energy` bound. The locked sign discipline fired a priority-3 halt on a measurement-edge wrong-sign cell; v0.53f along `base_metabolic_cost` lowered (per-tick depletion rate) remains the natural follow-up, and should incorporate reachability-gating on the OPPOSITE_SIGN trigger as a methodological improvement.**
+
+### Next-step candidates (open; not locked)
+
+The v0.53e verdict closes the founder-starting-energy axis along the maximal one-knob `starting_energy=100` value. The notable secondary finding (extended survival without reachability) and the methodological lesson (reachability-gating future opposite-sign halts) inform v0.53f's design.
+
+- **v0.53f — substrate-axis disambiguation along `base_metabolic_cost = 0.10` (60% reduction from V0_25 baseline 0.25).** Per-tick depletion rate is the orthogonal founder-facing budget axis to `starting_energy`. Lowering `base_metabolic_cost` slows energy depletion per tick — a stronger lever than the one-time starting boost. Pre-reg should incorporate reachability-gating on priority-3 OPPOSITE_SIGN_HALT (per the methodological lesson above). No `src/` change required (the v0.53e seam supports `BodyConfig` overrides).
+- **v0.53g (or later) — multi-knob founder-budget co-variation.** Triggered if v0.53f also fails to lift reachability. Could test `starting_energy=100` AND `base_metabolic_cost=0.10` together; or `starting_energy + max_energy` co-raised to e.g., `120`.
+- **v0.53h (or later) — investigate the C_food_ladder Label B degradation trajectory.** Why does Label B's bridge weaken from tick-50 to tick-200 specifically on `food_ladder` while Label A holds? Per-tick-window paired_d trajectory probe. Independent of v0.53e outcome.
+- **v0.53i (or later) — Reading-A causal-generalization slice on layouts admitting the bridge.** Re-run v0.49's null + clamp_4 + permutation_5! per layout that admits measurement.
+- **v0.54 — joint ablation** (zero-cost AND shuffle). Channel-interaction question. Independent of layout × substrate-axis findings.
+- **Eventual fresh-stream calibration** on the v0.46–v0.53e conclusion stack — needed for any "mechanism" declaration. Longer-horizon.
+
+User has not locked which slice is next.
+
+### CI gate at v0.53e close
+
+```
+uv run ruff check .             ok
+uv run ruff format --check .    ok (232 files already formatted)
+uv run pytest                   1776 passed, 7 skipped (was 1760; +16 v0.53e)
+uv run python scripts/core_smoke_test.py                                ok (determinism north star intact; chamber-driver seam is default-preserving)
+uv run python scripts/v0_53e_substrate_axis_starting_energy_audit.py    RELAXED_OPPOSITE_SIGN_HALT (priority 3; raises V053eReducerError after writing artifacts)
+```
