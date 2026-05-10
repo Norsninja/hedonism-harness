@@ -297,11 +297,11 @@ The reducer is fully self-contained. Wall time estimate ~25–50 minutes.
    - C body_config asserts: `body.energy == 100.0`, `body_config.starting_energy == 100.0`, `body_config.base_metabolic_cost == 0.10`, **`body_config.effective_sensor_radius_override == 8`** (NEW perception assert).
    - C all OTHER BodyConfig fields at default (max_energy=100.0, starting_health=100.0, max_health=100.0, sensor_radius_metabolic_cost=0.05; effective_sensor_radius_override is the ONLY new non-default field vs v0.53j).
    - C layout asserts (FOOD_NEAR1: world_width=14, food_x_min=9, food_x_max=13, hazard_x_min=5, hazard_x_max=7, safe_x_min=0, safe_x_max=4, spawn_x=1, height=6).
-   - C model end-state: `_RunCapture.final_tick_count == 400`.
+   - C model end-state: `_RunCapture.final_tick_count <= 400` (the arm is configured with `n_ticks=400`, but observed `final_tick_count` may be lower if the population goes extinct before tick 400; carries forward v0.53j's precedent).
 6. **`test_arm_d_widened_food_near2_combined_N400_uses_food_near2_layout_combined_body_config_no_sensor_override_and_n_ticks_400_with_explicit_geometry_and_perception_asserts`**:
    - D body_config asserts: `body.energy == 100.0`, `body_config.starting_energy == 100.0`, `body_config.base_metabolic_cost == 0.10`, **`body_config.effective_sensor_radius_override is None`** (NEW perception negative assert — D has NO override; matches v0.53i/j default).
    - D layout asserts (FOOD_NEAR2: world_width=13, food_x_min=8, food_x_max=12).
-   - D model end-state: `_RunCapture.final_tick_count == 400`.
+   - D model end-state: `_RunCapture.final_tick_count <= 400` (the arm is configured with `n_ticks=400`, but observed `final_tick_count` may be lower if the population goes extinct before tick 400; carries forward v0.53j's precedent).
 7. **`test_cross_arm_perception_contrast_c_has_override_8_d_has_no_override_layouts_differ_by_food_x_min`** *(new in v0.53k — verifies perception axis as the unique C/D differentiator beyond layout)*:
    - `C.body_config.effective_sensor_radius_override == 8` AND `D.body_config.effective_sensor_radius_override is None`.
    - `C.body_starting_energy == D.body_starting_energy == 100.0`; `C.body_base_metabolic_cost == D.body_base_metabolic_cost == 0.10`; `C.n_ticks == D.n_ticks == 400`.
@@ -325,7 +325,7 @@ The reducer is fully self-contained. Wall time estimate ~25–50 minutes.
     - Priority 3: `"AND C reachability at tick-400 clears the locked 25% threshold"` AND `"The reachability-gated trigger preserves v0.53e's locked sign discipline"` AND `"perception-only intervention (\`BodyConfig.effective_sensor_radius_override = 8\`)"`.
     - Priority 4: `"the perception-only override \`BodyConfig.effective_sensor_radius_override = 8\`"` AND `"the minimum east-ray reach from \`spawn_x=1\` to FOOD_NEAR1's \`food_x_min=9\`"` AND `"metabolic cost UNAFFECTED per the override's information-channel-only contract"` AND `"The v0.53j FOOD_NEAR1/FOOD_NEAR2 boundary is **consistent with sensor-reach being a binding constraint** under the tested envelope"` AND `"This is strong evidence but NOT exclusive causality"` AND substring references to v0.53c, v0.53d, v0.53e, v0.53f, v0.53g, v0.53h, v0.53i, v0.53j verdict names.
     - Priority 5: `"the perception-only override \`BodyConfig.effective_sensor_radius_override = 8\`"` AND `"D_widened_food_near2_combined_N400 reproduces v0.53i's \`35/64\` positive anchor at tick-400 in-slice"` AND `"The v0.53j FOOD_NEAR1/FOOD_NEAR2 boundary is **NOT explained by sensor-reach alone** under the tested envelope"` AND `"v0.53l (or later) candidates shift toward policy / hazard-avoidance / movement-mechanics probes"` AND substring references to v0.53c–v0.53j verdict names.
-    - Priority 6: `"D_widened_food_near2_combined_N400 reproduces v0.53i's \`35/64\` positive anchor at tick-400 in-slice"` AND substring references to v0.53c–v0.53j verdict names.
+    - Priority 6: `"D_widened_food_near2_combined_N400 reproduces v0.53i's \`35/64\` positive anchor at tick-400 in-slice"`. (Priority 6 is a tighter mixed-signal phrase by design and does not carry the full predecessor stack recap; only v0.53i is referenced verbatim per the locked phrase. Priorities 4 and 5 carry the full v0.53c–v0.53j stack.)
     Synthesize halt cascade (priorities 1 / 2.a / 2.b / 2.c / 2.d / 2.e / 2.f / 3); assert priority order. Exhaustively iterate the partition; assert unique outcome per cell.
 
 ## Watch-outs (for future-Chronus)
