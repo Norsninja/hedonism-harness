@@ -352,11 +352,17 @@ class HHModel(mesa.Model):
         lineage_id = self._next_lineage_id
         self._next_lineage_id += 1
 
-        traits = (
-            spec.traits_override
-            if spec.traits_override is not None
-            else random_traits(self.trait_config, self.streams.mutation)
-        )
+        # v0.53l always-consume invariant: every founder consumes exactly one
+        # `random_traits` draw from the mutation stream regardless of whether
+        # `spec.traits_override` is set. Without this invariant, per-founder
+        # override would shift the downstream mutation-stream state (founders
+        # past the override would receive different sampled traits, and the
+        # post-construction simulation RNG would diverge), confounding any
+        # per-lineage trait intervention. The sampled value is discarded when
+        # an override is provided. Default no-override paths remain
+        # byte-identical to v0.1..v0.53k.
+        sampled_traits = random_traits(self.trait_config, self.streams.mutation)
+        traits = spec.traits_override if spec.traits_override is not None else sampled_traits
         body = make_body(
             body_id=self._next_body_id,
             lineage_id=lineage_id,
