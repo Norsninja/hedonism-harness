@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from hedonism_harness.core.config import BodyConfig
+from tests import sha_pins
 
 _SCRIPT_PATH = (
     Path(__file__).parent.parent / "scripts" / "v0_53e_substrate_axis_starting_energy_audit.py"
@@ -413,9 +414,12 @@ V052B_TIP_SHA256: dict[str, str] = {
 # body_config seam. Future slices that re-touch this file MUST update Part B's
 # pinned hash AND its locked failure message together.
 V053E_CHAMBER_DRIVER_PATH: str = "src/hedonism_harness/experiments/fear_hunger_chamber.py"
-V053E_CHAMBER_DRIVER_SHA256: str = (
-    "62d134c5d82b031a6fd2b7bbdf0412eb8362199c7bf60a59836cfca9134e2b6d"
-)
+# v0.53l: chamber-driver SHA pin migrated to shared tests/sha_pins.py module
+# (chamber driver gained per_founder_traits_overrides parameter and model.py
+# adopted always-consume founder-construction invariant). Bookkeeping only —
+# v0.53e's verdict / anchor / locked phrases are not changed. See
+# docs/experiments/fear_hunger_v0.53l.md "Test #8 maintenance policy".
+V053E_CHAMBER_DRIVER_SHA256: str = sha_pins.CHAMBER_DRIVER_SHA
 
 
 def test_no_src_modifications_to_science_core_compared_to_v0_52b_tip_AND_chamber_driver_re_pinned():  # noqa: N802

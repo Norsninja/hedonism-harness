@@ -22,6 +22,7 @@ import pytest
 
 from hedonism_harness.core.config import BodyConfig
 from hedonism_harness.experiments.fear_hunger_chamber import ChamberLayout
+from tests import sha_pins
 
 _SCRIPT_PATH = (
     Path(__file__).parent.parent / "scripts" / "v0_53j_food_distance_dose_response_audit.py"
@@ -491,9 +492,9 @@ V052B_TIP_SHA256: dict[str, str] = {
 }
 
 V053E_CHAMBER_DRIVER_PATH: str = "src/hedonism_harness/experiments/fear_hunger_chamber.py"
-V053E_CHAMBER_DRIVER_SHA256: str = (
-    "62d134c5d82b031a6fd2b7bbdf0412eb8362199c7bf60a59836cfca9134e2b6d"
-)
+# v0.53l: chamber-driver SHA pin migrated to shared tests/sha_pins.py module.
+# Bookkeeping only — v0.53j's verdict / anchor / locked phrases are not changed.
+V053E_CHAMBER_DRIVER_SHA256: str = sha_pins.CHAMBER_DRIVER_SHA
 
 
 def test_no_src_modifications_compared_to_v0_53e_tip():

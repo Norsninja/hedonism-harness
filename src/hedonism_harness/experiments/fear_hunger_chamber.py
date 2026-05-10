@@ -57,7 +57,7 @@ from hedonism_harness.policies.gradient_policy import GradientPolicy
 from hedonism_harness.policies.hedonism_policy import HedonismPolicy
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Callable, Sequence
 
     from hedonism_harness.core.traits import Traits
     from hedonism_harness.policies.base import Policy
@@ -295,6 +295,7 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     policy_factory: Callable[[], Policy] = default_policy_factory,
     write_outputs: bool = True,
     traits_override: Traits | None = None,
+    per_founder_traits_overrides: Sequence[Traits | None] | None = None,
     condition: str | None = None,
     trait_config: TraitConfig | None = None,
     reproduction_config: ReproductionConfig | None = None,
@@ -317,6 +318,19 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
     ``Traits`` instance (the v0.2 positive-control seam). When ``None`` the
     v0.1 behavior holds: each founder samples from the configured
     ``TraitConfig``.
+
+    ``per_founder_traits_overrides``: when provided, must have length
+    ``n_founders``; founder ``i`` receives ``per_founder_traits_overrides[i]``
+    as its ``traits_override`` (with ``None`` entries falling back to
+    ``random_traits`` sampling). Mutually exclusive with the global
+    ``traits_override`` parameter — passing both non-``None`` raises
+    ``ValueError``. The v0.53l per-lineage perception-heterogeneity seam.
+    Default ``None`` preserves byte-identity for v0.1..v0.53k callers.
+    The companion always-consume invariant in ``model.py:_spawn_founder``
+    ensures founder construction consumes exactly one ``random_traits`` draw
+    per founder regardless of override presence; without that invariant,
+    per-founder override would also shift downstream mutation-stream state,
+    confounding the intervention.
 
     ``trait_config``: when provided, founders sample from this config's
     ranges (the v0.5 default-tuning seam). When ``None`` the SPEC §8.1
@@ -433,6 +447,25 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
 
         policy_factory = _avoidance_wrapped_factory
 
+    # v0.53l: validate per_founder_traits_overrides if provided. Mutually
+    # exclusive with traits_override; length must equal n_founders. Raise
+    # ValueError on either violation. Default None preserves v0.1..v0.53k
+    # byte-identity.
+    if per_founder_traits_overrides is not None:
+        if traits_override is not None:
+            msg = (
+                "run_chamber: traits_override and per_founder_traits_overrides "
+                "are mutually exclusive; pass exactly one of them (or neither)."
+            )
+            raise ValueError(msg)
+        if len(per_founder_traits_overrides) != n_founders:
+            msg = (
+                f"run_chamber: per_founder_traits_overrides has length "
+                f"{len(per_founder_traits_overrides)}, expected n_founders="
+                f"{n_founders}."
+            )
+            raise ValueError(msg)
+
     # Founders spaced along the chamber's spawn column.
     spawn_x = layout.resolved_spawn_x
     spawn_ys = spread_y(n_founders, layout.height)
@@ -441,11 +474,15 @@ def run_chamber(  # noqa: PLR0912, PLR0915 — single chamber-driver wiring; ext
             x=spawn_x,
             y=y,
             policy_factory=policy_factory,
-            traits_override=traits_override,
+            traits_override=(
+                per_founder_traits_overrides[i]
+                if per_founder_traits_overrides is not None
+                else traits_override
+            ),
             use_memory=use_memory,
             memory_type=memory_type,
         )
-        for y in spawn_ys
+        for i, y in enumerate(spawn_ys)
     ]
 
     model = HHModel(
