@@ -351,4 +351,109 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-*(To be appended after reducer run.)*
+**Run completed 2026-05-10 on the locked 256-run corpus** (4 arms × 64 runs; v0.42/43R/44/45 × seeds 41..72 × hazards {0,8}; A/B at `n_ticks=200`, C/D at `n_ticks=400`). All halt-class checks pass (no priority 1/2/3 halt). **Rollup verdict: `WIDENED_BRIDGE_PARTIALLY_RESCUED_BY_SENSOR_RADIUS_8` (priority 6).**
+
+### Locked phrase (verbatim)
+
+> On the modern A_null corpus with the V0_25 substrate held constant except for the combined founder-facing budget relaxation AND the perception-only override `effective_sensor_radius_override = 8` on FOOD_NEAR1 at `n_ticks=400`, C's reachability clears the locked 25% threshold at tick-400 but the v0.48 sensor_radius spatial / foraging bridge does not fully fire PRESENT — fewer than 2/3 primaries fire across both gating labels at tick-400 under the strict NaN rule. D_widened_food_near2_combined_N400 reproduces v0.53i's `35/64` positive anchor at tick-400 in-slice. The perception override admits measurable food access but does not fully replicate v0.53i's PRESENT bridge expression. Layout-specific partial-rescue logged in Results: `WIDENED_BRIDGE_PARTIALLY_RESCUED_BY_SENSOR_RADIUS_8`.
+
+### Reachability run-share (locked)
+
+| arm | tick-50 | tick-100 | tick-200 | tick-400 |
+|---|:-:|:-:|:-:|:-:|
+| A_null_V0_25 | 1.000 (64/64) | 1.000 | 1.000 | — |
+| B_widened_V0_25 | 0.000 (0/64) | 0.000 | **0.000** *(Tier-2 anchor)* | — |
+| **C_widened_food_near1_combined_sr8_N400** | **1.000 (64/64)** | **1.000** | **1.000** | **1.000 (64/64)** *(verdict-gating)* |
+| D_widened_food_near2_combined_N400 | 0.531 (34/64) | **0.547** | 0.547 | **0.547 (35/64)** *(Tier-3 anchor)* |
+
+**Headline access result.** C tick-400 reachability moved from v0.53j C's `0/64` (FOOD_NEAR1 + combined-budget × n_ticks=400 with default sensor) to v0.53k C's `64/64` under the perception-only override. Tick-50 already shows full-population reachability on C — the override grants tick-0 east-ray perception of FOOD_NEAR1's `food_x_min=9` from `spawn_x=1`, and every founder lineage acquires food before the first measurement window. C reachability passes the locked 25% threshold at tick-400 (`1.0 ≥ 0.25 ✓`); priority 5 (full null) does not fire.
+
+### C tick-400 sub-verdict (verdict-gating panel)
+
+`C_WIDENED_FOOD_NEAR1_SR8_TICK400_BRIDGE_PARTIAL` — exactly one label clears the ≥2/3-cell firing rule under the strict NaN-treated-as-non-firing convention.
+
+| label | observable | signed_d | fires_expected | fires_wrong | n_runs |
+|---|---|:-:|:-:|:-:|:-:|
+| label_a_sensor_radius | pre400_food_events_count | −0.019 | False | False | 64 |
+| label_a_sensor_radius | pre400_food_energy_acquired | −0.019 | False | False | 64 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick400 | −0.002 | False | False | 64 |
+| label_b_readiness_fraction_tick400 | pre400_food_events_count | **+0.698** | **True** | False | 56 |
+| label_b_readiness_fraction_tick400 | pre400_food_energy_acquired | **+0.698** | **True** | False | 56 |
+| label_b_readiness_fraction_tick400 | mean_distance_to_nearest_food_cell_tick400 | **+0.588** | **True** | False | 56 |
+
+**Label A: 0/3 firing.** All three cells fall inside the ±0.5 deadband (`|signed_d| < 0.05`); zero wrong-sign cells. **Label A collapse is expected under a model-wide override:** the intervention removes between-lineage `sensor_radius` heterogeneity, so the trait-indexed bridge has no remaining access gradient to track. The bridge did not fail in the ordinary sense; the intervention erased the variable Label A was designed to index.
+
+**Label B: 3/3 firing under expected sign.** Label B (`high_tick400_readiness_fraction_lineage`) indexes lineage-level outcomes rather than trait-driven access, so it remains expressible under universal reachability — early-readiness lineages still acquire more food than late-readiness lineages.
+
+**Strict NaN rule.** Exactly one label clears ≥2/3 cells → `BRIDGE_PARTIAL`. Priority 4 (`BRIDGE_RESCUED_BY_SENSOR_RADIUS_8`) does not fire because both labels would need to clear; priority 6 (`PARTIALLY_RESCUED_BY_SENSOR_RADIUS_8`) is the matched outcome.
+
+### Tier-3 D anchor (locked, identical to v0.53j)
+
+D tick-400 reachability `= 35/64 = 0.546875` exact ✓. D tick-400 sub-verdict `= D_WIDENED_FOOD_NEAR2_TICK400_BRIDGE_PRESENT` ✓. Six paired_d cells reproduce v0.53i's published values with **drift_abs = 0.0 on every cell** (perfect determinism, identical to v0.53j's reproduction).
+
+| label | observable | derived signed_d | published v0.53i | drift_abs |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre400_food_events_count | +1.0357354787853512 | +1.0357354787853512 | 0.000 |
+| label_a_sensor_radius | pre400_food_energy_acquired | +1.0357354787853512 | +1.0357354787853512 | 0.000 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick400 | +1.061633559034245 | +1.061633559034245 | 0.000 |
+| label_b_readiness_fraction_tick400 | pre400_food_events_count | +5.3040008005819095 | +5.3040008005819095 | 0.000 |
+| label_b_readiness_fraction_tick400 | pre400_food_energy_acquired | +5.3040008005819095 | +5.3040008005819095 | 0.000 |
+| label_b_readiness_fraction_tick400 | mean_distance_to_nearest_food_cell_tick400 | +6.294727858398778 | +6.294727858398778 | 0.000 |
+
+**Tier-1 A re-anchor.** A `a_share_h8` for v0.42 / v0.44 / v0.45 within 1e-3 of published values: 0.6523 vs 0.652 (drift 0.00031), 0.8781 vs 0.878 (drift 9.1e-05), 0.8182 vs 0.818 (drift 0.00018). All within tolerance ✓. **Tier-2 B anchor.** B reachability at tick-200 = `0.000` exact ✓.
+
+### Population survival (descriptive)
+
+| arm | tick-50 | tick-100 | tick-200 | tick-400 |
+|---|:-:|:-:|:-:|:-:|
+| C_widened_food_near1_combined_sr8_N400 | 1.000 | 1.000 | 1.000 | **0.875** |
+| D_widened_food_near2_combined_N400 | 1.000 | 1.000 | 0.938 | **0.359** |
+
+C's tick-400 survival (0.875 = 56/64) is substantially higher than D's (0.359 = 23/64). Under the perception override, C founders gain tick-0 food perception and acquire food earlier; this carries through to higher late-window survival despite identical body_config (modulo the override) and identical V0_25 substrate. This is descriptive — not a verdict-gating observable — but worth flagging: the override's cost-decoupled information channel produces both an access lift (0/64 → 64/64) and a survival lift (relative to D's ~36% tick-400 survival under default sensor at FOOD_NEAR2).
+
+### C tick-50/100/200 sub-verdicts (descriptive)
+
+| window | sub-verdict |
+|---|---|
+| tick-50 | `C_WIDENED_FOOD_NEAR1_SR8_TICK50_BRIDGE_PARTIAL` |
+| tick-100 | `C_WIDENED_FOOD_NEAR1_SR8_TICK100_BRIDGE_PARTIAL` |
+| tick-200 | `C_WIDENED_FOOD_NEAR1_SR8_TICK200_BRIDGE_NOT_FOUND` |
+| tick-400 | `C_WIDENED_FOOD_NEAR1_SR8_TICK400_BRIDGE_PARTIAL` *(verdict-gating)* |
+
+The PARTIAL → NOT_FOUND → PARTIAL trajectory across windows is descriptive only; verdict gating is locked at tick-400 per pre-reg.
+
+### D tick-50/100/200 sub-verdicts (descriptive)
+
+| window | sub-verdict |
+|---|---|
+| tick-50 | `D_WIDENED_FOOD_NEAR2_TICK50_BRIDGE_PARTIAL` |
+| tick-100 | `D_WIDENED_FOOD_NEAR2_TICK100_BRIDGE_PRESENT` |
+| tick-200 | `D_WIDENED_FOOD_NEAR2_TICK200_BRIDGE_PRESENT` |
+| tick-400 | `D_WIDENED_FOOD_NEAR2_TICK400_BRIDGE_PRESENT` *(Tier-3 anchor)* |
+
+D's bridge expression progressively strengthens from tick-50 → tick-400 under default sensor at FOOD_NEAR2, consistent with v0.53i's published trajectory.
+
+### What v0.53k establishes (bounded)
+
+- **Reachability is sensor-reach-sensitive at the v0.53j FOOD_NEAR1 boundary under the tested envelope.** With `effective_sensor_radius_override = 8` (information-channel only; metabolic cost UNAFFECTED), every founder lineage (64/64) acquires food access by tick-50. Without the override, v0.53j C had `0/64`. The r=8 intervention is sufficient to eliminate the reachability ceiling under the tested envelope; it does NOT prove exclusivity — sensor-reach may rescue access by simple visibility, by altered policy gradient (`signal += value/distance`), by food-attraction signal strength, by hazard anticipation, or a mix.
+- **The v0.48 sensor_radius bridge does NOT fully replicate under universal access — by design of the intervention, not by failure of the bridge.** Label A (`high_sensor_radius_lineage`) firing requires between-lineage differentiation on food access; under model-wide `effective_sensor_radius_override`, that differentiation is removed by construction (every lineage perceives at the same effective radius). Label B (`high_tick400_readiness_fraction_lineage`) continues to fire because it indexes lineage outcomes, not trait-driven access. The clean claim from v0.53k is: **model-wide sensor_radius=8 rescues FOOD_NEAR1 access and readiness-indexed bridge expression, but it does not preserve the original trait-indexed sensor_radius bridge fingerprint** — exactly what priority 6 is designed to capture.
+
+### What v0.53k does NOT establish
+
+- ✗ "Perception is the binding cause." The reachability rescue is consistent with sensor-reach being a binding constraint under v0.53j FOOD_NEAR1, but the partial bridge expression means the locked priority-4 phrase does NOT fire. The mixed signal is captured by priority 6's bounded language.
+- ✗ "Perception is irrelevant." The 0/64 → 64/64 reachability shift demonstrably depends on the override.
+- ✗ "r=8 is the minimum sufficient override." v0.53l candidate (r=7 converse) untested.
+- ✗ Mechanism for the label-A null. Population dynamics under universal access at FOOD_NEAR1 are descriptively logged; no formal mechanism is established.
+
+### Continuity statement
+
+Predecessor stack EIGHT-long: v0.53c (`WIDENED_BELOW_REACHABILITY_THRESHOLD_AT_TICK_200`) → v0.53d (`...UNDER_RELAXED_INFLUX`) → v0.53e (`RELAXED_OPPOSITE_SIGN_HALT`) → v0.53f (`...UNDER_BASE_METABOLIC_COST_010`) → v0.53g (`...UNDER_COMBINED_SE100_BMC010`) → v0.53h (`...AT_TIME_HORIZON_400`) → v0.53i (`WIDENED_BRIDGE_RESCUED_BY_FOOD_NEAR2`) → v0.53j (`...UNDER_FOOD_NEAR1`) → **v0.53k (`WIDENED_BRIDGE_PARTIALLY_RESCUED_BY_SENSOR_RADIUS_8`).**
+
+The substrate-axis stack is now genuinely multi-dimensional: body_config (energy / metabolic_cost), n_ticks (horizon), geometry (food_x_min), perception (`effective_sensor_radius_override`). v0.53k's partial-rescue outcome is the THIRD non-null priority among 10 predecessors (v0.53i `RESCUED_BY_FOOD_NEAR2`, v0.53k `PARTIALLY_RESCUED_BY_SENSOR_RADIUS_8`).
+
+### Open framing for v0.53l+
+
+- **Perception dose curve (v0.53l candidate).** Test r=7 (converse: should NOT reach FOOD_NEAR1 east-ray) AND r=10 / r=12 (open question whether higher reach eventually drives the bridge to PRESENT or whether label-A's universal-access collapse is structural).
+- **Per-lineage perception heterogeneity.** Instead of model-wide override, vary `traits.effective_sensor_radius_override` per lineage to preserve the high-vs-low differentiation while lifting low-end reach. This would test whether the v0.48 bridge can fire when access is partially trait-mediated.
+- **Reading-A causal-generalization on FOOD_NEAR1 + sr=8.** With 64/64 reachability rescued (and population stability acceptable at 0.875), the v0.49–v0.52b causal-generalization framework can re-anchor on this newly-accessible cell.
+- **Policy / hazard-avoidance probe at FOOD_NEAR1.** Independently of perception, test whether `hazard_avoidance_weight` adjustments rescue reachability (ortho-axis to perception).
