@@ -8,15 +8,17 @@
 
 The original project question — does late-window birth concentration reflect aggregate optimization at the v0.27 chamber configuration? — was closed by v0.27..v0.33 with `H6_pool WEAK` ("directionally persistent, not mechanistically robust"). Lineage observability was added in v0.34..v0.36, which surfaced an unexpected post-hoc correlation: under the heritability fingerprint (v0.36), `sensor_radius` was the trait most consistently linked to per-lineage outcome differences at the tested chamber configurations. v0.48 measured this directly as a **spatial / foraging bridge** — `is_high_sensor_radius_lineage` (Label A) and `is_high_tick{N}_readiness_fraction_lineage` (Label B) firing under a +0.5 paired_d effect-size rule on three primary observables across a 64-run V0_25 corpus. The v0.53 series probed the bridge mechanism along five axes — geometry (v0.53b/c/i/j), substrate energy / metabolic cost (v0.53d/e/f/g), time horizon (v0.53h), perception scope (v0.53k/l/m), and **alignment** (v0.53n) — converging on a bounded mechanism reading at v0.53n. v0.54 freezes that reading as a claim ladder before any further slicing.
 
-## 2. Claim ladder (frozen)
+## 2. Claim ladder (frozen for this arc)
 
-### Can claim (under FOOD_NEAR1 × combined-budget × `n_ticks=400` envelope)
+**Scope qualifier (applies to every "can claim" entry below):** Within **V0_25 × `widened_food_near1` layout × combined-budget `BodyConfig(starting_energy=100.0, base_metabolic_cost=0.10)` × `n_ticks=400` × `effective_sensor_radius_override=8` × 5-founder population × 64-run V0_25 corpus**, v0.53 can claim:
 
-1. **Reachability is access-mediated.** The choice of which lineage receives `effective_sensor_radius_override = 8` does not change the reachability run-share at 1/5 coverage (v0.53l C: 61/64; v0.53n D: 61/64 — same exact 61-run cohort across alignment). 5/5 coverage lifts the final 3/64 to 64/64 (v0.53k C / v0.53n E). 0/5 coverage yields 0/64 (v0.53j C). The reachability axis localizes to "is there a boosted lineage at all?" — not to "which lineage is boosted?" at 1/5.
-2. **Label A is alignment-mediated.** The trait-indexed bridge fires PRESENT when the boost is aligned with the max-sensor lineage label (v0.53l C: `+4.4 / +4.4 / +3.8`); fires **wrong-sign with near-mirror magnitude** when the boost is trait-opposed (v0.53n D: `−4.4 / −4.4 / −3.3`); dilutes monotonically when coverage broadens with alignment preserved (v0.53m D top-2: `+1.2 / +1.2 / +2.3`); collapses into the ±0.5 deadband when alignment is meaningless (v0.53k C / v0.53n E model-wide: `−0.019 / −0.019 / −0.002`). The lineage label tracks **the boosted lineage**, not the underlying trait, when alignment is varied.
-3. **Label B is readiness / access-success indexed.** Label B fires PRESENT on the boosted lineage in every arm with rescued reachability — `+44.8 / +44.8 / +7.2` (v0.53l C max-only), `+2.1 / +2.1 / +0.7` (v0.53m D top-2), `+35.7 / +35.7 / +6.8` (v0.53n D min-only), `+0.7 / +0.7 / +0.6` (v0.53k C / v0.53n E model-wide). Magnitudes reflect structural-concentration of outcome on the boosted lineage(s); they are not direct biological-strength measures of the underlying trait correlation.
-4. **Model-wide access homogenizes the original trait bridge.** Universal `effective_sensor_radius_override = 8` (v0.53k C / v0.53n E) removes between-lineage perception heterogeneity by construction; Label A falls into the deadband while Label B retains a small PRESENT signal indexed on early-readiness rather than perception.
-5. **Min-lineage access flips Label A while preserving reachability and Label B.** Assigning the perception boost to the lowest-sensor founder (v0.53n D) inverts Label A's expected sign without disrupting reachability or Label B firing — the strongest possible single-slice evidence that Label A's PRESENT expression in v0.53l/m tracks the boosted-lineage alignment, not raw trait causation.
+### Can claim
+
+1. **Under the tested widened/FOOD_NEAR1 envelope, reachability is access-mediated.** The choice of which lineage receives `effective_sensor_radius_override = 8` does not change the reachability run-share at 1/5 coverage (v0.53l C: 61/64; v0.53n D: 61/64 — same exact 61-run cohort across alignment). 5/5 coverage lifts the final 3/64 to 64/64 (v0.53k C / v0.53n E). 0/5 coverage yields 0/64 (v0.53j C). The reachability axis localizes to "is there a boosted lineage at all?" — not to "which lineage is boosted?" at 1/5.
+2. **Under the tested envelope, Label A is alignment-mediated.** The trait-indexed bridge fires PRESENT when the boost is aligned with the max-sensor lineage label (v0.53l C: `+4.4 / +4.4 / +3.8`); fires **wrong-sign with near-mirror magnitude** when the boost is trait-opposed (v0.53n D: `−4.4 / −4.4 / −3.3`); dilutes monotonically when coverage broadens with alignment preserved (v0.53m D top-2: `+1.2 / +1.2 / +2.3`); collapses into the ±0.5 deadband when alignment is meaningless (v0.53k C / v0.53n E model-wide: `−0.019 / −0.019 / −0.002`). The lineage label tracks **the boosted lineage**, not the underlying trait, when alignment is varied at fixed coverage.
+3. **Under the tested envelope, Label B is readiness / access-success indexed.** Label B fires PRESENT on the boosted lineage in every arm with rescued reachability — `+44.8 / +44.8 / +7.2` (v0.53l C max-only), `+2.1 / +2.1 / +0.7` (v0.53m D top-2), `+35.7 / +35.7 / +6.8` (v0.53n D min-only), `+0.7 / +0.7 / +0.6` (v0.53k C / v0.53n E model-wide). Magnitudes reflect structural-concentration of outcome on the boosted lineage(s); they are not direct biological-strength measures of the underlying trait correlation.
+4. **Under the tested envelope, model-wide access homogenizes the original trait bridge.** Universal `effective_sensor_radius_override = 8` (v0.53k C / v0.53n E) removes between-lineage perception heterogeneity by construction; Label A falls into the deadband while Label B retains a small PRESENT signal indexed on early-readiness rather than perception.
+5. **Under the tested envelope, min-lineage access flips Label A while preserving reachability and Label B.** Assigning the perception boost to the lowest-sensor founder (v0.53n D) inverts Label A's expected sign without disrupting reachability or Label B firing — the strongest single-slice evidence within the tested envelope that Label A's PRESENT expression in v0.53l/m tracks the boosted-lineage alignment, not raw trait causation.
 
 ### Cannot claim
 
@@ -82,21 +84,28 @@ The large Label B magnitudes are **structural-concentration channels** — outco
 
 Under 1/5 coverage with **trait-opposed** alignment, population survival is highest (`0.953`). Under universal access (5/5 homogenized), survival is `0.875`. Under 1/5 trait-aligned, survival is `0.594`. The asymmetry is large enough to be probably-not-noise.
 
-**Plausible tentative reading:** in the V0_25 TraitConfig, `sensor_radius` correlates with `metabolic_rate` (founders with higher sensor radius typically sample correspondingly higher per-tick metabolic cost). When the max-sensor lineage dominates reproduction (v0.53l C: it is the only effective forager and reproduces accordingly), aggregate metabolic load on the chamber is high → starvation-death rate climbs by tick-400. When the min-sensor lineage dominates instead (v0.53n D), aggregate metabolic load is lower → population persists. Model-wide override is intermediate because all five lineages contribute to reproduction at homogenized access.
+**The survival asymmetry is descriptive.** A plausible candidate is **trait-package correlation** — potentially involving metabolic rate, movement cost, hazard exposure, reproduction timing, energy transfer mode, or their interaction — but v0.54 does not establish which channel explains the pattern, and the founder Trait vectors / descendant counts / cause-of-death distributions on the v0.53l C vs v0.53n D corpora have not been inspected in this synthesis.
 
-**This reading is not established by v0.53.** The trait-package correlation, the per-lineage descendant count, the cause-of-death distribution, and the cross-lineage interference modes (e.g., does the boosted lineage starve adjacent lineages by monopolizing food cells?) are all candidate diagnostics for v0.53o. v0.54 explicitly does **not** close this thread.
+**This thread is not closed by v0.54.** The trait-package distribution per arm, the per-lineage descendant count over time, the cause-of-death distribution (starvation vs injury), the cross-lineage interference modes (e.g., does the boosted lineage starve adjacent lineages by monopolizing food cells?), and the reproduction-rate differential are all candidate diagnostics for v0.53o — **optional**, not required.
 
 ## 4. Canonical coverage × alignment matrix
 
-| arm origin | coverage | alignment | reach (tick-400) | Label A signed_d | Label B signed_d | survival |
-|---|:-:|:-:|:-:|:-:|:-:|:-:|
-| v0.53j C | 0/5 (no override) | — | 0/64 | NA | NA | 0.000 (extinct) |
-| v0.53l C / v0.53n C | 1/5 | trait-aligned | 61/64 | +4.41 / +4.41 / +3.82 | +44.79 / +44.79 / +7.20 | 0.594 |
-| **v0.53n D** | **1/5** | **trait-OPPOSED** | **61/64** | **−4.44 / −4.44 / −3.29** | **+35.72 / +35.72 / +6.80** | **0.953** |
-| v0.53m D | 2/5 | trait-aligned | (n/a in v0.53n) | +1.17 / +1.17 / +2.35 | +2.10 / +2.10 / +0.70 | 0.672 |
-| v0.53k C / v0.53n E | 5/5 | homogenized | 64/64 | −0.019 / −0.019 / −0.002 | +0.70 / +0.70 / +0.59 | 0.875 |
+| coverage | alignment | arm origin | reach (tick-400) | Label A signed_d | Label B signed_d | survival | status |
+|:-:|:-:|---|:-:|:-:|:-:|:-:|---|
+| 0/5 (no override) | — (alignment meaningless) | v0.53j C | 0/64 | NA | NA | 0.000 (extinct) | characterized |
+| 1/5 | trait-aligned (max) | v0.53l C / v0.53n C | 61/64 | +4.41 / +4.41 / +3.82 | +44.79 / +44.79 / +7.20 | 0.594 | characterized |
+| **1/5** | **trait-opposed (min)** | **v0.53n D** | **61/64** | **−4.44 / −4.44 / −3.29** | **+35.72 / +35.72 / +6.80** | **0.953** | **characterized** |
+| 1/5 | random (non-max, non-min) | — | — | — | — | — | **not run** |
+| 2/5 | trait-aligned (top-2) | v0.53m D | (cross-slice; reach n/a here) | +1.17 / +1.17 / +2.35 | +2.10 / +2.10 / +0.70 | 0.672 | characterized |
+| 2/5 | trait-opposed (bottom-2) | — | — | — | — | — | **not run** |
+| 2/5 | random (any other 2-of-5) | — | — | — | — | — | **not run** |
+| 3/5 | trait-aligned (top-3) | — | — | — | — | — | **not run** |
+| 3/5 | trait-opposed (bottom-3) | — | — | — | — | — | **not run** |
+| 4/5 | trait-aligned (top-4) | — | — | — | — | — | **not run** |
+| 4/5 | trait-opposed (bottom-4) | — | — | — | — | — | **not run** |
+| 5/5 (model-wide) | homogenized (alignment meaningless) | v0.53k C / v0.53n E | 64/64 | −0.019 / −0.019 / −0.002 | +0.70 / +0.70 / +0.59 | 0.875 | characterized |
 
-The matrix maps **two axes** — coverage (rows by override-targeting count) and alignment (columns by selection rule's relation to Label A's selector). Three coverage points × three alignment categories = nine possible cells; v0.53 occupies five. The trait-aligned 2/5 cell at top-2 alignment was sampled (v0.53m D); the trait-aligned 3/5 / 4/5 cells, the trait-opposed 2/5 / 3/5 / 4/5 cells, and the random-non-aligned cells are not characterized.
+The matrix maps two axes — coverage (rows by override-targeting count, from 0/5 to 5/5) and alignment (columns by selection rule's relation to Label A's `is_high_sensor_radius_lineage` selector). Cells marked **"not run"** were not sampled by the v0.53 arc and should be read as "no data" rather than "no signal" — interpolation across the matrix is not supported by v0.53. The 2/5 trait-opposed (bottom-2) cell and the random-non-aligned cells at 1/5 and 2/5 are the closest natural extensions if the alignment-mediation reading is to be cross-checked under different selection rules; v0.53o (optional) does not address them and would not need to.
 
 ## 5. What v0.54 explicitly does NOT do
 
@@ -110,11 +119,11 @@ The matrix maps **two axes** — coverage (rows by override-targeting count) and
 
 ### 6.1 v0.53o (OPTIONAL — per-lineage trait-package + dose-response diagnostic)
 
-**Status:** optional. v0.54 closes the v0.53 mechanism arc. v0.53o is justified only if a factual hole emerges during synthesis review or if the user wants to elevate the survival-asymmetry reading from "tentative metabolic correlation" to "established within-V0_25 mechanism." It is **not** the auto-next step.
+**v0.53o is optional and should only be opened if the next user-directed question is to explain the survival asymmetry. It is not required to validate the v0.53 mechanism arc or the v0.54 claim ladder.**
 
 **Likely scope if run:** mostly observational; compare max-lineage and min-lineage founder Trait vectors and descendant outcome distributions across v0.53l C and v0.53n D using the existing on-disk corpora. Add a dose-response axis on `r ∈ {6, 7, 8, 10}` at min-lineage scope only if the static comparison shows ambiguity. Do not add new mechanics unless the diagnostic reveals a specific confound.
 
-**Locked precondition:** v0.53o is not authorized without explicit user direction after v0.54 review.
+**Locked precondition:** v0.53o is not authorized without explicit user direction after v0.54 review. Chronus should not treat v0.53o as morally required just because the survival asymmetry is logged here.
 
 ### 6.2 v0.55+ (fresh-stream calibration territory)
 
@@ -168,7 +177,7 @@ Any escalation of a v0.46–v0.53n verdict from "consistent with X" to "X mechan
 
 ## 8. Watch-outs for future sessions
 
-- **The claim ladder in §2 is frozen.** Future slices may extend it (e.g., v0.53o establishing the metabolic-correlation reading), but must not retroactively soften or reword the existing entries. v0.54 is the historical contract for the v0.53 arc.
+- **The v0.53 claim ladder in §2 is frozen for purposes of reporting this arc.** Future experiments may extend or revise the broader model — including the v0.48 bridge framework, the Label A/B selectors, the V0_25 corpus shape, or the chamber geometry — but should **not retrofit the v0.53 interpretation**. v0.54 is the historical contract for what v0.53b..v0.53n observed under the tested envelope; downstream slices add to the record rather than rewrite it.
 - **The locked phrases on v0.53k/l/m/n stand verbatim.** v0.54's narrative explanations (e.g., "alignment-mediated", "structural-concentration channel") are synthesis-level shorthand; they do not replace the verbatim Results phrases on the individual slice docs.
 - **The v0.27 closure stands.** v0.53's mechanism reading is downstream-of-original-goal but legitimate science on a separate question (the v0.48 bridge mechanism). Nothing in v0.54 reopens the v0.27..v0.33 aggregate-optimum verdict.
 - **Survival asymmetry is descriptive only in v0.54.** Any further use of the `0.953 / 0.875 / 0.594` numbers as evidence for "the trait costs energy" must come with explicit "consistent with" framing until v0.53o (or fresh-stream replication) establishes the mechanism.
