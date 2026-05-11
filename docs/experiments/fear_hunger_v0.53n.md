@@ -400,4 +400,132 @@ No `src/` modifications. No prior reducer / audit / test / pre-reg files modifie
 
 ## Results
 
-*(Appended after reducer run on the locked 320-run corpus.)*
+**Run completed 2026-05-11 on the locked 320-run corpus** (5 arms × 64 runs; v0.42/43R/44/45 × seeds 41..72 × hazards {0,8}; A/B at `n_ticks=200`, C/D/E at `n_ticks=400`). All halt-class checks pass (no priority 1/2/3 halt). **Rollup verdict: `MIN_LINEAGE_ACCESS_RESCUES_REACHABILITY_AND_DECOUPLES_LABEL_A` (priority 4 — the expected headline outcome).**
+
+### Locked phrase (verbatim)
+
+> On the modern A_null corpus with the V0_25 substrate held constant except for the combined founder-facing budget relaxation `BodyConfig(starting_energy=100.0, base_metabolic_cost=0.10)` AND the simulation horizon doubled to `n_ticks=400` AND the `widened_food_near1` layout AND the **min-sensor-lineage** per-lineage perception intervention `per_founder_traits_overrides[bottom_lineage_ids[0]] = Traits(effective_sensor_radius_override=8)` (the override applies ONLY to the single min-`sensor_radius` founder per run, with `argmin(sensor_radius)` selection and `min(lineage_id)` tiebreak; the v0.48 `is_high_sensor_radius_lineage` selector still picks the MAX-sensor lineage for Label A indexing — that lineage receives NO override; metabolic cost UNAFFECTED per the override's information-channel-only contract; override propagates to all descendants via `dataclasses.replace`'s preservation), D reachability at tick-400 clears the locked 25% threshold and D Label B fires PRESENT under the locked +0.5 paired_d threshold, while D Label A does NOT fire PRESENT (NOT_FOUND, PARTIAL <2/3, deadband, wrong-sign, or NaN-nonfiring). C_widened_food_near1_combined_max_lineage_sr8_N400 reproduces v0.53l's `61/64` anchor at tick-400 (max-only / trait-aligned lock holds), E_widened_food_near1_combined_modelwide_sr8_N400 reproduces v0.53k's `64/64` anchor at tick-400 (model-wide / homogenized lock holds). The geometry/substrate cell that v0.53c through v0.53m locked admits an alignment-decoupled outcome at the min-sensor-lineage adversarial control point: D reachability clears the 25% threshold, D Label B fires PRESENT, and D Label A does NOT fire PRESENT. **The result is consistent with the v0.53l/m Label A rescue depending on alignment between the boosted perception channel and the max-sensor lineage label, while reachability itself can be rescued by perception access assigned to a non-max lineage.** This is strong evidence but NOT exclusive causality and NOT a claim that the v0.48 bridge is purely access-mediated — the min-sensor boost may also produce Label A decoupling through secondary channels (asymmetric early survival of the boosted lineage, reproduction-rate differential, pleiotropy with other heritable traits, structural-concentration effects on Label B that obscure the trait signal): `MIN_LINEAGE_ACCESS_RESCUES_REACHABILITY_AND_DECOUPLES_LABEL_A`.
+
+### Reachability run-share (locked)
+
+| arm | tick-50 | tick-100 | tick-200 | tick-400 |
+|---|:-:|:-:|:-:|:-:|
+| A_null_V0_25 | 1.000 (64/64) | 1.000 | 1.000 | — |
+| B_widened_V0_25 | 0.000 (0/64) | 0.000 | **0.000** *(Tier-2 anchor ✓)* | — |
+| C_widened_food_near1_combined_max_lineage_sr8_N400 | 0.953 (61/64) | 0.953 | 0.953 | **0.953 (61/64)** *(Tier-3 anchor vs v0.53l ✓)* |
+| **D_widened_food_near1_combined_min_lineage_sr8_N400** | **0.953 (61/64)** | **0.953** | **0.953** | **0.953 (61/64)** *(verdict-gating ≥ 0.25 ✓)* |
+| E_widened_food_near1_combined_modelwide_sr8_N400 | 1.000 (64/64) | 1.000 | 1.000 | **1.000 (64/64)** *(Tier-3 anchor vs v0.53k ✓)* |
+
+**Headline access result.** D tick-400 reachability `61/64 = 0.953` matches C tick-400 reachability **exactly to the run** — D and C have the identical 61-run cohort with food access. The choice of which lineage receives `r=8` (max-sensor in C vs min-sensor in D) does NOT change the reachability run-share at all under FOOD_NEAR1 + combined-budget × n_ticks=400. The access channel is doing the work regardless of which lineage carries the boost. The same 3/64 runs that fail to rescue on C also fail to rescue on D (verified by descriptive cross-reference of `run_id`s in the audit_log); reproduction-failure or extinction modes on the boosted lineage account for the gap from 64/64. C/D vs E shows that 4 of 5 lineages each finding access independently lifts reachability the final 3/64 to 64/64.
+
+### D tick-400 sub-verdict (verdict-gating panel — the central design check)
+
+**Per-arm sub-verdict: `D_WIDENED_FOOD_NEAR1_MIN_LINEAGE_SR8_TICK400_OPPOSITE_SIGN_HALT`** — Label A has 3/3 wrong-sign cells. **But the rollup-level priority-3 halt does NOT fire** because the asymmetric halt rule gates on Label B specifically, and Label B has 0 wrong-sign cells. The rollup classifies this configuration as priority 4 (DECOUPLES) since Label A wrong-sign ⊂ Label A NOT PRESENT.
+
+| label | observable | signed_d | fires_expected | fires_wrong | n_runs |
+|---|---|:-:|:-:|:-:|:-:|
+| label_a_sensor_radius | pre400_food_events_count | **−4.438** | False | **True** | 64 |
+| label_a_sensor_radius | pre400_food_energy_acquired | **−4.438** | False | **True** | 64 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick400 | **−3.287** | False | **True** | 64 |
+| label_b_readiness_fraction_tick400 | pre400_food_events_count | **+35.723** | **True** | False | 61 |
+| label_b_readiness_fraction_tick400 | pre400_food_energy_acquired | **+35.723** | **True** | False | 61 |
+| label_b_readiness_fraction_tick400 | mean_distance_to_nearest_food_cell_tick400 | **+6.796** | **True** | False | 61 |
+
+**Label A: 0/3 firing-expected, 3/3 wrong-sign.** The max-sensor lineage performs **strictly worse** than the non-label pool on D — `signed_d ≈ −4.4` is roughly the mirror image of C's `+4.4`. This is the strongest possible decoupling signal: not deadband (as in v0.53k's homogenized arm) but a **full sign-flip**. The boosted min-sensor lineage acquires food that the non-boosted max-sensor lineage cannot reach.
+
+**Label B: 3/3 firing-expected, 0/3 wrong-sign.** Readiness-indexed bridge fires at the +35.7/+35.7/+6.8 magnitude (slightly weaker than v0.53l C's +44.8/+44.8/+7.2 because the boosted lineage now coincides with the high-readiness label LESS PERFECTLY — `label_b_n_runs = 61` on D, same as on C, but the underlying `(boosted, high-readiness)` overlap distribution differs). Per the structural-concentration framing inherited from v0.53l/m, Label B's large magnitude on D is a concentrated outcome channel created by the targeted perception intervention, not a generic strengthening of the underlying trait correlation.
+
+**The asymmetric halt rule did exactly the work it was designed for.** Under v0.53k/l/m's 6-priority cascade (no asymmetric rule), this configuration would have triggered priority 3 (a reachability-gated OPPOSITE_SIGN_HALT) and been classified as a framework failure. v0.53n's locked priority-3 trigger gates on Label B specifically, recognizing in advance that Label A wrong-sign is the **expected informative path** under min-lineage alignment. The framework correctly identified the headline result.
+
+### Comparison across the lineage-perception axis (coverage × alignment)
+
+| slice | arm | coverage | alignment | reach (tick-400) | Label A signed_d | Label B signed_d | survival (tick-400) |
+|---|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| v0.53j C | FOOD_NEAR1 + no override | 0/5 | — | 0/64 | NA | NA | 0.000 (extinct) |
+| **v0.53n D** | **FOOD_NEAR1 + min-only** | **1/5** | **OPPOSED** | **61/64** | **−4.4 / −4.4 / −3.3** | **+35.7 / +35.7 / +6.8** | **0.953** |
+| v0.53l C / v0.53n C | FOOD_NEAR1 + max-only | 1/5 | aligned | 61/64 | +4.4 / +4.4 / +3.8 | +44.8 / +44.8 / +7.2 | 0.594 |
+| v0.53m D | FOOD_NEAR1 + top-2 | 2/5 | aligned | n/a in v0.53n | +1.2 / +1.2 / +2.3 | +2.1 / +2.1 / +0.7 | 0.672 |
+| v0.53k C / v0.53n E | FOOD_NEAR1 + model-wide | 5/5 | homogenized | 64/64 | −0.019 / −0.019 / −0.002 | +0.698 / +0.698 / +0.588 | 0.875 |
+
+**Three readings of this table:**
+
+1. **Reachability is symmetric under 1/5 coverage regardless of alignment.** v0.53l/n C (trait-aligned) and v0.53n D (trait-opposed) both rescue 61/64 — same exact runs. The boosted lineage carries reachability through whether it is the max-sensor or the min-sensor founder.
+
+2. **Label A is sign-symmetric under 1/5 coverage across alignment.** C's `+4.4 / +4.4 / +3.8` and D's `−4.4 / −4.4 / −3.3` are near-mirror images. The trait-indexed bridge tracks whichever lineage holds the boosted access channel — when the channel is aligned with the trait label, the bridge fires PRESENT; when it is opposed, the bridge fires wrong-sign with comparable magnitude. **This is the strongest possible localization of the alignment requirement.**
+
+3. **D's tick-400 survival (0.953) substantially exceeds C's tick-400 survival (0.594) AND E's (0.875).** Under min-lineage alignment, the population stays nearly intact through n_ticks=400. Under max-lineage alignment (C), 40% of the population dies by tick-400. Tentative interpretation: the max-sensor lineage's reproductive efficiency may have higher metabolic cost (the sampled `sensor_radius` trait correlates with `metabolic_rate` in the V0_25 TraitConfig); when it dominates the population (C), aggregate metabolic load is high; when a low-sensor lineage dominates instead (D), aggregate metabolic load is lower. This is **descriptive** only — verdict-gating depends on Label A/B firing, not on survival. The cross-arm survival pattern motivates a v0.53o-candidate per-lineage trait-package diagnostic.
+
+### Tier-3 C anchor (locked, vs v0.53l published)
+
+C tick-400 reachability `= 61/64 = 0.953125` exact ✓. C tick-400 sub-verdict `= C_WIDENED_FOOD_NEAR1_MAX_LINEAGE_SR8_TICK400_BRIDGE_PRESENT` ✓. Six paired_d cells reproduce v0.53l's published values with **drift_abs = 0.0 on every cell** (perfect determinism, identical to v0.53m's reproduction).
+
+| label | observable | derived signed_d | published v0.53l | drift_abs |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre400_food_events_count | +4.407500095034808 | +4.407500095034808 | 0.000 |
+| label_a_sensor_radius | pre400_food_energy_acquired | +4.407500095034808 | +4.407500095034808 | 0.000 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick400 | +3.8177086030179344 | +3.8177086030179344 | 0.000 |
+| label_b_readiness_fraction_tick400 | pre400_food_events_count | +44.79447381457056 | +44.79447381457056 | 0.000 |
+| label_b_readiness_fraction_tick400 | pre400_food_energy_acquired | +44.79447381457056 | +44.79447381457056 | 0.000 |
+| label_b_readiness_fraction_tick400 | mean_distance_to_nearest_food_cell_tick400 | +7.203121884647769 | +7.203121884647769 | 0.000 |
+
+### Tier-3 E anchor (locked, vs v0.53k published)
+
+E tick-400 reachability `= 64/64 = 1.0` exact ✓. E tick-400 sub-verdict `= E_WIDENED_FOOD_NEAR1_MODELWIDE_SR8_TICK400_BRIDGE_PARTIAL` (suffix match) ✓. Six paired_d cells reproduce v0.53k's published values with **drift_abs ≤ 1.1e-16 on every cell** (machine epsilon on one Label B cell; perfect zero on the other five).
+
+| label | observable | derived signed_d | published v0.53k | drift_abs |
+|---|---|:-:|:-:|:-:|
+| label_a_sensor_radius | pre400_food_events_count | −0.019198889380801876 | −0.019198889380801876 | 0.000 |
+| label_a_sensor_radius | pre400_food_energy_acquired | −0.019198889380801876 | −0.019198889380801876 | 0.000 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick400 | −0.002295569212554338 | −0.002295569212554338 | 0.000 |
+| label_b_readiness_fraction_tick400 | pre400_food_events_count | +0.6978345195653476 | +0.6978345195653476 | 0.000 |
+| label_b_readiness_fraction_tick400 | pre400_food_energy_acquired | +0.6978345195653476 | +0.6978345195653478 | 1.1e-16 |
+| label_b_readiness_fraction_tick400 | mean_distance_to_nearest_food_cell_tick400 | +0.5878534807527567 | +0.5878534807527567 | 0.000 |
+
+**Tier-1 A re-anchor.** A `a_share_h8` for v0.42 / v0.44 / v0.45 within 1e-3 of published values: 0.6523 vs 0.652 (drift 3.1e-04), 0.8781 vs 0.878 (drift 9.1e-05), 0.8182 vs 0.818 (drift 1.8e-04). All within tolerance ✓. **Tier-2 B anchor.** B reachability at tick-200 = `0.000` exact ✓.
+
+### Population survival (descriptive)
+
+| arm | tick-50 | tick-100 | tick-200 | tick-400 |
+|---|:-:|:-:|:-:|:-:|
+| C_widened_food_near1_combined_max_lineage_sr8_N400 | 1.000 | 1.000 | 0.969 | **0.594** |
+| **D_widened_food_near1_combined_min_lineage_sr8_N400** | 1.000 | 1.000 | 1.000 | **0.953** |
+| E_widened_food_near1_combined_modelwide_sr8_N400 | 1.000 | 1.000 | 1.000 | **0.875** |
+
+D's tick-400 living-population run share `0.953` is **higher than both C (0.594) and E (0.875)**. Under min-lineage alignment, the population stays intact in 61/64 runs through tick-400. Under max-lineage alignment (C), population drops by ~40% by tick-400; under universal access (E), drops by ~12%. The descriptive observation is striking and motivates per-lineage trait-package and reproduction-rate diagnostics as a v0.53o candidate. (Verdict-gating depends on Label A/B firing per pre-reg; survival is informational.)
+
+### D tick-50/100/200 sub-verdicts (descriptive)
+
+| window | sub-verdict |
+|---|---|
+| tick-50 | `D_WIDENED_FOOD_NEAR1_MIN_LINEAGE_SR8_TICK50_OPPOSITE_SIGN_HALT` |
+| tick-100 | `D_WIDENED_FOOD_NEAR1_MIN_LINEAGE_SR8_TICK100_OPPOSITE_SIGN_HALT` |
+| tick-200 | `D_WIDENED_FOOD_NEAR1_MIN_LINEAGE_SR8_TICK200_OPPOSITE_SIGN_HALT` |
+| tick-400 | `D_WIDENED_FOOD_NEAR1_MIN_LINEAGE_SR8_TICK400_OPPOSITE_SIGN_HALT` *(verdict-gating; rollup correctly routes to priority 4 via the asymmetric halt rule)* |
+
+The Label A sign-flip is present from tick-50 onward — the alignment-control signal is robust across all measurement windows, not a tick-400-specific phenomenon. Verdict gating is locked at tick-400 per pre-reg; intermediate windows are descriptive.
+
+### What v0.53n establishes (bounded)
+
+- **Reachability is access-mediated under FOOD_NEAR1 × combined-budget × n_ticks=400 at 1/5 coverage.** Whichever lineage receives `r=8`, the reachability run-share is 61/64 — symmetric across the alignment axis at this coverage point.
+- **Label A is alignment-dependent under 1/5 coverage.** The trait-indexed bridge fires PRESENT when the boost is trait-aligned (`+4.4`) and wrong-sign when it is trait-opposed (`−4.4`). The near-mirror magnitudes localize the alignment requirement to the boosted-lineage channel.
+- **The result is consistent with the v0.53l/m Label A rescue depending on alignment between the boosted perception channel and the max-sensor lineage label, while reachability itself can be rescued by perception access assigned to a non-max lineage.**
+- **The asymmetric halt rule (priority 3 gates on Label B specifically) is load-bearing for this slice.** Under the symmetric "any primary wrong-sign" halt rule v0.53k/l/m used, this configuration would have halted at priority 3 and the headline result would have been suppressed.
+
+### What v0.53n does NOT establish
+
+- ✗ **"The v0.48 bridge is purely access-mediated."** Label A on D shows full sign-flip with comparable magnitude to v0.53l C — strong but not exclusive evidence. Trait-mediated reading is not falsified; the bridge may carry residual trait expression through secondary channels (early survival, reproduction-rate, pleiotropy with metabolic_rate, structural-concentration effects on Label B). The bounded claim is the alignment dependence localization, not a global mechanism declaration.
+- ✗ **"The v0.53l/m Label A rescue was purely access-mediated."** Both max-only (v0.53l) and top-2 (v0.53m) had trait-aligned access; v0.53n's adversarial control breaks the alignment but does not retroactively reinterpret v0.53l/m.
+- ✗ **"D's higher survival (0.953) is caused by the min-lineage alignment."** The cross-arm survival pattern is descriptive; no mechanism is formally established. May reflect aggregate metabolic load (sensor_radius correlates with metabolic_rate in V0_25 TraitConfig) or reproduction-rate differential or some other lineage-trait-package interaction. Motivates a v0.53o-candidate diagnostic.
+- ✗ **"r=8 is the right magnitude for the adversarial control."** Only one magnitude tested. v0.53o-candidate dose-response remains untested under min-lineage scope.
+- ✗ **A revised v0.53–v0.53m verdict.** All thirteen predecessor verdicts stand as historical contracts.
+
+### Continuity statement
+
+Predecessor stack TWELVE-long: v0.53c → v0.53d → v0.53e → v0.53f → v0.53g → v0.53h → v0.53i → v0.53j → v0.53k → v0.53l → v0.53m → **v0.53n (`MIN_LINEAGE_ACCESS_RESCUES_REACHABILITY_AND_DECOUPLES_LABEL_A`).**
+
+The lineage-perception axis is now mapped across **both** coverage (1/5 → 2/5 → 5/5 via v0.53l → v0.53m → v0.53k) **and** alignment (trait-aligned via v0.53l vs trait-opposed via v0.53n) at the 1/5-coverage point. The v0.53 mechanism arc has converged: the v0.48 Label A bridge under FOOD_NEAR1 × combined-budget × n_ticks=400 carries an **alignment-dependent** trait-indexed signature, with reachability rescued by access regardless of alignment. v0.54 synthesis / fresh-stream calibration is the natural arc-closing artifact; v0.53o (per-lineage trait-package diagnostic + dose-response) is optional.
+
+### Open framing for v0.53o+ (NOT in v0.53n primary)
+
+- **v0.53o candidate (per-lineage trait-package diagnostic + dose-response).** Open question: does the alignment dependence persist at smaller `r` (r=6/7) under min-lineage scope? Does the survival asymmetry (D > C > E) correlate with per-lineage sampled metabolic_rate? Optional, NOT auto-locked — to be discussed with user.
+- **v0.54 synthesis / fresh-stream calibration.** The natural arc-closing artifact for the v0.46–v0.53n stack. Recommended next.
