@@ -396,4 +396,118 @@ Wall time estimate ~35–60 minutes. C and E arms each replay published predeces
 
 ## Results
 
-*(To be appended after reducer run.)*
+**Run completed 2026-05-10 on the locked 320-run corpus** (5 arms × 64 runs; v0.42/43R/44/45 × seeds 41..72 × hazards {0,8}; A/B at `n_ticks=200`, C/D/E at `n_ticks=400`). All halt-class checks pass (no priority 1/2/3 halt). **Rollup verdict: `WIDENED_BRIDGE_RESCUED_BY_TOP2_LINEAGE_SENSOR_RADIUS_8` (priority 4 — top-2 coverage point fires PRESENT under both gating labels).**
+
+### Locked phrase (verbatim)
+
+> On the modern A_null corpus with the V0_25 substrate held constant except for the combined founder-facing budget relaxation `BodyConfig(starting_energy=100.0, base_metabolic_cost=0.10)` AND the simulation horizon doubled to `n_ticks=400` AND the `widened_food_near1` layout AND the **top-2** per-lineage perception intervention `per_founder_traits_overrides[top_lineage_ids[0]] = per_founder_traits_overrides[top_lineage_ids[1]] = Traits(effective_sensor_radius_override=8)` (the override applies to the TWO highest-`sensor_radius` founders per run; the v0.48 `is_high_sensor_radius_lineage` selector picks `top_lineage_ids[0]` — the same lineage Label A indexes; metabolic cost UNAFFECTED per the override's information-channel-only contract; override propagates to all descendants via `dataclasses.replace`'s preservation), the v0.48 sensor_radius spatial / foraging bridge fires PRESENT under the locked +0.5 paired_d threshold at tick-400 under both gating labels. C_widened_food_near1_combined_max_lineage_sr8_N400 reproduces v0.53l's `61/64` anchor at tick-400 (max-only lock holds), E_widened_food_near1_combined_modelwide_sr8_N400 reproduces v0.53k's `64/64` anchor at tick-400 (model-wide lock holds), D reachability at tick-400 clears the locked 25% threshold, and ≥ 2/3 spatial / foraging primaries fire PRESENT under both gating labels at the D tick-400 panel. **The v0.48 bridge tolerates at least 2/5 lineage-level perception access, under the locked top-2-by-sensor-radius selection rule, under FOOD_NEAR1 × combined-budget × n_ticks=400 without collapsing Label A.** This is strong evidence but NOT exclusive causality and NOT a minimal-sufficient-heterogeneity claim — v0.53m only tests one intermediate coverage point: `WIDENED_BRIDGE_RESCUED_BY_TOP2_LINEAGE_SENSOR_RADIUS_8`.
+
+### Coverage curve (the headline result)
+
+| metric | C max-only (1/5) | **D top-2 (2/5)** | E model-wide (5/5) |
+|---|:-:|:-:|:-:|
+| reachability tick-400 | 61/64 (0.953) | **64/64 (1.000)** | 64/64 (1.000) |
+| sub-verdict tick-400 | `BRIDGE_PRESENT` | **`BRIDGE_PRESENT`** | `BRIDGE_PARTIAL` |
+| Label A pre400_food_events_count signed_d | +4.408 | **+1.166** | −0.019 |
+| Label A pre400_food_energy_acquired signed_d | +4.408 | **+1.166** | −0.019 |
+| Label A mean_distance_tick400 signed_d | +3.818 | **+2.347** | −0.002 |
+| Label B pre400_food_events_count signed_d | +44.794 | **+2.079** | +0.698 |
+| Label B pre400_food_energy_acquired signed_d | +44.794 | **+2.079** | +0.698 |
+| Label B mean_distance_tick400 signed_d | +7.203 | **+4.686** | +0.588 |
+| Population survival tick-400 | 0.594 | **0.672** | 0.875 |
+
+The three coverage points form a clean monotone curve:
+
+- **Label A magnitude is monotone-decreasing in coverage** (`+4.4 → +1.2 → −0.0` on the food cells). At top-2, Label A's three cells fire `+1.166, +1.166, +2.347` — all clear the +0.5 threshold (sub-verdict PRESENT), but each cell is 26–61% of max-only's magnitude. The dilution is sharper than the simple structural-intuition prior (`~0.75 × max-only`) in the pre-implementation note predicted on the food-event cells, and closer to it on the distance cell.
+- **Label B magnitude is also monotone-decreasing in coverage** (`+44.8 → +2.1 → +0.7`). **Label B's very large max-only magnitude should be interpreted as structural concentration under asymmetric access, not as a directly linear biological-strength measure.** When only one lineage has reliable perception-mediated food access, readiness becomes concentrated in that lineage's descendants, inflating the winner/non-winner contrast. The structural-concentration channel that produced v0.53l's `+44.8` magnitudes (single override-targeted lineage = the only food-acquiring lineage = the high-readiness lineage) is broken once a second lineage shares the override; the contrast collapses from `high − 0` to `high − high/4`. The `+44.8 → +2.1 → +0.7` curve is therefore not a comparable effect-size series — it is a measurement of how the structural concentration channel itself decays as access becomes less asymmetric.
+- **Population survival is monotone-increasing in coverage** (`0.594 → 0.672 → 0.875`). More override-targeted lineages → more food-acquiring lineages → more descendants → higher tick-400 survival.
+
+### D tick-400 sub-verdict (verdict-gating panel)
+
+`D_WIDENED_FOOD_NEAR1_TOP2_LINEAGE_SR8_TICK400_BRIDGE_PRESENT` — both labels clear ≥ 2/3 cells under the strict NaN-treated-as-non-firing rule, with all six cells firing under expected sign and zero wrong-sign cells.
+
+| label | observable | signed_d | fires_expected | fires_wrong | n_runs |
+|---|---|:-:|:-:|:-:|:-:|
+| label_a_sensor_radius | pre400_food_events_count | **+1.166** | **True** | False | 64 |
+| label_a_sensor_radius | pre400_food_energy_acquired | **+1.166** | **True** | False | 64 |
+| label_a_sensor_radius | mean_distance_to_nearest_food_cell_tick400 | **+2.347** | **True** | False | 64 |
+| label_b_readiness_fraction_tick400 | pre400_food_events_count | **+2.079** | **True** | False | 43 |
+| label_b_readiness_fraction_tick400 | pre400_food_energy_acquired | **+2.079** | **True** | False | 43 |
+| label_b_readiness_fraction_tick400 | mean_distance_to_nearest_food_cell_tick400 | **+4.686** | **True** | False | 43 |
+
+### C in-slice anchor (vs v0.53l C published Results)
+
+C reachability `0.953125` matches v0.53l's `61/64` exact ✓. C sub-verdict `C_WIDENED_FOOD_NEAR1_MAX_LINEAGE_SR8_TICK400_BRIDGE_PRESENT` matches exact ✓. Six paired_d cells reproduce v0.53l's published values with **drift_abs = 0.0 on every cell** — the in-slice anchor is byte-identical to v0.53l C, confirming the v0.53l-tip seams continue to deliver deterministic per-founder override behavior.
+
+### E in-slice anchor (vs v0.53k C published Results)
+
+E reachability `1.0` matches v0.53k's `64/64` exact ✓. E sub-verdict ends with `_TICK400_BRIDGE_PARTIAL` ✓ (E's arm prefix `E_WIDENED_FOOD_NEAR1_MODELWIDE_SR8` differs from v0.53k C's `C_WIDENED_FOOD_NEAR1_SR8`; the categorical resolution PARTIAL is what reproduces). Six paired_d cells reproduce v0.53k's published values with **drift_abs = 0.0 on every cell** — the in-slice anchor is byte-identical to v0.53k C, confirming the always-consume invariant does not perturb the no-per-founder-override path even with body_config-driven model-wide override.
+
+### Anchors held
+
+- **Tier-1 A re-anchor.** v0.42/v0.44/v0.45 `a_share_h8` within 1e-3 (matched to v0.53l/k drift values).
+- **Tier-2 B anchor.** B reachability at tick-200 = `0.000` exact ✓.
+- **In-slice C anchor (vs v0.53l).** drift_abs = 0.0 on six paired_d cells + categorical reachability + sub-verdict ✓.
+- **In-slice E anchor (vs v0.53k).** drift_abs = 0.0 on six paired_d cells + categorical reachability + sub-verdict suffix ✓.
+
+### C tick-50/100/200 sub-verdicts (descriptive, anchor match against v0.53l)
+
+| window | sub-verdict |
+|---|---|
+| tick-50 | `C_WIDENED_FOOD_NEAR1_MAX_LINEAGE_SR8_TICK50_BRIDGE_PARTIAL` |
+| tick-100 | `C_WIDENED_FOOD_NEAR1_MAX_LINEAGE_SR8_TICK100_BRIDGE_PRESENT` |
+| tick-200 | `C_WIDENED_FOOD_NEAR1_MAX_LINEAGE_SR8_TICK200_BRIDGE_PRESENT` |
+| tick-400 | `C_WIDENED_FOOD_NEAR1_MAX_LINEAGE_SR8_TICK400_BRIDGE_PRESENT` *(anchor)* |
+
+Matches v0.53l C trajectory exactly.
+
+### D tick-50/100/200 sub-verdicts (descriptive)
+
+| window | sub-verdict |
+|---|---|
+| tick-50 | `D_WIDENED_FOOD_NEAR1_TOP2_LINEAGE_SR8_TICK50_BRIDGE_PRESENT` |
+| tick-100 | `D_WIDENED_FOOD_NEAR1_TOP2_LINEAGE_SR8_TICK100_BRIDGE_PRESENT` |
+| tick-200 | `D_WIDENED_FOOD_NEAR1_TOP2_LINEAGE_SR8_TICK200_BRIDGE_PRESENT` |
+| tick-400 | `D_WIDENED_FOOD_NEAR1_TOP2_LINEAGE_SR8_TICK400_BRIDGE_PRESENT` *(verdict-gating)* |
+
+D's trajectory clears PRESENT at every measured window — earlier-onset than C max-only (PARTIAL → PRESENT at tick-100) because top-2 puts TWO lineages on the food-acquisition channel from tick-0, doubling the readiness pool that produces label-B-firing food events.
+
+### E tick-50/100/200 sub-verdicts (descriptive, anchor match against v0.53k)
+
+| window | sub-verdict |
+|---|---|
+| tick-50 | `E_WIDENED_FOOD_NEAR1_MODELWIDE_SR8_TICK50_BRIDGE_PARTIAL` |
+| tick-100 | `E_WIDENED_FOOD_NEAR1_MODELWIDE_SR8_TICK100_BRIDGE_PARTIAL` |
+| tick-200 | `E_WIDENED_FOOD_NEAR1_MODELWIDE_SR8_TICK200_BRIDGE_NOT_FOUND` |
+| tick-400 | `E_WIDENED_FOOD_NEAR1_MODELWIDE_SR8_TICK400_BRIDGE_PARTIAL` *(anchor)* |
+
+Matches v0.53k C trajectory exactly (categorical resolutions identical; arm prefix differs).
+
+### What v0.53m establishes (bounded)
+
+- **The v0.48 bridge tolerates at least 2/5 lineage-level perception access, under the locked top-2-by-sensor-radius selection rule, under FOOD_NEAR1 × combined-budget × n_ticks=400 without collapsing Label A.** Both gating labels fire PRESENT (3/3 cells each) at the top-2 coverage point.
+- **Label A magnitude is monotone-decreasing in coverage** across the three measured points (1/5 → 2/5 → 5/5). Top-2 is in the "weakened but firing" regime; model-wide collapses to deadband; max-only is the strongest measured.
+- **Population survival is monotone-increasing in coverage.** The trade-off curve is sharp: max-only (0.594) → top-2 (0.672) → model-wide (0.875) on tick-400 survival.
+- **The always-consume invariant + per-founder seam continue to deliver deterministic behavior.** Both C and E in-slice anchors hit drift_abs = 0.0 across all six paired_d cells, matching v0.53l's reproduction guarantee.
+
+### What v0.53m does NOT establish
+
+- ✗ **"Top-2 is the minimum-tolerable coverage."** v0.53m tests one intermediate point at 2/5. The tolerance threshold may lie anywhere in `[2/5, 5/5)`; top-3 and top-4 are untested.
+- ✗ **"The v0.48 bridge is linear in coverage."** The observed Label A magnitudes (+4.4 → +1.2 → −0.0) and Label B magnitudes (+44.8 → +2.1 → +0.7) are inconsistent with a linear-dilution model; both show super-linear decay between 1/5 and 2/5. The structural-intuition prior in the pre-implementation note (`~0.75 × max-only`) was too optimistic on the food-event cells.
+- ✗ **Trait-vs-access disambiguation.** Top-2 and max-only BOTH target the highest-`sensor_radius` lineages. Whether Label A firing in priority 4 reflects the underlying trait OR the access channel remains undisambiguated until v0.53n's random-lineage control runs.
+- ✗ **"Any 2-of-5 lineage selection tolerates the bridge."** v0.53m only tests top-2 by `sensor_radius`. Random-2 or bottom-2 selections are untested (v0.53n / v0.53o candidates).
+- ✗ **A revised v0.53–v0.53l verdict.** All twelve predecessor verdicts stand as historical contracts.
+
+### Continuity statement
+
+Predecessor stack now TEN long: v0.53c → v0.53d → v0.53e → v0.53f → v0.53g → v0.53h → v0.53i → v0.53j → v0.53k → v0.53l → **v0.53m (`WIDENED_BRIDGE_RESCUED_BY_TOP2_LINEAGE_SENSOR_RADIUS_8`).**
+
+v0.53m is the THIRD priority-4 outcome in the v0.53c–v0.53m chain (v0.53i `RESCUED_BY_FOOD_NEAR2`; v0.53l `RESCUED_BY_MAX_LINEAGE_SENSOR_RADIUS_8`; v0.53m `RESCUED_BY_TOP2_LINEAGE_SENSOR_RADIUS_8`). v0.53k stands as the unique priority-6 PARTIAL.
+
+### Open framing for v0.53n+
+
+The lineage-coverage curve at 1/5, 2/5, 5/5 is now established. **v0.53n is the immediate next probe** — top-2's success at the trait-aligned coverage point makes the trait-vs-access disambiguation question the immediate scientific bottleneck, not an optional follow-up:
+
+- **v0.53n — non-max-lineage (adversarial) control.** v0.53n should test whether the rescue is tied to the max-sensor trait identity or merely to any lineage receiving `r=8` access. The cleanest intervention is overriding exactly one **non-max** founder per run — preferentially the **lowest-sensor lineage** (sharper adversarial control than random; random introduces sampling ambiguity). If reachability rescues but Label A does NOT fire, v0.53l/m's Label A rescue depends on alignment between the boosted access channel and the max-sensor lineage label — strong evidence the bridge is trait-mediated where access is held constant. If Label A still fires for the original max-sensor lineage despite the boosted founder being the min-sensor, something is wrong or deeply interesting.
+- **Lower-priority candidates (NOT v0.53n):** top-3 / top-4 dose-response between 2/5 and 5/5; Reading-A causal-generalization on FOOD_NEAR1 + per-lineage sr=8; dose-response on the `r=8` magnitude axis.
+- **v0.54 — synthesis / fresh-stream calibration / arc closure.** Eventually fresh-stream calibration on the full v0.46–v0.53n stack, with a synthesis document covering v0.53j–n as a unit (mechanism characterization of the v0.48 sensor_radius bridge).
